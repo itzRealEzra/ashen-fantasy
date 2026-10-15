@@ -10,6 +10,13 @@ and push to `main` on https://github.com/itzRealEzra/ashen-fantasy.
 
 ## [Unreleased]
 
+## [0.4.3] - 2026-10-16
+### Changed
+- Cultivate event message line removed for a cleaner panel.
+- Character figure explicitly centered (flex + auto margins, block image).
+- Dantian glow is smaller (56px) but brighter: hot core, screen blending,
+  tighter halo, same nonstop pulse and qi ring.
+
 ## [0.4.2] - 2026-10-16
 ### Added
 - Dantian glow over the meditating figure's lower abdomen: warm radial
