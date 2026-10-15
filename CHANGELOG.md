@@ -10,6 +10,16 @@ and push to `main` on https://github.com/itzRealEzra/ashen-fantasy.
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-10-16
+### Added
+- Character panel now shows derived combat stats (HP, Qi + rate, Attack,
+  Defense, Crit chance, Crit dmg) scaling with root foundation and realm.
+### Changed
+- Breakthrough button reserves its space while hidden (visibility instead
+  of display), so the canvas no longer jumps when it appears.
+- Raw internal stats (root multipliers, comprehension/physique/fortune sums)
+  removed from the Character panel.
+
 ## [0.4.4] - 2026-10-16
 ### Fixed
 - Character centering fine-tuned with a 4.1px optical nudge on the art.

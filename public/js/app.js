@@ -333,10 +333,32 @@ async function enterMain(p) {
 function renderChar(p) {
   if (!REALM_TABLE.length) return;
   const st = stageOf(p);
+  const d = derivedStats(p);
   $("char-sheet").innerHTML =
-    `<p><b>${esc(p.username)}</b> · ${esc(p.realm)} · Qi ×${p.stats.qi_mult} · Compr ${p.stats.comprehension} · Phys ${p.stats.physique} · Fort ${p.stats.fortune} · 💠 Dao Insight ×${p.dao_insight}</p>` +
-    `<p class="muted">${esc(st.flavor)}</p>` +
-    p.roots.map(r => `<div class="char-card" style="border-left-color:${r.color}"><b style="color:${r.color}">${esc(r.name)}</b> <small>${esc(r.rarity)} · ${esc(r.element)}</small><br/>${esc(r.desc)}<br/><small>Qi ×${r.qi_mult} · C${r.comprehension} P${r.physique} F${r.fortune}</small></div>`).join("");
+    `<p><b>${esc(p.username)}</b> · ${esc(st.realm)}</p>` +
+    `<div class="stat-panel">` +
+    `<div><span>HP</span><b>${d.hp}</b></div>` +
+    `<div><span>Qi</span><b>${Math.floor(p.cultivation)} <small>(+${cultRate(p).toFixed(1)}/s)</small></b></div>` +
+    `<div><span>Attack</span><b>${d.atk}</b></div>` +
+    `<div><span>Defense</span><b>${d.def}</b></div>` +
+    `<div><span>Crit chance</span><b>${d.crit}%</b></div>` +
+    `<div><span>Crit dmg</span><b>${d.critDmg}%</b></div>` +
+    `</div>` +
+    `<p class="muted">💠 Dao Insight ×${p.dao_insight} · ${esc(st.flavor)}</p>` +
+    p.roots.map(r => `<div class="char-card" style="border-left-color:${r.color}"><b style="color:${r.color}">${esc(r.name)}</b> <small>${esc(r.rarity)} · ${esc(r.element)}</small><br/>${esc(r.desc)}</div>`).join("");
+}
+
+// Combat stats derived from spiritual-root foundation + realm.
+// Single source for everything the Character panel shows.
+function derivedStats(p) {
+  const s = p.stats, r = p.realm_idx | 0;
+  return {
+    hp: Math.round((100 + s.physique * 25) * (1 + r * 0.1)),
+    atk: Math.round(10 + (s.physique * 2 + s.comprehension * 1.5) * (1 + r * 0.08)),
+    def: Math.round(5 + s.physique * 1.2 + r * 2),
+    crit: Math.min(60, Math.round(5 + s.comprehension * 1.2 + s.fortune * 0.5)),
+    critDmg: Math.round(150 + s.fortune * 4 + s.comprehension * 1.5),
+  };
 }
 
 function updateQi(p) {
