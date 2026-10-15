@@ -11,6 +11,14 @@ and push to `main` on https://github.com/itzRealEzra/ashen-fantasy.
 
 ## [Unreleased]
 
+## [0.6.2] - 2026-10-16
+### Changed
+- Attack log removed from combat; kills and drops stay visible via the
+  kill counter and loot log.
+- Searching indicator reserves its slot, so appearing/disappearing no
+  longer stretches the canvas.
+- Attack bars glide via CSS transition instead of stepping each tick.
+
 ## [0.6.1] - 2026-10-16
 ### Added
 - Client/server version handshake: `/api/health` reports the server

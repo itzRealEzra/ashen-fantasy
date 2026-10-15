@@ -140,8 +140,10 @@ input { background: #0e0e14; border: 1px solid var(--line); color: var(--ink); p
 .hp-bar { height: 14px; background: #0e0e15; border: 1px solid var(--line); border-radius: 3px; overflow: hidden; margin: 2px 0 6px; }
 .hp-fill { height: 100%; width: 100%; background: linear-gradient(90deg, #7a1010, #c62828); transition: width .15s linear; }
 .atk-bar { height: 8px; background: #0e0e15; border: 1px solid var(--line); border-radius: 3px; overflow: hidden; margin: 2px 0 0; }
-.atk-fill { height: 100%; width: 0%; background: linear-gradient(90deg, var(--gold), var(--gold2)); }
+.atk-fill { height: 100%; width: 0%; background: linear-gradient(90deg, var(--gold), var(--gold2)); transition: width .1s linear; }
 .atk-fill.full { background: #fff3d6; box-shadow: 0 0 8px var(--gold2); }
+/* Reserved slot: the searching line appears without moving anything. */
+#battle-status { min-height: 36px; display: flex; align-items: center; justify-content: center; }
 .searching { text-align: center; color: var(--gold2); padding: 8px; letter-spacing: 1px; animation: flicker 1s infinite; }
 .loot-log { margin-top: 10px; }
 .loot-log h3 { font-size: 14px; margin: 0 0 6px; letter-spacing: 1px; }

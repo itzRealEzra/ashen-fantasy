@@ -1,6 +1,6 @@
 /* Ashen Fantasy — vanilla JS state machine: username -> roots -> main */
 const $ = (id) => document.getElementById(id);
-const CLIENT_VERSION = "0.6.1"; // must match server.py server_version + footer
+const CLIENT_VERSION = "0.6.2"; // must match server.py server_version + footer
 const state = {
   username: localStorage.getItem("af_user") || "",
   rollId: null,
@@ -575,7 +575,7 @@ $("hamburger").onclick = () => {
 const battle = {
   areas: [], view: "areas", area: null, mob: null,
   php: 1, ehp: 1, pbar: 0, ebar: 0, timer: null,
-  searching: false, kills: 0, atkLog: [], loot: {},
+  searching: false, kills: 0, loot: {},
 };
 
 function lootKey() { return "af_loot_" + (state.username || "guest"); }
@@ -654,12 +654,10 @@ function startCombat() {
   battle.pbar = 0;
   battle.ebar = 0;
   battle.kills = 0;
-  battle.atkLog = [];
   battle.searching = false;
   renderCombat();
   stopBattle();
   battle.timer = setInterval(battleTick, 100);
-  atkLogLine(`A wild ${m.name} appears!`);
 }
 
 function renderCombat() {
@@ -683,7 +681,6 @@ function renderCombat() {
         <div class="atk-bar"><div id="ebar-fill" class="atk-fill"></div></div></div>
     </div>` +
     `<div id="battle-status"></div>` +
-    `<div class="log" id="atk-log" style="min-height:90px;max-height:150px"></div>` +
     `<div class="loot-log"><h3>Loot log</h3><div class="loot-rows" id="loot-rows"></div>` +
     `<div class="kill-count" id="kill-count"></div></div>`;
   $("combat-leave").onclick = () => showBattleEnemies("");
@@ -737,16 +734,6 @@ function strikeDmg(atk, crit, critDmg, dfn) {
   return { dmg: Math.round(dmg), isCrit };
 }
 
-function atkLogLine(msg) {
-  battle.atkLog.push(msg);
-  if (battle.atkLog.length > 30) battle.atkLog.shift();
-  const el = $("atk-log");
-  if (el) {
-    el.textContent = battle.atkLog.join("\n");
-    el.scrollTop = el.scrollHeight;
-  }
-}
-
 function battleTick() {
   const p = state.player, m = battle.mob;
   if (!p || !m || battle.view !== "combat" || battle.searching) return;
@@ -758,7 +745,6 @@ function battleTick() {
     const s = strikeDmg(d.atk, d.crit, d.critDmg, m.def);
     battle.ehp -= s.dmg;
     flash("side-enemy");
-    atkLogLine(`You attacked ${s.dmg} dmg${s.isCrit ? " (crit!)" : ""}.`);
   }
   if (battle.ebar >= 1 && battle.ehp > 0) {
     battle.ebar = 0;
@@ -766,7 +752,6 @@ function battleTick() {
     const s = strikeDmg(m.atk, m.crit, m.crit_dmg, d.def);
     battle.php -= s.dmg;
     flash("side-player");
-    atkLogLine(`${m.name} attacked ${s.dmg} dmg${s.isCrit ? " (crit!)" : ""}.`);
   }
   if (battle.ehp <= 0) return onMobDeath();
   if (battle.php <= 0) return onPlayerDeath();
@@ -776,19 +761,16 @@ function battleTick() {
 function onMobDeath() {
   const p = state.player, m = battle.mob;
   battle.kills++;
-  const drops = [];
   for (const l of m.loot) {
     if (Math.random() < l.chance) {
       const n = l.min + Math.floor(Math.random() * (l.max - l.min + 1));
       battle.loot[l.item] = (battle.loot[l.item] || 0) + n;
-      drops.push(`${l.item} ${n}x`);
     }
   }
   saveLoot();
   accrue(p, m.qi);
   saveLocal(p);
   updateQi(p);
-  atkLogLine(`${m.name} dies${drops.length ? " — loot: " + drops.join(", ") : " — no loot"}. +${m.qi} Qi.`);
   battle.searching = true;
   battle.pbar = 0;
   battle.ebar = 0;
@@ -797,7 +779,6 @@ function onMobDeath() {
     if (battle.view !== "combat") return;
     battle.ehp = m.hp;
     battle.searching = false;
-    atkLogLine(`A wild ${m.name} appears!`);
     paintCombat();
   }, 2000);
 }
