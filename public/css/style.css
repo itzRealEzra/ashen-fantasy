@@ -80,7 +80,6 @@ input { background: #0e0e14; border: 1px solid var(--line); color: var(--ink); p
 .hamb:hover { color: var(--gold2); }
 .hamb.collapsed { transform: rotate(90deg); color: var(--gold); }
 .top-name, .top-realm { border-right: 1px solid var(--line); padding: 12px 20px; }
-.top-qi { margin-left: auto; padding: 12px 20px; color: var(--gold2); }
 .shell-body { display: flex; flex: 1; min-height: 0; position: relative; }
 /* Sidebar floats above the canvas — opening/closing never resizes .content */
 .sidebar { position: absolute; top: 0; left: 0; bottom: 0; width: 220px; z-index: 10; background: var(--panel); border-right: 1px solid var(--line); display: flex; flex-direction: column; overflow: hidden; opacity: 1; visibility: visible; transform: translateX(0); transition: transform .3s ease, opacity .22s ease, visibility 0s; box-shadow: 8px 0 24px rgba(0,0,0,.55); }
@@ -108,15 +107,16 @@ input { background: #0e0e14; border: 1px solid var(--line); color: var(--ink); p
 #cult-art {
     display: block;
     height: 100%;
+    width: auto;
     position: relative;
     left: 4.1px;
-    max-width: 92%;
+    max-width: 92vw;
     object-fit: contain;
     margin: 0 auto;
     filter: drop-shadow(0 0 24px rgba(201, 168, 106, .25));
 }
-/* Dantian glow over the lower abdomen — small, bright, breathing nonstop */
-.dantian { position: absolute; left: 50%; top: 65%; width: 56px; height: 56px; transform: translate(-50%, -50%); border-radius: 50%; pointer-events: none; mix-blend-mode: screen;
+/* Dantian glow over the lower abdomen — tracks the art's optical nudge */
+.dantian { position: absolute; left: calc(50% + 4.1px); top: 65%; width: 56px; height: 56px; transform: translate(-50%, -50%); border-radius: 50%; pointer-events: none; mix-blend-mode: screen;
   background: radial-gradient(circle, rgba(255,244,214,1) 0%, rgba(255,205,110,.9) 28%, rgba(230,140,50,.5) 52%, transparent 75%);
   animation: dantian-pulse 2.4s ease-in-out infinite; }
 .dantian::after { content: ""; position: absolute; inset: -9px; border-radius: 50%;

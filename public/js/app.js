@@ -338,7 +338,7 @@ function renderChar(p) {
     `<p><b>${esc(p.username)}</b> · ${esc(st.realm)}</p>` +
     `<div class="stat-panel">` +
     `<div><span>HP</span><b>${d.hp}</b></div>` +
-    `<div><span>Qi</span><b>${Math.floor(p.cultivation)} <small>(+${cultRate(p).toFixed(1)}/s)</small></b></div>` +
+    `<div><span>Qi</span><b id="char-qi">${Math.floor(p.cultivation)} <small>(+${cultRate(p).toFixed(1)}/s)</small></b></div>` +
     `<div><span>Attack</span><b>${d.atk}</b></div>` +
     `<div><span>Defense</span><b>${d.def}</b></div>` +
     `<div><span>Crit chance</span><b>${d.crit}%</b></div>` +
@@ -363,8 +363,11 @@ function derivedStats(p) {
 
 function updateQi(p) {
   $("p-name").textContent = p.username;
-  $("p-qi").textContent = Math.floor(p.cultivation);
   $("qi-bar").style.width = Math.min(100, p.cultivation / p.cultivation_to_next * 100) + "%";
+  // Character panel Qi stays live between full re-renders.
+  const cq = $("char-qi");
+  if (cq && REALM_TABLE.length)
+    cq.innerHTML = `${Math.floor(p.cultivation)} <small>(+${cultRate(p).toFixed(1)}/s)</small>`;
   const bb = $("breakthrough-btn");
   if (bb) bb.classList.toggle("show", REALM_TABLE.length ? breakthroughReady(p) : false);
 }

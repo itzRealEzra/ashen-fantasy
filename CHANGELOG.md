@@ -10,6 +10,17 @@ and push to `main` on https://github.com/itzRealEzra/ashen-fantasy.
 
 ## [Unreleased]
 
+## [0.5.1] - 2026-10-16
+### Changed
+- Character panel Qi now ticks live every second instead of only on panel
+  refreshes.
+- Top-bar Qi counter removed (Qi lives in the Cultivate and Character
+  panels now).
+### Fixed
+- Dantian glow recentered on the art: it follows the same 4.1px optical
+  nudge as the character, and the image width no longer resolves against
+  its own container.
+
 ## [0.5.0] - 2026-10-16
 ### Added
 - Character panel now shows derived combat stats (HP, Qi + rate, Attack,
