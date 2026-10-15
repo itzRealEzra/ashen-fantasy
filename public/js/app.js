@@ -1,6 +1,6 @@
 /* Ashen Fantasy — vanilla JS state machine: username -> roots -> main */
 const $ = (id) => document.getElementById(id);
-const CLIENT_VERSION = "0.7.2"; // must match server.py server_version + footer
+const CLIENT_VERSION = "0.7.3"; // must match server.py server_version + footer
 const state = {
   username: localStorage.getItem("af_user") || "",
   rollId: null,
@@ -667,8 +667,14 @@ function itemTipHtml(itemId) {
 }
 
 function showTip(itemId, x, y) {
+  ensureTipWired();
   const tip = $("item-tip");
   if (!tip) return;
+  if (tipItem === itemId && tip.style.display === "block") {
+    // Same item: keep the tooltip (and its buttons) perfectly still.
+    if (tipHideTimer) { clearTimeout(tipHideTimer); tipHideTimer = null; }
+    return;
+  }
   tip.innerHTML = itemTipHtml(itemId);
   if (!tip.innerHTML) return;
   tipItem = itemId;
@@ -688,7 +694,7 @@ function hideTip() {
 // Grace period so the cursor can travel from the slot onto the tooltip.
 function scheduleHideTip() {
   if (tipHideTimer) clearTimeout(tipHideTimer);
-  tipHideTimer = setTimeout(hideTip, 250);
+  tipHideTimer = setTimeout(hideTip, 350);
 }
 
 function renderInventory() {
@@ -1083,9 +1089,13 @@ if (state.username) $("username-input").value = state.username;
 checkServerFresh();
 
 // Tooltip actions (delegated: tip content re-renders on every hover).
-(function wireTip() {
+// Wired lazily so script order can never silently break the buttons again.
+let tipWired = false;
+function ensureTipWired() {
+  if (tipWired) return;
   const tip = $("item-tip");
   if (!tip) return;
+  tipWired = true;
   tip.addEventListener("click", e => {
     const act = e.target && e.target.dataset && e.target.dataset.act;
     if (!act || !tipItem) return;
@@ -1098,7 +1108,7 @@ checkServerFresh();
     if (tipHideTimer) { clearTimeout(tipHideTimer); tipHideTimer = null; }
   });
   tip.addEventListener("mouseleave", hideTip);
-})();
+}
 
 // Warn plainly (not just console 404s) when the server is unreachable or
 // older than this client — e.g. a stale server.py left running after a pull.

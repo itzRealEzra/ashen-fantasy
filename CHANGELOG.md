@@ -11,6 +11,14 @@ and push to `main` on https://github.com/itzRealEzra/ashen-fantasy.
 
 ## [Unreleased]
 
+## [0.7.3] - 2026-10-16
+### Fixed
+- Tooltips usable again: the tip element now loads before the script so its
+  buttons actually wire up (previously the boot wiring silently no-opped,
+  leaving dead buttons and a tooltip that always timed out).
+- Tooltip wiring is lazy and idempotent, same-item hovers no longer
+  re-render the buttons mid-click, and the slot-to-tip grace is 350ms.
+
 ## [0.7.2] - 2026-10-16
 ### Added
 - Tooltips are now interactive: hover an item, slide onto the tooltip, and
