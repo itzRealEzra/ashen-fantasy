@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+<title>Ashen Fantasy — Text Cultivation RPG</title>
+<link rel="stylesheet" href="/css/style.css" />
+</head>
+<body>
+<div class="mist"></div>
+
+<!-- ============ SCREEN: USERNAME ============ -->
+<section id="screen-username" class="screen active">
+  <div class="title-wrap">
+    <div class="game-title">ASHEN FANTASY</div>
+    <div class="game-sub">灰燼仙途 · A Text-Based Cultivation RPG</div>
+    <div class="card username-card">
+      <h2>Step Into the Jianghu</h2>
+      <p class="hint">Enter your Daoist name (3–16 chars, letters / numbers / _)</p>
+      <div class="row">
+        <input id="username-input" maxlength="16" placeholder="e.g. AshenSword" autocomplete="off" />
+        <button id="username-btn" class="btn gold">Begin Journey</button>
+      </div>
+      <p id="username-err" class="err"></p>
+      <p class="lore">“From ash, the root. From root, the Dao.”</p>
+    </div>
+  </div>
+</section>
+
+<!-- ============ SCREEN: REROLL ROOT PANEL ============ -->
+<section id="screen-roots" class="screen">
+  <div class="panel-frame">
+    <div class="panel-title">REROLL ROOT PANEL — Roll 9, Choose 3 as Foundation</div>
+    <div class="root-grid">
+      <!-- LEFT: selected detail -->
+      <aside class="col left">
+        <h3>SELECTED ROOT<br/>DESCRIPTION AND STATS</h3>
+        <div id="detail-box" class="detail-box">
+          <p class="muted">Click a rolled root to inspect it.<br/><br/>Then tick ☑ up to 3 roots as your starting foundation.</p>
+        </div>
+        <div class="picked-counter"><span id="picked-count">0</span>/3 chosen</div>
+        <button id="confirm-btn" class="btn gold full" disabled>Enter Cultivation (0/3)</button>
+      </aside>
+
+      <!-- CENTER: roll area -->
+      <div class="col center">
+        <div class="center-head">SHOW ROLLED ROOTS HERE</div>
+        <div id="roll-stage" class="roll-stage">
+          <div id="roll-anim" class="roll-anim">PLAY ANIMATED ROLL HERE</div>
+        </div>
+        <div id="roll-list" class="roll-list"></div>
+        <button id="roll-btn" class="btn big">ROLL 【 Roll 9 Roots 】</button>
+      </div>
+
+      <!-- RIGHT: index -->
+      <aside class="col right">
+        <h3>ROOT INDEX<br/><span class="small">SHOW ALL AVAILABLE ROOT AND ITS CHANCES</span></h3>
+        <div id="root-index" class="root-index"><p class="muted">Loading…</p></div>
+      </aside>
+    </div>
+  </div>
+</section>
+
+<!-- ============ SCREEN: MAIN GAME ============ -->
+<section id="screen-main" class="screen">
+  <div class="main-title">MAIN GAME OPEN SIDE BAR MENU</div>
+  <div class="game-shell">
+    <header class="topbar">
+      <button id="hamburger" class="hamb" aria-label="menu">☰</button>
+      <div class="top-name">NAME: <span id="p-name">—</span></div>
+      <div class="top-realm">REALM: <span id="p-realm">—</span></div>
+      <div class="top-qi"><span id="p-qi">0</span> Qi</div>
+    </header>
+    <div class="shell-body">
+      <nav id="sidebar" class="sidebar open">
+        <button data-tab="character" class="side-btn">CHARACTER</button>
+        <button data-tab="cultivate" class="side-btn active">CULTIVATE</button>
+        <button data-tab="battle" class="side-btn">BATTLE</button>
+        <div class="side-foot">Ashen Fantasy v0.1.2</div>
+      </nav>
+      <main class="content">
+        <div id="tab-cultivate" class="tab active">
+          <h2>CULTIVATE PANEL — DEFAULT OR FIRST PANEL</h2>
+          <p id="cult-desc" class="muted"></p>
+          <div class="row">
+            <button id="meditate-btn" class="btn">🧘 Meditate (+Qi)</button>
+            <button id="breakthrough-btn" class="btn gold">⚡ Breakthrough</button>
+          </div>
+          <div class="progress"><div id="qi-bar" class="qi-bar"></div></div>
+          <div id="cult-log" class="log"></div>
+        </div>
+        <div id="tab-character" class="tab">
+          <h2>CHARACTER</h2>
+          <div id="char-sheet"></div>
+        </div>
+        <div id="tab-battle" class="tab">
+          <h2>BATTLE (prototype)</h2>
+          <p class="muted">Challenge the Stone Puppet. Power = physique + sword intent (comprehension).</p>
+          <button id="battle-btn" class="btn red">⚔ Spar Stone Puppet</button>
+          <div id="battle-log" class="log"></div>
+        </div>
+      </main>
+    </div>
+  </div>
+</section>
+
+<script src="/js/app.js"></script>
+</body>
+</html>
