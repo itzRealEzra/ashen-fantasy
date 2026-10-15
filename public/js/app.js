@@ -1,6 +1,6 @@
 /* Ashen Fantasy — vanilla JS state machine: username -> roots -> main */
 const $ = (id) => document.getElementById(id);
-const CLIENT_VERSION = "0.7.1"; // must match server.py server_version + footer
+const CLIENT_VERSION = "0.7.2"; // must match server.py server_version + footer
 const state = {
   username: localStorage.getItem("af_user") || "",
   rollId: null,
@@ -614,7 +614,8 @@ $("hamburger").onclick = () => {
 };
 
 // ---------- inventory + equipment (v0.7.0) ----------
-let invTab = "all", invSel = null;
+let invTab = "all";
+let tipItem = null, tipHideTimer = null;
 const ITEM_RARITY_COLORS = { Mortal: "#9aa0a6", Earth: "#7cb342", Heaven: "#42a5f5",
   Immortal: "#ab47bc", Divine: "#ffb300", Primordial: "#ff3d00" };
 const DOLL_ROWS = [
@@ -657,6 +658,11 @@ function itemTipHtml(itemId) {
       h += `<br/><small class="muted">vs ${esc(ITEM_BY_ID[cur].name)}:</small><br/>${cmp}<br/><small class="muted">Click to equip</small>`;
     } else if (!cur) h += `<br/><small class="muted">Click to equip</small>`;
   }
+  const p = state.player;
+  const owned = p && p.inventory ? (p.inventory[itemId] || 0) : 0;
+  if (it.kind === "gear" && owned > 0) h += `<div class="tip-actions"><button data-act="equip">Equip</button></div>`;
+  if (it.kind === "consumable" && owned > 0)
+    h += `<div class="tip-actions"><button data-act="use">Use</button><button data-act="elixir">Elixir</button></div>`;
   return h;
 }
 
@@ -665,6 +671,8 @@ function showTip(itemId, x, y) {
   if (!tip) return;
   tip.innerHTML = itemTipHtml(itemId);
   if (!tip.innerHTML) return;
+  tipItem = itemId;
+  if (tipHideTimer) { clearTimeout(tipHideTimer); tipHideTimer = null; }
   tip.style.display = "block";
   tip.style.left = Math.min(window.innerWidth - tip.offsetWidth - 10, x + 14) + "px";
   tip.style.top = Math.min(window.innerHeight - tip.offsetHeight - 10, y + 14) + "px";
@@ -673,6 +681,14 @@ function showTip(itemId, x, y) {
 function hideTip() {
   const tip = $("item-tip");
   if (tip) tip.style.display = "none";
+  tipItem = null;
+  if (tipHideTimer) { clearTimeout(tipHideTimer); tipHideTimer = null; }
+}
+
+// Grace period so the cursor can travel from the slot onto the tooltip.
+function scheduleHideTip() {
+  if (tipHideTimer) clearTimeout(tipHideTimer);
+  tipHideTimer = setTimeout(hideTip, 250);
 }
 
 function renderInventory() {
@@ -705,25 +721,12 @@ function renderInventory() {
   }).sort();
   const grid = entries.map(id => {
     const it = ITEM_BY_ID[id];
-    return `<div class="slot inv-slot${invSel === id ? " sel" : ""}" data-item="${id}" data-tip="${id}" title="${esc(it.name)}">` +
+    return `<div class="slot inv-slot" data-item="${id}" data-tip="${id}" title="${esc(it.name)}">` +
       `<span class="glyph">${esc(it.glyph)}</span><span class="count">${p.inventory[id]}x</span></div>`;
   }).join("") || `<p class="muted">Empty. Hunt beasts for loot.</p>`;
-  const sel = invSel && ITEM_BY_ID[invSel] ? ITEM_BY_ID[invSel] : null;
-  let detail = "";
-  if (sel) {
-    const st = Object.entries(sel.stats || {}).filter(([, v]) => v).map(([k, v]) => `${k}+${v}`).join(" · ");
-    detail = `<b>${esc(sel.glyph)} ${esc(sel.name)}</b> ` +
-      `<small class="muted">${esc(sel.kind)}${sel.slot ? " · " + esc(sel.slot) : ""} · ×${p.inventory[invSel] || 0}</small><br/>${esc(sel.desc)}` +
-      (st ? `<br/><span class="inv-stats">${esc(st)}</span>` : "") +
-      (sel.kind === "consumable" && sel.use ? `<br/><span class="inv-stats">${esc(describeUse(sel))}</span>` : "") +
-      `<div class="row">` +
-      (sel.kind === "gear" ? `<button class="btn" id="inv-equip">Equip</button>` : "") +
-      (sel.kind === "consumable" ? `<button class="btn" id="inv-use">Use</button><button class="btn" id="inv-load">Load elixir slot</button>` : "") +
-      `</div>`;
-  }
   root.innerHTML = `<div class="inv-layout"><div class="inv-doll"><h2>Equipment</h2>${doll}${elix}</div>` +
     `<div class="inv-bag"><h2>Bag</h2><div class="inv-tabs">${tabs}</div><div class="inv-grid">${grid}</div>` +
-    (sel ? `<div class="inv-detail">${detail}</div>` : "") + `</div></div>`;
+    `</div></div>`;
   root.querySelectorAll(".slot[data-slot]").forEach(el => el.onclick = () => unequipSlot(el.dataset.slot));
   root.querySelectorAll(".slot[data-elixir]").forEach(el => el.onclick = () => useElixir(+el.dataset.elixir));
   root.querySelectorAll(".inv-tab").forEach(el => el.onclick = () => { invTab = el.dataset.tab; renderInventory(); });
@@ -731,18 +734,12 @@ function renderInventory() {
     const id = el.dataset.item;
     const it = ITEM_BY_ID[id];
     if (it && it.kind === "gear") equipItem(id); // click gear to equip
-    else { invSel = id; renderInventory(); }
+    else if (it) useConsumable(id); // click consumable to use (waste-guarded)
   });
   root.querySelectorAll("[data-tip]").forEach(el => {
     el.onmousemove = e => showTip(el.dataset.tip, e.clientX, e.clientY);
-    el.onmouseleave = hideTip;
+    el.onmouseleave = scheduleHideTip;
   });
-  const eq = $("inv-equip");
-  if (eq) eq.onclick = () => equipItem(invSel);
-  const us = $("inv-use");
-  if (us) us.onclick = () => useConsumable(invSel);
-  const ld = $("inv-load");
-  if (ld) ld.onclick = () => loadElixirSlot(invSel);
 }
 
 function equipTargets(it) {
@@ -769,7 +766,6 @@ function equipItem(itemId) {
   takeInv(itemId, 1);
   if (prev) addInv(prev, 1);
   p.equipment[slot] = itemId;
-  if ((p.inventory[itemId] || 0) <= 0 && invSel === itemId) invSel = null;
   afterGearChange();
 }
 
@@ -786,13 +782,15 @@ function useConsumable(itemId) {
   const p = state.player, it = ITEM_BY_ID[itemId];
   if (!it || it.kind !== "consumable" || (p.inventory[itemId] || 0) <= 0) return;
   const maxHp = playerMaxHp(p);
+  const heals = (it.use.heal_pct || 0) > 0 && (p.hp || maxHp) < maxHp;
+  const givesQi = (it.use.qi_pct || 0) > 0;
+  if (!heals && !givesQi) return; // never waste a pill on full HP
   if (it.use.heal_pct) p.hp = Math.min(maxHp, (p.hp || maxHp) + maxHp * it.use.heal_pct / 100);
   if (it.use.qi_pct) accrue(p, stageOf(p).cost * it.use.qi_pct / 100);
   takeInv(itemId, 1);
   if ((p.inventory[itemId] || 0) <= 0) {
     delete p.inventory[itemId];
     p.elixirs = p.elixirs.map(x => x === itemId ? null : x);
-    if (invSel === itemId) invSel = null;
   }
   saveLocal(p);
   renderInventory();
@@ -805,6 +803,7 @@ function useConsumable(itemId) {
 function loadElixirSlot(itemId) {
   const p = state.player, it = ITEM_BY_ID[itemId];
   if (!it || it.kind !== "consumable" || (p.inventory[itemId] || 0) <= 0) return;
+  p.elixirs = p.elixirs.map(x => x === itemId ? null : x); // no duplicates
   let i = p.elixirs.findIndex(x => !x);
   if (i < 0) i = 0;
   p.elixirs[i] = itemId;
@@ -1082,6 +1081,24 @@ function onPlayerDeath() {
 // boot
 if (state.username) $("username-input").value = state.username;
 checkServerFresh();
+
+// Tooltip actions (delegated: tip content re-renders on every hover).
+(function wireTip() {
+  const tip = $("item-tip");
+  if (!tip) return;
+  tip.addEventListener("click", e => {
+    const act = e.target && e.target.dataset && e.target.dataset.act;
+    if (!act || !tipItem) return;
+    if (act === "equip") equipItem(tipItem);
+    else if (act === "use") useConsumable(tipItem);
+    else if (act === "elixir") loadElixirSlot(tipItem);
+    hideTip();
+  });
+  tip.addEventListener("mouseenter", () => {
+    if (tipHideTimer) { clearTimeout(tipHideTimer); tipHideTimer = null; }
+  });
+  tip.addEventListener("mouseleave", hideTip);
+})();
 
 // Warn plainly (not just console 404s) when the server is unreachable or
 // older than this client — e.g. a stale server.py left running after a pull.

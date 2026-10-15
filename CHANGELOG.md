@@ -11,6 +11,18 @@ and push to `main` on https://github.com/itzRealEzra/ashen-fantasy.
 
 ## [Unreleased]
 
+## [0.7.2] - 2026-10-16
+### Added
+- Tooltips are now interactive: hover an item, slide onto the tooltip, and
+  use Equip / Use / Elixir buttons right inside it; it hides on hover-out.
+### Changed
+- Inspect detail box removed; bag clicks act directly (gear equips,
+  consumables are used with a waste guard at full HP).
+- Loading an elixir already slotted elsewhere moves it instead of
+  duplicating it across slots.
+### Fixed
+- `invSel` selection state fully retired with the detail box.
+
 ## [0.7.1] - 2026-10-16
 ### Added
 - Gear rarity (Mortal/Earth/Heaven/Immortal by tier) with rarity-colored
