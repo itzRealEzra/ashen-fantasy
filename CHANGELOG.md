@@ -11,6 +11,20 @@ and push to `main` on https://github.com/itzRealEzra/ashen-fantasy.
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-10-16
+### Added
+- Inventory + Equipment tab: paper-doll with head/sec weapon/chest, main
+  weapon/core/arm, back/boots/legs, 2 rings/necklace/headpiece, and 4
+  quick-use elixir slots; bag with All/Gear/Consumable/Materials tabs and
+  an inspect/equip/use detail box.
+- 91-item database via `GET /api/items` (48 gear pieces across 4 tiers,
+  3 consumables, 40 materials); gear stats feed Character and Battle.
+- Gear and pill drops merged into hunting loot; kills also fill the bag.
+- Consumables: Healing Pill, Qi Pill, Spirit Meal; loadable into elixir
+  slots, usable from the bag.
+- Persistent HP: fights start at current HP, damage sticks between hunts,
+  slow recovery outside combat, full revive on defeat, starter healing kit.
+
 ## [0.6.2] - 2026-10-16
 ### Changed
 - Attack log removed from combat; kills and drops stay visible via the

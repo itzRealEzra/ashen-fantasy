@@ -151,6 +151,29 @@ input { background: #0e0e14; border: 1px solid var(--line); color: var(--ink); p
 .loot-rows div { display: flex; justify-content: space-between; font-size: 13px; padding: 2px 0; border-bottom: 1px dotted var(--line); }
 .kill-count { font-size: 12px; color: var(--muted); text-align: right; margin-top: 4px; }
 @media (max-width: 900px) { .enemy-grid { grid-template-columns: repeat(2, 1fr); } }
+/* inventory + equipment (doll left, bag right) */
+.inv-layout { display: grid; grid-template-columns: 340px minmax(0, 1fr); gap: 12px; height: 100%; min-height: 0; }
+.inv-doll { border: 1px solid var(--line); background: var(--panel); padding: 12px; overflow-y: auto; }
+.inv-doll h2, .inv-bag h2 { margin: 0 0 8px; font-size: 18px; }
+.doll-row { display: flex; justify-content: center; gap: 8px; margin-bottom: 8px; }
+.slot { width: 72px; height: 72px; border: 1px solid var(--line); border-radius: 6px; background: #0e0e15; display: flex; flex-direction: column; align-items: center; justify-content: center; cursor: pointer; position: relative; }
+.slot:hover { border-color: var(--gold); }
+.slot .glyph { font-size: 28px; line-height: 1; }
+.slot .slot-name { font-size: 9px; color: var(--muted); margin-top: 2px; text-align: center; }
+.slot.filled { border-color: var(--gold); background: var(--panel2); }
+.slot .count { position: absolute; right: 4px; bottom: 2px; font-size: 11px; color: var(--gold2); }
+.slot.elixir { border-style: dashed; }
+.inv-bag { border: 1px solid var(--line); background: var(--panel); padding: 12px; overflow-y: auto; min-height: 0; }
+.inv-tabs { display: flex; gap: 6px; margin-bottom: 10px; flex-wrap: wrap; }
+.inv-tab { background: var(--panel2); border: 1px solid var(--line); color: var(--muted); padding: 6px 14px; border-radius: 20px; cursor: pointer; font-size: 13px; }
+.inv-tab.active { color: var(--gold2); border-color: var(--gold); }
+.inv-grid { display: grid; grid-template-columns: repeat(8, 1fr); gap: 6px; }
+.inv-slot { aspect-ratio: 1; }
+.inv-slot.sel { outline: 2px solid var(--gold2); }
+.inv-detail { margin-top: 10px; border: 1px solid var(--line); background: #0e0e15; padding: 10px 12px; font-size: 14px; line-height: 1.6; }
+.inv-detail .row { justify-content: flex-start; }
+.inv-stats { color: var(--gold2); font-size: 13px; }
+@media (max-width: 900px) { .inv-layout { grid-template-columns: 1fr; } .inv-grid { grid-template-columns: repeat(6, 1fr); } }
 /* cultivate art panel (mockup layout: art, qi bar, rate, breakthrough) */
 #tab-cultivate.active { display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 100%; gap: 8px; padding: 8px 0; }
 .cult-stage { width: 100%; flex: 1; min-height: 220px; display: flex; align-items: center; justify-content: center; background: #0e0e15 url("/assets/background/cultivation_panel.png") center / cover no-repeat; overflow: hidden; }

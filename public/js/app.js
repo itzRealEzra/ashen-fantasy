@@ -1,6 +1,6 @@
 /* Ashen Fantasy — vanilla JS state machine: username -> roots -> main */
 const $ = (id) => document.getElementById(id);
-const CLIENT_VERSION = "0.6.2"; // must match server.py server_version + footer
+const CLIENT_VERSION = "0.7.0"; // must match server.py server_version + footer
 const state = {
   username: localStorage.getItem("af_user") || "",
   rollId: null,
@@ -262,6 +262,21 @@ function normalizePlayer(p) {
   p.bottleneck = Math.max(0, Math.min(p.bottleneck | 0, st.bottleneck_req));
   p.dao_insight = p.dao_insight | 0;
   p.seclusion = false; // seclusion retired in v0.4.1 (pure idle)
+  if (!p.equipment || typeof p.equipment !== "object") p.equipment = {};
+  for (const s of EQUIP_SLOT_LIST) if (!(s in p.equipment)) p.equipment[s] = null;
+  for (const s of Object.keys(p.equipment)) {
+    if (p.equipment[s] && !ITEM_BY_ID[p.equipment[s]]) p.equipment[s] = null;
+  }
+  if (!p.inventory || typeof p.inventory !== "object") p.inventory = {};
+  for (const k of Object.keys(p.inventory)) {
+    if (!ITEM_BY_ID[k] || !(p.inventory[k] > 0)) delete p.inventory[k];
+  }
+  if (!Array.isArray(p.elixirs)) p.elixirs = [null, null, null, null];
+  p.elixirs = [0, 1, 2, 3].map(i => {
+    const x = p.elixirs[i];
+    return (x && ITEM_BY_ID[x] && ITEM_BY_ID[x].kind === "consumable") ? x : null;
+  });
+  clampHp(p);
   if (!p.last_seen) p.last_seen = Date.now() / 1000;
   return p;
 }
@@ -269,6 +284,23 @@ function normalizePlayer(p) {
 function saveLocal(p) {
   p.last_seen = Date.now() / 1000;
   try { localStorage.setItem("af_player", JSON.stringify(p)); } catch {}
+}
+
+function addInv(id, n) {
+  const p = state.player;
+  p.inventory[id] = Math.min(9999, (p.inventory[id] || 0) + n);
+}
+
+function takeInv(id, n) {
+  const p = state.player;
+  p.inventory[id] = Math.max(0, (p.inventory[id] || 0) - n);
+  if (!p.inventory[id]) delete p.inventory[id];
+}
+
+function clampHp(p) {
+  const m = playerMaxHp(p);
+  if (!(p.hp > 0)) p.hp = m;
+  else p.hp = Math.min(p.hp, m);
 }
 
 function accrue(p, amt, quiet) {
@@ -308,6 +340,7 @@ function refreshCultPanel() {
 
 async function enterMain(p) {
   REALM_TABLE = await fetchRealms();
+  await fetchItems();
   normalizePlayer(p);
   const frac = p.cultivation / stageOf(p).cost;
   stageFlags = { half: frac >= 0.5, full: frac >= 1 };
@@ -330,6 +363,7 @@ async function enterMain(p) {
   battle.areas = await fetchAreas();
   loadLoot();
   showBattleAreas();
+  renderInventory();
   startTick();
   syncPlayer(true);
 }
@@ -352,16 +386,17 @@ function renderChar(p) {
     p.roots.map(r => `<div class="char-card" style="border-left-color:${r.color}"><b style="color:${r.color}">${esc(r.name)}</b> <small>${esc(r.rarity)} · ${esc(r.element)}</small><br/>${esc(r.desc)}</div>`).join("");
 }
 
-// Combat stats derived from spiritual-root foundation + realm.
+// Combat stats derived from spiritual-root foundation + realm + gear.
 // Single source for everything the Character panel shows.
 function derivedStats(p) {
   const s = p.stats, r = p.realm_idx | 0;
+  const g = gearBonus(p);
   return {
-    hp: Math.round((100 + s.physique * 25) * (1 + r * 0.1)),
-    atk: Math.round(10 + (s.physique * 2 + s.comprehension * 1.5) * (1 + r * 0.08)),
-    def: Math.round(5 + s.physique * 1.2 + r * 2),
-    crit: Math.min(60, Math.round(5 + s.comprehension * 1.2 + s.fortune * 0.5)),
-    critDmg: Math.round(150 + s.fortune * 4 + s.comprehension * 1.5),
+    hp: Math.round((100 + s.physique * 25) * (1 + r * 0.1)) + g.hp,
+    atk: Math.round(10 + (s.physique * 2 + s.comprehension * 1.5) * (1 + r * 0.08)) + g.atk,
+    def: Math.round(5 + s.physique * 1.2 + r * 2) + g.def,
+    crit: Math.min(60, Math.round(5 + s.comprehension * 1.2 + s.fortune * 0.5) + g.crit),
+    critDmg: Math.round(150 + s.fortune * 4 + s.comprehension * 1.5) + g.critDmg,
   };
 }
 
@@ -406,6 +441,11 @@ function startTick() {
     const rate = cultRate(p);
     const gain = dt <= 300 ? rate * dt : rate * 300 + rate * (dt - 300) * OFFLINE_EFF;
     accrue(p, gain);
+    // slow wound recovery while not fighting (consumables heal instantly)
+    if (battle.view !== "combat" && REALM_TABLE.length) {
+      const max = playerMaxHp(p);
+      if (p.hp < max) p.hp = Math.min(max, p.hp + max * 0.02 * dt);
+    }
     saveLocal(p);
   }, 1000);
   syncTimer = setInterval(() => syncPlayer(false), 30000);
@@ -428,6 +468,7 @@ async function syncPlayer(initial) {
       body: JSON.stringify({
         username: p.username, cultivation: p.cultivation, realm_idx: p.realm_idx,
         bottleneck: p.bottleneck, dao_insight: p.dao_insight, seclusion: p.seclusion,
+        equipment: p.equipment, inventory: p.inventory, elixirs: p.elixirs,
       }),
     });
     const j = await r.json();
@@ -557,6 +598,7 @@ function advanceRealm(p, msg) {
 
 document.querySelectorAll(".side-btn").forEach(b => b.onclick = () => {
   if (b.dataset.tab !== "battle") stopBattle();
+  if (b.dataset.tab === "inventory") renderInventory();
   document.querySelectorAll(".side-btn").forEach(x => x.classList.remove("active"));
   document.querySelectorAll(".tab").forEach(x => x.classList.remove("active"));
   b.classList.add("active");
@@ -570,6 +612,155 @@ $("hamburger").onclick = () => {
   sb.classList.toggle("open");
   $("hamburger").classList.toggle("collapsed", !sb.classList.contains("open"));
 };
+
+// ---------- inventory + equipment (v0.7.0) ----------
+let invTab = "all", invSel = null;
+const DOLL_ROWS = [
+  [{ s: "sec_weapon", label: "Sec weapon" }, { s: "head", label: "Head" }, { s: "chest", label: "Chest" }],
+  [{ s: "main_weapon", label: "Main weapon" }, { s: "core", label: "Core" }, { s: "arm", label: "Arm" }],
+  [{ s: "back", label: "Back" }, { s: "boots", label: "Boots" }, { s: "legs", label: "Legs" }],
+  [{ s: "ring1", label: "Ring 1" }, { s: "ring2", label: "Ring 2" }, { s: "necklace", label: "Necklace" }, { s: "headpiece", label: "Headpiece" }],
+];
+
+function describeUse(it) {
+  const parts = [];
+  if (it.use.heal_pct) parts.push(`restores ${it.use.heal_pct}% HP`);
+  if (it.use.qi_pct) parts.push(`grants Qi worth ${it.use.qi_pct}% of stage`);
+  return parts.join(" and ") || "usable";
+}
+
+function renderInventory() {
+  const p = state.player;
+  if (!p) return;
+  const root = $("inventory-root");
+  if (!root) return;
+  const doll = DOLL_ROWS.map(row => `<div class="doll-row">` + row.map(({ s, label }) => {
+    const iid = p.equipment && p.equipment[s];
+    const it = iid && ITEM_BY_ID[iid];
+    return `<div class="slot${it ? " filled" : ""}" data-slot="${s}" title="${it ? esc(it.name) : label}">` +
+      (it ? `<span class="glyph">${esc(it.glyph)}</span>` : "") +
+      `<span class="slot-name">${it ? esc(it.name) : label}</span></div>`;
+  }).join("") + `</div>`).join("");
+  const elix = `<div class="doll-row">` + [0, 1, 2, 3].map(i => {
+    const iid = p.elixirs && p.elixirs[i];
+    const it = iid && ITEM_BY_ID[iid];
+    const n = iid ? (p.inventory[iid] || 0) : 0;
+    return `<div class="slot elixir${it ? " filled" : ""}" data-elixir="${i}" title="${it ? esc(it.name) : "Elixir"}">` +
+      (it ? `<span class="glyph">${esc(it.glyph)}</span>` : "") +
+      `<span class="slot-name">${it ? esc(it.name) : "Elixir"}</span>` +
+      (it ? `<span class="count">${n}x</span>` : "") + `</div>`;
+  }).join("") + `</div>`;
+  const tabs = [["all", "All"], ["gear", "Gear"], ["consumable", "Consumable"], ["material", "Materials"]]
+    .map(([v, l]) => `<button class="inv-tab${invTab === v ? " active" : ""}" data-tab="${v}">${l}</button>`).join("");
+  const entries = Object.keys(p.inventory || {}).filter(id => {
+    const it = ITEM_BY_ID[id];
+    return it && (p.inventory[id] > 0) && (invTab === "all" || it.kind === invTab);
+  }).sort();
+  const grid = entries.map(id => {
+    const it = ITEM_BY_ID[id];
+    return `<div class="slot inv-slot${invSel === id ? " sel" : ""}" data-item="${id}" title="${esc(it.name)}">` +
+      `<span class="glyph">${esc(it.glyph)}</span><span class="count">${p.inventory[id]}x</span></div>`;
+  }).join("") || `<p class="muted">Empty. Hunt beasts for loot.</p>`;
+  const sel = invSel && ITEM_BY_ID[invSel] ? ITEM_BY_ID[invSel] : null;
+  let detail = `<p class="muted">Select an item to inspect it.</p>`;
+  if (sel) {
+    const st = Object.entries(sel.stats || {}).filter(([, v]) => v).map(([k, v]) => `${k}+${v}`).join(" · ");
+    detail = `<b>${esc(sel.glyph)} ${esc(sel.name)}</b> ` +
+      `<small class="muted">${esc(sel.kind)}${sel.slot ? " · " + esc(sel.slot) : ""} · ×${p.inventory[invSel] || 0}</small><br/>${esc(sel.desc)}` +
+      (st ? `<br/><span class="inv-stats">${esc(st)}</span>` : "") +
+      (sel.kind === "consumable" && sel.use ? `<br/><span class="inv-stats">${esc(describeUse(sel))}</span>` : "") +
+      `<div class="row">` +
+      (sel.kind === "gear" ? `<button class="btn" id="inv-equip">Equip</button>` : "") +
+      (sel.kind === "consumable" ? `<button class="btn" id="inv-use">Use</button><button class="btn" id="inv-load">Load elixir slot</button>` : "") +
+      `</div>`;
+  }
+  root.innerHTML = `<div class="inv-layout"><div class="inv-doll"><h2>Equipment</h2>${doll}${elix}</div>` +
+    `<div class="inv-bag"><h2>Bag</h2><div class="inv-tabs">${tabs}</div><div class="inv-grid">${grid}</div>` +
+    `<div class="inv-detail">${detail}</div></div></div>`;
+  root.querySelectorAll(".slot[data-slot]").forEach(el => el.onclick = () => unequipSlot(el.dataset.slot));
+  root.querySelectorAll(".slot[data-elixir]").forEach(el => el.onclick = () => useElixir(+el.dataset.elixir));
+  root.querySelectorAll(".inv-tab").forEach(el => el.onclick = () => { invTab = el.dataset.tab; renderInventory(); });
+  root.querySelectorAll(".inv-slot").forEach(el => el.onclick = () => { invSel = el.dataset.item; renderInventory(); });
+  const eq = $("inv-equip");
+  if (eq) eq.onclick = () => equipItem(invSel);
+  const us = $("inv-use");
+  if (us) us.onclick = () => useConsumable(invSel);
+  const ld = $("inv-load");
+  if (ld) ld.onclick = () => loadElixirSlot(invSel);
+}
+
+function equipTargets(it) {
+  return it.slot === "ring" ? ["ring1", "ring2"] : [it.slot];
+}
+
+function afterGearChange() {
+  const p = state.player;
+  clampHp(p);
+  saveLocal(p);
+  renderInventory();
+  renderChar(p);
+  refreshCultPanel();
+  updateQi(p);
+  syncPlayer(false);
+}
+
+function equipItem(itemId) {
+  const p = state.player, it = ITEM_BY_ID[itemId];
+  if (!it || it.kind !== "gear" || (p.inventory[itemId] || 0) <= 0) return;
+  const targets = equipTargets(it);
+  const slot = targets.find(s => !p.equipment[s]) || targets[0];
+  const prev = p.equipment[slot];
+  takeInv(itemId, 1);
+  if (prev) addInv(prev, 1);
+  p.equipment[slot] = itemId;
+  afterGearChange();
+}
+
+function unequipSlot(slot) {
+  const p = state.player;
+  const prev = p.equipment && p.equipment[slot];
+  if (!prev) return;
+  p.equipment[slot] = null;
+  addInv(prev, 1);
+  afterGearChange();
+}
+
+function useConsumable(itemId) {
+  const p = state.player, it = ITEM_BY_ID[itemId];
+  if (!it || it.kind !== "consumable" || (p.inventory[itemId] || 0) <= 0) return;
+  const maxHp = playerMaxHp(p);
+  if (it.use.heal_pct) p.hp = Math.min(maxHp, (p.hp || maxHp) + maxHp * it.use.heal_pct / 100);
+  if (it.use.qi_pct) accrue(p, stageOf(p).cost * it.use.qi_pct / 100);
+  takeInv(itemId, 1);
+  if ((p.inventory[itemId] || 0) <= 0) {
+    delete p.inventory[itemId];
+    p.elixirs = p.elixirs.map(x => x === itemId ? null : x);
+    if (invSel === itemId) invSel = null;
+  }
+  saveLocal(p);
+  renderInventory();
+  renderChar(p);
+  refreshCultPanel();
+  updateQi(p);
+  syncPlayer(false);
+}
+
+function loadElixirSlot(itemId) {
+  const p = state.player, it = ITEM_BY_ID[itemId];
+  if (!it || it.kind !== "consumable" || (p.inventory[itemId] || 0) <= 0) return;
+  let i = p.elixirs.findIndex(x => !x);
+  if (i < 0) i = 0;
+  p.elixirs[i] = itemId;
+  saveLocal(p);
+  renderInventory();
+  syncPlayer(false);
+}
+
+function useElixir(i) {
+  const p = state.player;
+  const iid = p.elixirs && p.elixirs[i];
+  if (iid) useConsumable(iid);
+}
 
 // ---------- battle engine (v0.6.0): areas -> enemies -> auto combat ----------
 const battle = {
@@ -594,6 +785,39 @@ async function fetchAreas() {
     if (j.areas && j.areas.length) return j.areas;
   } catch {}
   return [];
+}
+
+let ITEM_BY_ID = {};
+let NAME_TO_ID = {};
+const EQUIP_SLOT_LIST = ["head", "sec_weapon", "chest", "main_weapon", "core",
+  "arm", "back", "boots", "legs", "ring1", "ring2", "necklace", "headpiece"];
+
+async function fetchItems() {
+  try {
+    const r = await fetch("/api/items");
+    const j = await r.json();
+    if (j.items && j.items.length) {
+      ITEM_BY_ID = {};
+      NAME_TO_ID = {};
+      for (const it of j.items) {
+        ITEM_BY_ID[it.id] = it;
+        NAME_TO_ID[it.name] = it.id;
+      }
+    }
+  } catch {}
+  return ITEM_BY_ID;
+}
+
+// Sum of equipped gear bonuses. Single source alongside base stats.
+function gearBonus(p) {
+  const b = { atk: 0, def: 0, hp: 0, crit: 0, critDmg: 0 };
+  if (!p.equipment) return b;
+  for (const s of Object.keys(p.equipment)) {
+    const it = ITEM_BY_ID[p.equipment[s]];
+    if (!it || !it.stats) continue;
+    for (const k of Object.keys(b)) b[k] += it.stats[k] || 0;
+  }
+  return b;
 }
 
 function stopBattle() {
@@ -646,10 +870,17 @@ function showBattleEnemies(notice) {
   });
 }
 
+function persistBattleHp(fainted) {
+  const p = state.player;
+  if (fainted) p.hp = playerMaxHp(p); // revive at full on defeat
+  else p.hp = Math.max(0, Math.min(battle.php, playerMaxHp(p)));
+  saveLocal(p);
+}
+
 function startCombat() {
   const p = state.player, m = battle.mob;
   battle.view = "combat";
-  battle.php = playerMaxHp(p);
+  battle.php = p.hp > 0 ? Math.min(p.hp, playerMaxHp(p)) : playerMaxHp(p);
   battle.ehp = m.hp;
   battle.pbar = 0;
   battle.ebar = 0;
@@ -683,7 +914,7 @@ function renderCombat() {
     `<div id="battle-status"></div>` +
     `<div class="loot-log"><h3>Loot log</h3><div class="loot-rows" id="loot-rows"></div>` +
     `<div class="kill-count" id="kill-count"></div></div>`;
-  $("combat-leave").onclick = () => showBattleEnemies("");
+  $("combat-leave").onclick = () => { persistBattleHp(false); showBattleEnemies(""); };
   paintCombat();
 }
 
@@ -765,6 +996,8 @@ function onMobDeath() {
     if (Math.random() < l.chance) {
       const n = l.min + Math.floor(Math.random() * (l.max - l.min + 1));
       battle.loot[l.item] = (battle.loot[l.item] || 0) + n;
+      const iid = NAME_TO_ID[l.item];
+      if (iid) addInv(iid, n); // drops also land in the bag
     }
   }
   saveLoot();
@@ -785,6 +1018,7 @@ function onMobDeath() {
 
 function onPlayerDeath() {
   stopBattle();
+  persistBattleHp(true);
   showBattleEnemies(`You were defeated by ${battle.mob.name} — dragged out of the hunt. Heal up and return.`);
 }
 

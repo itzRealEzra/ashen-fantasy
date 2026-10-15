@@ -262,6 +262,148 @@ AREAS = [
              [_loot("Jiao Scale", 0.4, 1, 2), _loot("Dragon Dew", 0.2, 1, 1)]),
      ]},
 ]
+
+# ----------------------------------------------------------------------------
+# Item database (single source of truth; served via GET /api/items)
+# kind: gear (equippable) / consumable (usable) / material (future crafting)
+# ----------------------------------------------------------------------------
+def _gear(id, name, slot, glyph, desc, **stats):
+    base = {"atk": 0, "def": 0, "hp": 0, "crit": 0, "critDmg": 0}
+    base.update(stats)
+    return {"id": id, "name": name, "kind": "gear", "slot": slot,
+            "glyph": glyph, "desc": desc, "stats": base}
+
+def _con(id, name, glyph, desc, heal_pct=0, qi_pct=0):
+    return {"id": id, "name": name, "kind": "consumable", "slot": None,
+            "glyph": glyph, "desc": desc,
+            "stats": {"atk": 0, "def": 0, "hp": 0, "crit": 0, "critDmg": 0},
+            "use": {"heal_pct": heal_pct, "qi_pct": qi_pct}}
+
+def _gear(id, name, slot, glyph, desc, stats=None):
+    base = {"atk": 0, "def": 0, "hp": 0, "crit": 0, "critDmg": 0}
+    if stats:
+        base.update(stats)
+    return {"id": id, "name": name, "kind": "gear", "slot": slot,
+            "glyph": glyph, "desc": desc, "stats": base}
+
+def _con(id, name, glyph, desc, heal_pct=0, qi_pct=0):
+    return {"id": id, "name": name, "kind": "consumable", "slot": None,
+            "glyph": glyph, "desc": desc,
+            "stats": {"atk": 0, "def": 0, "hp": 0, "crit": 0, "critDmg": 0},
+            "use": {"heal_pct": heal_pct, "qi_pct": qi_pct}}
+
+GEAR = [
+    # tier 1 — mortal valley finds
+    _gear("worn_iron_sword", "Worn Iron Sword", "main_weapon", "⚔️", "Notched but honest.", {"atk": 6}),
+    _gear("wolf_fang_blade", "Wolf Fang Blade", "main_weapon", "🗡️", "Hilt wrapped in dust-wolf hide.", {"atk": 9}),
+    _gear("wooden_shield", "Wooden Shield", "sec_weapon", "🛡️", "Stops rats. Mostly.", {"def": 5}),
+    _gear("hide_guard", "Hide Guard", "sec_weapon", "🦺", "Boiled wolf hide on oak.", {"def": 8}),
+    _gear("cloth_hood", "Cloth Hood", "head", "🧣", "Smells of rain.", {"def": 3, "hp": 20}),
+    _gear("linen_robe", "Linen Robe", "chest", "🥋", "Standard outer-sect issue.", {"def": 4, "hp": 30}),
+    _gear("clay_core", "Clay Core", "core", "🟤", "A pebble that hums faintly.", {"hp": 40}),
+    _gear("cloth_wraps", "Cloth Wraps", "arm", "🩹", "Bound knuckles hit harder.", {"atk": 2, "def": 2}),
+    _gear("straw_cloak", "Straw Cloak", "back", "🌾", "Sheds water and weak insults.", {"def": 2}),
+    _gear("straw_sandals", "Straw Sandals", "boots", "🩴", "Worn by every beginner ever.", {"def": 1}),
+    _gear("linen_pants", "Linen Pants", "legs", "👖", "Unremarkable. Durable.", {"def": 3, "hp": 20}),
+    _gear("copper_ring", "Copper Ring", "ring", "⭕", "Green with age, lucky anyway.", {"crit": 2}),
+    _gear("twig_pin", "Twig Hairpin", "headpiece", "📌", "Holds hair and minor resolve.", {"crit": 1}),
+    _gear("wood_beads", "Wood Bead Necklace", "necklace", "📿", "Warm from a hundred hands.", {"hp": 60}),
+    # tier 2 — bamboo forest spoils
+    _gear("bamboo_cutter", "Bamboo Cutter", "main_weapon", "🎋", "Sings when swung.", {"atk": 14}),
+    _gear("claw_dagger", "Panther Claw Dagger", "main_weapon", "🐾", "Still sharp. Still angry.", {"atk": 18}),
+    _gear("bamboo_hat", "Bamboo Hat", "head", "🎩", "Shade with attitude.", {"def": 7, "hp": 60}),
+    _gear("boarhide_vest", "Boarhide Vest", "chest", "🦺", "Smells like victory.", {"def": 9, "hp": 90}),
+    _gear("jade_core", "Jade Core", "core", "💚", "Cool to the touch, warm to qi.", {"hp": 160}),
+    _gear("iron_vambraces", "Iron Vambraces", "arm", "⛓️", "Clank with confidence.", {"atk": 5, "def": 6}),
+    _gear("panther_cloak", "Panther Pelt Cloak", "back", "🐆", "It still dreams of running.", {"def": 7, "hp": 50}),
+    _gear("hide_boots", "Hide Boots", "boots", "🥾", "Quiet on moss.", {"def": 5}),
+    _gear("bamboo_greaves", "Bamboo Greaves", "legs", "🎋", "Light, springy, green.", {"def": 8, "hp": 70}),
+    _gear("jade_ring", "Jade Ring", "ring", "💍", "A juren's gift, or a bribe.", {"crit": 5, "critDmg": 20}),
+    _gear("bronze_circlet", "Bronze Circlet", "headpiece", "⭕", "Squeezes focus out.", {"def": 4, "crit": 3}),
+    _gear("fang_necklace", "Fang Necklace", "necklace", "🦷", "One fang per victory.", {"atk": 6, "crit": 2}),
+    # tier 3 — ember cavern relics
+    _gear("ember_brand", "Ember Brand", "main_weapon", "🔥", "Leaves glowing footnotes.", {"atk": 28}),
+    _gear("ember_ward", "Ember Ward", "sec_weapon", "🔥", "A shield that bites back.", {"def": 16}),
+    _gear("horned_helm", "Horned Helm", "head", "🪖", "The horns are decorative. Probably.", {"def": 14, "hp": 150}),
+    _gear("magma_plate", "Magma Plate", "chest", "🛡️", "Warm. Always warm.", {"def": 18, "hp": 220}),
+    _gear("ember_core", "Ember Core", "core", "🔥", "A captured furnace-heart.", {"hp": 300, "atk": 6}),
+    _gear("magma_gauntlets", "Magma Gauntlets", "arm", "🧤", "Handle with everything.", {"atk": 10, "def": 10}),
+    _gear("ashen_mantle", "Ashen Mantle", "back", "🌫️", "Smells of old fires.", {"def": 12, "hp": 140}),
+    _gear("ember_treads", "Ember Treads", "boots", "🥾", "Footprints smolder.", {"def": 10, "hp": 80}),
+    _gear("magma_legguards", "Magma Legguards", "legs", "🦵", "Heavy. Worth it.", {"def": 15, "hp": 180}),
+    _gear("ember_crown", "Ember Crown", "headpiece", "👑", "A coronation of cinders.", {"atk": 8, "crit": 5}),
+    _gear("ember_pendant", "Ember Pendant", "necklace", "📿", "Pulses like a second heart.", {"atk": 12, "crit": 4}),
+    # tier 4 — frostbite peak treasures
+    _gear("frostbite_edge", "Frostbite Edge", "main_weapon", "❄️", "Cold enough to cut ghosts.", {"atk": 40}),
+    _gear("ice_mirror", "Ice Mirror", "sec_weapon", "🪞", "Shows enemies their doom.", {"def": 24}),
+    _gear("frost_crown", "Frost Crown", "head", "👑", "Winter kneels to no one.", {"def": 22, "hp": 300}),
+    _gear("glacial_robe", "Glacial Robe", "chest", "🧊", "Woven from avalanche silk.", {"def": 26, "hp": 400}),
+    _gear("frost_core", "Frost Core", "core", "🧊", "A star frozen mid-thought.", {"hp": 450, "atk": 10}),
+    _gear("frost_bracers", "Frost Bracers", "arm", "❄️", "Fists like hailstones.", {"atk": 16, "def": 14}),
+    _gear("roc_cloak", "Roc Feather Cloak", "back", "🪶", "Light as a storm's rumor.", {"def": 18, "hp": 260, "crit": 2}),
+    _gear("snowwalkers", "Snowwalkers", "boots", "🥾", "Never sink, never slip.", {"def": 15, "hp": 180}),
+    _gear("frost_leggings", "Frost Leggings", "legs", "🦵", "Creak pleasantly.", {"def": 22, "hp": 320}),
+    _gear("frost_diadem", "Frost Diadem", "headpiece", "💎", "A glacier's vanity.", {"atk": 14, "crit": 8, "critDmg": 40}),
+    _gear("frozen_tear", "Frozen Tear", "necklace", "💧", "Someone's last winter, kept.", {"atk": 18, "crit": 6, "critDmg": 30}),
+]
+
+CONSUMABLES = [
+    _con("healing_pill", "Healing Pill", "💊", "Crude but effective. Restores 40% HP.", heal_pct=40),
+    _con("qi_pill", "Qi Pill", "🔮", "Condensed morning mist. Grants 15% of a stage in Qi.", qi_pct=15),
+    _con("spirit_meal", "Spirit Meal", "🍱", "A hot otherworldly lunch. Restores 15% HP and a little Qi.", heal_pct=15, qi_pct=5),
+]
+
+def _slug(name):
+    return re.sub(r"[^a-z0-9]+", "_", name.lower()).strip("_")
+
+_ZERO = {"atk": 0, "def": 0, "hp": 0, "crit": 0, "critDmg": 0}
+# Every battle material becomes an inventory item (crafting coming soon).
+MATERIALS = [{"id": _slug(name), "name": name, "kind": "material", "slot": None,
+              "glyph": "✦", "desc": "Battle loot. (Crafting coming soon.)",
+              "stats": dict(_ZERO)}
+             for name in sorted({l["item"] for a in AREAS for m in a["mobs"] for l in m["loot"]})]
+
+ITEMS = GEAR + CONSUMABLES + MATERIALS
+ITEM_BY_ID = {it["id"]: it for it in ITEMS}
+EQUIP_SLOTS = ("head", "sec_weapon", "chest", "main_weapon", "core", "arm",
+               "back", "boots", "legs", "ring1", "ring2", "necklace", "headpiece")
+
+# Bonus gear/consumable drops merged into /api/areas (mob_id -> drops).
+_GEAR_DROPS = {
+    "stone_puppet": [("worn_iron_sword", 0.08, 1, 1), ("healing_pill", 0.10, 1, 1)],
+    "ash_rat": [("twig_pin", 0.06, 1, 1)],
+    "mud_crab": [("wooden_shield", 0.07, 1, 1)],
+    "dust_wolf": [("wolf_fang_blade", 0.07, 1, 1), ("copper_ring", 0.06, 1, 1)],
+    "sprout_treant": [("cloth_hood", 0.07, 1, 1), ("healing_pill", 0.08, 1, 1)],
+    "bamboo_viper": [("bamboo_hat", 0.06, 1, 1)],
+    "ironback_boar": [("bamboo_cutter", 0.06, 1, 1), ("boarhide_vest", 0.06, 1, 1)],
+    "mist_gibbon": [("spirit_meal", 0.12, 1, 1), ("wood_beads", 0.06, 1, 1)],
+    "thorn_panther": [("claw_dagger", 0.06, 1, 1)],
+    "bamboo_wraith": [("qi_pill", 0.08, 1, 1)],
+    "flame_imp": [("ember_brand", 0.05, 1, 1), ("healing_pill", 0.08, 1, 1)],
+    "magma_lizard": [("magma_plate", 0.05, 1, 1)],
+    "cinder_golem": [("ember_ward", 0.05, 1, 1)],
+    "ash_wraith": [("ashen_mantle", 0.05, 1, 1), ("qi_pill", 0.08, 1, 1)],
+    "inferno_bat": [("ember_crown", 0.04, 1, 1)],
+    "frost_alpha": [("frostbite_edge", 0.04, 1, 1), ("fang_necklace", 0.05, 1, 1)],
+    "ice_revenant": [("glacial_robe", 0.04, 1, 1), ("qi_pill", 0.08, 1, 1)],
+    "snow_yak": [("snowwalkers", 0.04, 1, 1), ("spirit_meal", 0.10, 1, 1)],
+    "blizzard_roc": [("roc_cloak", 0.04, 1, 1)],
+    "frozen_jiao": [("frozen_tear", 0.04, 1, 1), ("frost_diadem", 0.03, 1, 1)],
+}
+
+def areas_with_drops():
+    out = []
+    for a in AREAS:
+        mobs = []
+        for m in a["mobs"]:
+            extra = [{"item": ITEM_BY_ID[i]["name"], "chance": c, "min": mn, "max": mx}
+                     for (i, c, mn, mx) in _GEAR_DROPS.get(m["id"], [])
+                     if i in ITEM_BY_ID]
+            mobs.append({**m, "loot": m["loot"] + extra})
+        out.append({**a, "mobs": mobs})
+    return out
+
 REALM_COST_BASE = 50.0
 REALM_COST_GROWTH = 1.6  # per realm breakthrough
 
@@ -390,6 +532,10 @@ def build_player(username, picks):
         "bottleneck": 0,
         "dao_insight": 0,
         "seclusion": False,
+        "equipment": {s: None for s in EQUIP_SLOTS},
+        "inventory": {"healing_pill": 3},
+        "elixirs": ["healing_pill", None, None, None],
+        "hp": None,  # client-tracked; full on first load
         "last_seen": time.time(),
         "roots": roots,
         "stats": stats,
@@ -397,7 +543,7 @@ def build_player(username, picks):
 
 
 class Handler(BaseHTTPRequestHandler):
-    server_version = "AshenFantasy/0.6.2"
+    server_version = "AshenFantasy/0.7.0"
 
     def log_message(self, fmt, *args):
         pass  # quiet
@@ -443,7 +589,10 @@ class Handler(BaseHTTPRequestHandler):
             return self._send_json({"roots": roots_sorted}, cache="max-age=3600")
 
         if path == "/api/areas":
-            return self._send_json({"areas": AREAS}, cache="max-age=3600")
+            return self._send_json({"areas": areas_with_drops()}, cache="max-age=3600")
+
+        if path == "/api/items":
+            return self._send_json({"items": ITEMS}, cache="max-age=3600")
 
         if path == "/api/health":
             return self._send_json({"ok": True, "roots": len(ROOTS_WITH_CHANCE),
@@ -596,6 +745,31 @@ class Handler(BaseHTTPRequestHandler):
                     dao_insight += 1
                 # client breakthrough click may report one insight ahead of sync
                 dao_insight = max(dao_insight, min(extra_insight, dao_insight + 1))
+            # equipment / inventory / elixirs: accept only known items in valid slots
+            equip_in = data.get("equipment") or {}
+            equipment = {s: None for s in EQUIP_SLOTS}
+            if isinstance(equip_in, dict):
+                for s in EQUIP_SLOTS:
+                    iid = equip_in.get(s)
+                    if iid in ITEM_BY_ID:
+                        it = ITEM_BY_ID[iid]
+                        if it["slot"] == s or (s in ("ring1", "ring2") and it["slot"] == "ring"):
+                            equipment[s] = iid
+            inventory = {}
+            inv_in = data.get("inventory") or {}
+            if isinstance(inv_in, dict):
+                for k, v in inv_in.items():
+                    if k in ITEM_BY_ID:
+                        try:
+                            inventory[k] = max(0, min(int(v), 9999))
+                        except (TypeError, ValueError):
+                            pass
+            elixirs = [None, None, None, None]
+            elix_in = data.get("elixirs") or []
+            if isinstance(elix_in, list):
+                for i, x in enumerate(elix_in[:4]):
+                    if x in ITEM_BY_ID and ITEM_BY_ID[x]["kind"] == "consumable":
+                        elixirs[i] = x
             stored.update({
                 "realm": stage["name"],
                 "realm_idx": idx,
@@ -604,6 +778,9 @@ class Handler(BaseHTTPRequestHandler):
                 "bottleneck": bottleneck,
                 "dao_insight": dao_insight,
                 "seclusion": bool(data.get("seclusion", stored.get("seclusion", False))),
+                "equipment": equipment,
+                "inventory": inventory,
+                "elixirs": elixirs,
                 "last_seen": now,
             })
             save_players()
