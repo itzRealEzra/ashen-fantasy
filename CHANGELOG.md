@@ -10,6 +10,13 @@ and push to `main` on https://github.com/itzRealEzra/ashen-fantasy.
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-10-16
+### Changed
+- Realm ladder collapsed to 11 stages: Mortal (major tribulation) then Qi
+  Refinement Realm I-X, one realm per breakthrough — no more minor layers.
+  Costs scale x1.6 per realm (50 -> ~5,498 Qi), bottleneck grinding gates
+  Realms VI, VIII, and IX, peak Realm X condenses Dao Insight.
+
 ## [0.3.1] - 2026-10-16
 ### Fixed
 - Topbar realm now shows the realm only ("Mortal", "Qi Refinement Realm I"

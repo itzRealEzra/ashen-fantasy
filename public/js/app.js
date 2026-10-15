@@ -182,20 +182,28 @@ const TABID = Math.random().toString(36).slice(2);
 const OFFLINE_CAP_SEC = 8 * 3600, OFFLINE_EFF = 0.5;
 
 function fallbackRealms() {
-  // Mirrors the server ladder: Mortal (major) + Qi Refinement I-X, 10 layers each.
-  const specs = [{ realm: "Mortal", layer: 0, major: true, bottleneck_req: 0,
+  // Mirrors the server ladder: Mortal (major) + Qi Refinement Realm I-X.
+  // Every breakthrough advances straight to the next realm.
+  const specs = [{ realm: "Mortal", major: true, bottleneck_req: 0,
     flavor: "A mortal body of flesh and bone. Endure the tribulation and step onto the Dao." }];
-  for (const r of ["I", "II", "III", "IV", "V", "VI", "VII", "VIII", "IX", "X"])
-    for (let layer = 1; layer <= 10; layer++) {
-      const last = r === "X" && layer === 10;
-      specs.push({ realm: `Qi Refinement Realm ${r}`, layer, major: false,
-        bottleneck_req: layer === 10 && !last ? 1 : 0, flavor: "" });
-    }
+  const stages = [
+    ["I", 0, "First breath of qi. The dantian stirs."],
+    ["II", 0, "Meridians open like spring streams."],
+    ["III", 0, "Qi pools steady. The body hardens."],
+    ["IV", 0, "Night meditation deepens; senses sharpen."],
+    ["V", 0, "Half-step threshold. The heart wavers."],
+    ["VI", 1, "Bottleneck looms. Grind insight through circulation."],
+    ["VII", 0, "Thunder rumbles far away. Heaven watches."],
+    ["VIII", 1, "The dam is about to break. Temper the foundation."],
+    ["IX", 1, "One step from the peak. The heavens take notice."],
+    ["X", 0, "PEAK of Qi Refinement. Excess qi condenses into Dao Insight."],
+  ];
+  for (const [numeral, bottleneck_req, flavor] of stages)
+    specs.push({ realm: `Qi Refinement Realm ${numeral}`, major: false, bottleneck_req, flavor });
   return specs.map((s, i) => ({
-    idx: i, name: s.layer === 0 ? s.realm : `${s.realm} · Layer ${s.layer}`,
-    realm: s.realm, layer: s.layer,
-    cost: Math.round(50 * Math.pow(1.06, i)),
-    rate_mult: Math.round((1 + 0.12 * i) * 100) / 100,
+    idx: i, name: s.realm, realm: s.realm, layer: 0,
+    cost: Math.round(50 * Math.pow(1.6, i)),
+    rate_mult: Math.round((1 + 0.15 * i) * 100) / 100,
     major: s.major, bottleneck_req: s.bottleneck_req, flavor: s.flavor,
     cap: i === specs.length - 1,
   }));

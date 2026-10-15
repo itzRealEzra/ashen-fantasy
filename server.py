@@ -143,46 +143,41 @@ BASE_QI_PER_SEC = 1.0
 OFFLINE_CAP_SEC = 8 * 3600
 OFFLINE_EFF = 0.5
 SECLUSION_MULT = 2.0
-REALM_RATE_STEP = 0.12
+REALM_RATE_STEP = 0.15
 ONLINE_GRACE_SEC = 300  # elapsed beyond this counts as offline (capped, 50%)
 MANUAL_ALLOW_MULT = 3.0  # Meditate-click headroom per second in legit-gain calc
 REALM_COST_BASE = 50.0
-REALM_COST_GROWTH = 1.06  # per stage; gentle enough for a 101-stage ladder
+REALM_COST_GROWTH = 1.6  # per realm breakthrough
 
 _QI_REFINEMENT_NUMERALS = ("I", "II", "III", "IV", "V", "VI", "VII", "VIII", "IX", "X")
-_MINOR_FLAVOR = (
-    "Qi threads gather like morning mist.",
-    "The dantian warms; meridians hum.",
-    "Breath syncs with the turning of heaven.",
-    "A thin barrier thins further.",
-    "Sweat carries out mortal impurities.",
-    "The layer above glimmers faintly.",
+# (realm suffix, major breakthrough, bottleneck insight attempts, flavor)
+_QI_REFINEMENT_STAGES = (
+    ("I", False, 0, "First breath of qi. The dantian stirs."),
+    ("II", False, 0, "Meridians open like spring streams."),
+    ("III", False, 0, "Qi pools steady. The body hardens."),
+    ("IV", False, 0, "Night meditation deepens; senses sharpen."),
+    ("V", False, 0, "Half-step threshold. The heart wavers."),
+    ("VI", False, 1, "Bottleneck looms. Grind insight through circulation."),
+    ("VII", False, 0, "Thunder rumbles far away. Heaven watches."),
+    ("VIII", False, 1, "The dam is about to break. Temper the foundation."),
+    ("IX", False, 1, "One step from the peak. The heavens take notice."),
+    ("X", False, 0, "PEAK of Qi Refinement. Excess qi condenses into Dao Insight."),
 )
 
 def _build_realms():
-    # Stage 0: Mortal (major breakthrough to step onto the Dao).
-    # Then Qi Refinement I-X, each with 10 minor layers (101 stages total).
-    specs = [("Mortal", 0, True, 0,
+    # Mortal (major breakthrough to step onto the Dao), then each
+    # breakthrough advances straight to the next Qi Refinement Realm I-X.
+    specs = [("Mortal", True, 0,
               "A mortal body of flesh and bone. Endure the tribulation and step onto the Dao.")]
-    for r in _QI_REFINEMENT_NUMERALS:
-        for layer in range(1, 11):
-            last = (r == "X" and layer == 10)
-            ascent = (layer == 10 and not last)
-            if last:
-                flavor = "PEAK of Qi Refinement. Excess qi condenses into Dao Insight."
-            elif ascent:
-                flavor = f"Layer 10 of Qi Refinement Realm {r}. Ascend to the next heaven!"
-            else:
-                flavor = _MINOR_FLAVOR[(layer - 1) % len(_MINOR_FLAVOR)]
-            specs.append((f"Qi Refinement Realm {r}", layer, False, 1 if ascent else 0, flavor))
+    for numeral, major, bottleneck_req, flavor in _QI_REFINEMENT_STAGES:
+        specs.append((f"Qi Refinement Realm {numeral}", major, bottleneck_req, flavor))
     realms = []
-    for i, (realm, layer, major, bottleneck_req, flavor) in enumerate(specs):
-        name = realm if layer == 0 else f"{realm} · Layer {layer}"
+    for i, (realm, major, bottleneck_req, flavor) in enumerate(specs):
         realms.append({
             "idx": i,
-            "name": name,
+            "name": realm,
             "realm": realm,
-            "layer": layer,
+            "layer": 0,
             "cost": int(round(REALM_COST_BASE * (REALM_COST_GROWTH ** i))),
             "rate_mult": round(1.0 + REALM_RATE_STEP * i, 2),
             "major": major,
@@ -286,7 +281,7 @@ def build_player(username, picks):
 
 
 class Handler(BaseHTTPRequestHandler):
-    server_version = "AshenFantasy/0.3.1"
+    server_version = "AshenFantasy/0.4.0"
 
     def log_message(self, fmt, *args):
         pass  # quiet
