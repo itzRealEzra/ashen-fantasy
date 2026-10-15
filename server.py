@@ -171,10 +171,10 @@ def _build_realms():
             if last:
                 flavor = "PEAK of Qi Refinement. Excess qi condenses into Dao Insight."
             elif ascent:
-                flavor = f"Layer 10 of Qi Refinement {r}. Ascend to the next heaven!"
+                flavor = f"Layer 10 of Qi Refinement Realm {r}. Ascend to the next heaven!"
             else:
                 flavor = _MINOR_FLAVOR[(layer - 1) % len(_MINOR_FLAVOR)]
-            specs.append((f"Qi Refinement {r}", layer, False, 1 if ascent else 0, flavor))
+            specs.append((f"Qi Refinement Realm {r}", layer, False, 1 if ascent else 0, flavor))
     realms = []
     for i, (realm, layer, major, bottleneck_req, flavor) in enumerate(specs):
         name = realm if layer == 0 else f"{realm} · Layer {layer}"
@@ -286,7 +286,7 @@ def build_player(username, picks):
 
 
 class Handler(BaseHTTPRequestHandler):
-    server_version = "AshenFantasy/0.3.0"
+    server_version = "AshenFantasy/0.3.1"
 
     def log_message(self, fmt, *args):
         pass  # quiet

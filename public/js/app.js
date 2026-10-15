@@ -188,7 +188,7 @@ function fallbackRealms() {
   for (const r of ["I", "II", "III", "IV", "V", "VI", "VII", "VIII", "IX", "X"])
     for (let layer = 1; layer <= 10; layer++) {
       const last = r === "X" && layer === 10;
-      specs.push({ realm: `Qi Refinement ${r}`, layer, major: false,
+      specs.push({ realm: `Qi Refinement Realm ${r}`, layer, major: false,
         bottleneck_req: layer === 10 && !last ? 1 : 0, flavor: "" });
     }
   return specs.map((s, i) => ({
@@ -291,7 +291,8 @@ function refreshCultPanel() {
   if (!p || !REALM_TABLE.length) return;
   const st = stageOf(p), rate = cultRate(p);
   p.cultivation_to_next = st.cost;
-  $("p-realm").textContent = p.realm;
+  // Topbar shows the realm only (layers live in the cultivate/character panels).
+  $("p-realm").textContent = st.realm;
   $("cult-desc").textContent = `${p.username}, your foundation: ${p.roots.map(r => r.name).join(" + ")} ` +
     `(root ×${p.stats.qi_mult}, realm ×${st.rate_mult}${p.seclusion ? ", seclusion ×2" : ""}). ${st.flavor}`;
   $("cult-rate").textContent = `+${rate.toFixed(2)} Qi/s${p.seclusion ? " — SECLUSION ×2" : ""}`;
@@ -408,7 +409,7 @@ async function syncPlayer(initial) {
       Object.assign(p, j.player);
       if (p.realm_idx !== wasRealm) {
         stageFlags = { half: true, full: true };
-        $("p-realm").textContent = p.realm;
+        $("p-realm").textContent = stageOf(p).realm;
       }
       if (j.clamped && !initial)
         log($("cult-log"), "Heaven corrects your meridians — reported qi exceeded honest gains. (clamped)");
@@ -549,7 +550,7 @@ function advanceRealm(p, msg) {
   p.cultivation_to_next = st.cost;
   p.bottleneck = 0;
   stageFlags = { half: false, full: false };
-  $("p-realm").textContent = p.realm;
+  $("p-realm").textContent = st.realm;
   log($("cult-log"), `${msg} Realm rises: ${p.realm}. ${st.flavor}`);
   saveLocal(p);
   renderChar(p);

@@ -10,6 +10,12 @@ and push to `main` on https://github.com/itzRealEzra/ashen-fantasy.
 
 ## [Unreleased]
 
+## [0.3.1] - 2026-10-16
+### Fixed
+- Topbar realm now shows the realm only ("Mortal", "Qi Refinement Realm I"
+  ... "Qi Refinement Realm X"); the layer detail ("· Layer N") stays in the
+  Cultivate and Character panels.
+
 ## [0.3.0] - 2026-10-16
 ### Added
 - New realm ladder: Mortal (major tribulation breakthrough) -> Qi Refinement
