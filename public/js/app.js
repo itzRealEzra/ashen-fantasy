@@ -1,6 +1,6 @@
 /* Ashen Fantasy — vanilla JS state machine: username -> roots -> main */
 const $ = (id) => document.getElementById(id);
-const CLIENT_VERSION = "0.7.3"; // must match server.py server_version + footer
+const CLIENT_VERSION = "0.7.4"; // must match server.py server_version + footer
 const state = {
   username: localStorage.getItem("af_user") || "",
   rollId: null,
@@ -632,18 +632,21 @@ function describeUse(it) {
   return parts.join(" and ") || "usable";
 }
 
-// Hover tooltip: rarity-colored name, stats, and for gear a live
-// comparison against what is currently equipped in that slot.
-function itemTipHtml(itemId) {
+// Hover tooltip. Layout: name + rarity / type / info / actions.
+// ctx: { unequip: slot } on equipped doll slots, { unload: idx } on elixir
+// slots, {} in the bag. Tooltips only exist where actions exist.
+function itemTipHtml(itemId, ctx) {
   const it = ITEM_BY_ID[itemId];
   if (!it) return "";
+  ctx = ctx || {};
   const col = ITEM_RARITY_COLORS[it.rarity] || "#e8e0cf";
-  let h = `<b style="color:${col}">${esc(it.glyph)} ${esc(it.name)}</b><br/>` +
-    `<small class="muted">${esc(it.rarity || "")} ${esc(it.kind)}${it.slot ? " · " + esc(it.slot) : ""}</small><br/>${esc(it.desc)}`;
+  const type = it.kind === "gear" ? "armor" : it.kind === "consumable" ? "consumable" : "materials";
+  let h = `<div class="tip-title"><b>${esc(it.glyph)} ${esc(it.name)}</b><span style="color:${col}">${esc(it.rarity || "")}</span></div>` +
+    `<div>Type: ${type}</div><div>Info:</div><div class="muted">${esc(it.desc)}</div>`;
   const st = Object.entries(it.stats || {}).filter(([, v]) => v).map(([k, v]) => `${k}+${v}`).join(" · ");
-  if (st) h += `<br/><span class="inv-stats">${esc(st)}</span>`;
-  if (it.kind === "consumable" && it.use) h += `<br/><span class="inv-stats">${esc(describeUse(it))}</span>`;
-  if (it.kind === "gear") {
+  if (st) h += `<div><span class="inv-stats">${esc(st)}</span></div>`;
+  if (it.kind === "consumable" && it.use) h += `<div><span class="inv-stats">${esc(describeUse(it))}</span></div>`;
+  if (it.kind === "gear" && !ctx.unequip) {
     const p = state.player;
     const targets = it.slot === "ring" ? ["ring1", "ring2"] : [it.slot];
     const cur = p && p.equipment ? (targets.map(s => p.equipment[s]).find(x => x) || null) : null;
@@ -655,29 +658,35 @@ function itemTipHtml(itemId) {
           const d = (b[k] || 0) - (a[k] || 0);
           return `<span class="${d > 0 ? "up" : "down"}">${k} ${a[k] || 0} → ${b[k] || 0}</span>`;
         }).join(" · ") || `<span class="muted">identical stats</span>`;
-      h += `<br/><small class="muted">vs ${esc(ITEM_BY_ID[cur].name)}:</small><br/>${cmp}<br/><small class="muted">Click to equip</small>`;
-    } else if (!cur) h += `<br/><small class="muted">Click to equip</small>`;
+      h += `<div><small class="muted">vs ${esc(ITEM_BY_ID[cur].name)}:</small><br/>${cmp}</div>`;
+    }
   }
   const p = state.player;
   const owned = p && p.inventory ? (p.inventory[itemId] || 0) : 0;
-  if (it.kind === "gear" && owned > 0) h += `<div class="tip-actions"><button data-act="equip">Equip</button></div>`;
-  if (it.kind === "consumable" && owned > 0)
-    h += `<div class="tip-actions"><button data-act="use">Use</button><button data-act="elixir">Elixir</button></div>`;
+  let acts = "";
+  if (ctx.unequip) acts += `<button data-act="unequip" data-slot="${esc(ctx.unequip)}">Unequip</button>`;
+  else if (ctx.unload != null) acts += `<button data-act="use">Use</button><button data-act="unload" data-slot="${ctx.unload}">Unload</button>`;
+  else if (it.kind === "gear" && owned > 0) acts += `<button data-act="equip">Equip</button>`;
+  else if (it.kind === "consumable" && owned > 0) acts += `<button data-act="use">Use</button><button data-act="elixir">Elixir</button>`;
+  if (acts) h += `<div class="tip-actions">${acts}</div>`;
   return h;
 }
 
-function showTip(itemId, x, y) {
+let tipCtxKey = "";
+function showTip(itemId, x, y, ctx) {
   ensureTipWired();
   const tip = $("item-tip");
   if (!tip) return;
-  if (tipItem === itemId && tip.style.display === "block") {
-    // Same item: keep the tooltip (and its buttons) perfectly still.
+  const key = itemId + "|" + (ctx && ctx.unequip ? "u" + ctx.unequip : ctx && ctx.unload != null ? "l" + ctx.unload : "b");
+  if (tipItem === itemId && tipCtxKey === key && tip.style.display === "block") {
+    // Same item + context: keep the tooltip (and its buttons) perfectly still.
     if (tipHideTimer) { clearTimeout(tipHideTimer); tipHideTimer = null; }
     return;
   }
-  tip.innerHTML = itemTipHtml(itemId);
+  tip.innerHTML = itemTipHtml(itemId, ctx);
   if (!tip.innerHTML) return;
   tipItem = itemId;
+  tipCtxKey = key;
   if (tipHideTimer) { clearTimeout(tipHideTimer); tipHideTimer = null; }
   tip.style.display = "block";
   tip.style.left = Math.min(window.innerWidth - tip.offsetWidth - 10, x + 14) + "px";
@@ -688,6 +697,7 @@ function hideTip() {
   const tip = $("item-tip");
   if (tip) tip.style.display = "none";
   tipItem = null;
+  tipCtxKey = "";
   if (tipHideTimer) { clearTimeout(tipHideTimer); tipHideTimer = null; }
 }
 
@@ -706,7 +716,7 @@ function renderInventory() {
   const doll = DOLL_ROWS.map(row => `<div class="doll-row">` + row.map(({ s, label }) => {
     const iid = p.equipment && p.equipment[s];
     const it = iid && ITEM_BY_ID[iid];
-    return `<div class="slot${it ? " filled" : ""}" data-slot="${s}"${it ? ` data-tip="${iid}"` : ""} title="${it ? esc(it.name) : label}">` +
+    return `<div class="slot${it ? " filled" : ""}" data-slot="${s}"${it ? ` data-tip="${iid}"` : ` title="${label}"`}>` +
       (it ? `<span class="glyph">${esc(it.glyph)}</span>` : "") +
       `<span class="slot-name">${it ? esc(it.name) : label}</span></div>`;
   }).join("") + `</div>`).join("");
@@ -714,7 +724,7 @@ function renderInventory() {
     const iid = p.elixirs && p.elixirs[i];
     const it = iid && ITEM_BY_ID[iid];
     const n = iid ? (p.inventory[iid] || 0) : 0;
-    return `<div class="slot elixir${it ? " filled" : ""}" data-elixir="${i}"${it ? ` data-tip="${iid}"` : ""} title="${it ? esc(it.name) : "Elixir"}">` +
+    return `<div class="slot elixir${it ? " filled" : ""}" data-elixir="${i}"${it ? ` data-tip="${iid}"` : ` title="Elixir"`}>` +
       (it ? `<span class="glyph">${esc(it.glyph)}</span>` : "") +
       `<span class="slot-name">${it ? esc(it.name) : "Elixir"}</span>` +
       (it ? `<span class="count">${n}x</span>` : "") + `</div>`;
@@ -727,14 +737,23 @@ function renderInventory() {
   }).sort();
   const grid = entries.map(id => {
     const it = ITEM_BY_ID[id];
-    return `<div class="slot inv-slot" data-item="${id}" data-tip="${id}" title="${esc(it.name)}">` +
+    // Tooltips only where actions exist: gear + consumables, never materials.
+    return `<div class="slot inv-slot" data-item="${id}"${it.kind === "material" ? ` title="${esc(it.name)}"` : ` data-tip="${id}"`}>` +
       `<span class="glyph">${esc(it.glyph)}</span><span class="count">${p.inventory[id]}x</span></div>`;
   }).join("") || `<p class="muted">Empty. Hunt beasts for loot.</p>`;
   root.innerHTML = `<div class="inv-layout"><div class="inv-doll"><h2>Equipment</h2>${doll}${elix}</div>` +
     `<div class="inv-bag"><h2>Bag</h2><div class="inv-tabs">${tabs}</div><div class="inv-grid">${grid}</div>` +
     `</div></div>`;
-  root.querySelectorAll(".slot[data-slot]").forEach(el => el.onclick = () => unequipSlot(el.dataset.slot));
-  root.querySelectorAll(".slot[data-elixir]").forEach(el => el.onclick = () => useElixir(+el.dataset.elixir));
+  root.querySelectorAll(".slot[data-slot]").forEach(el => {
+    el.onclick = () => unequipSlot(el.dataset.slot);
+    el.onmousemove = e => { if (el.dataset.tip) showTip(el.dataset.tip, e.clientX, e.clientY, { unequip: el.dataset.slot }); };
+    el.onmouseleave = scheduleHideTip;
+  });
+  root.querySelectorAll(".slot[data-elixir]").forEach(el => {
+    el.onclick = () => useElixir(+el.dataset.elixir);
+    el.onmousemove = e => { if (el.dataset.tip) showTip(el.dataset.tip, e.clientX, e.clientY, { unload: +el.dataset.elixir }); };
+    el.onmouseleave = scheduleHideTip;
+  });
   root.querySelectorAll(".inv-tab").forEach(el => el.onclick = () => { invTab = el.dataset.tab; renderInventory(); });
   root.querySelectorAll(".inv-slot").forEach(el => el.onclick = () => {
     const id = el.dataset.item;
@@ -742,7 +761,7 @@ function renderInventory() {
     if (it && it.kind === "gear") equipItem(id); // click gear to equip
     else if (it) useConsumable(id); // click consumable to use (waste-guarded)
   });
-  root.querySelectorAll("[data-tip]").forEach(el => {
+  root.querySelectorAll("[data-tip].inv-slot").forEach(el => {
     el.onmousemove = e => showTip(el.dataset.tip, e.clientX, e.clientY);
     el.onmouseleave = scheduleHideTip;
   });
@@ -822,6 +841,14 @@ function useElixir(i) {
   const p = state.player;
   const iid = p.elixirs && p.elixirs[i];
   if (iid) useConsumable(iid);
+}
+
+function unloadElixir(itemId) {
+  const p = state.player;
+  p.elixirs = p.elixirs.map(x => x === itemId ? null : x);
+  saveLocal(p);
+  renderInventory();
+  syncPlayer(false);
 }
 
 // ---------- battle engine (v0.6.0): areas -> enemies -> auto combat ----------
@@ -1102,6 +1129,8 @@ function ensureTipWired() {
     if (act === "equip") equipItem(tipItem);
     else if (act === "use") useConsumable(tipItem);
     else if (act === "elixir") loadElixirSlot(tipItem);
+    else if (act === "unequip" && e.target.dataset.slot) unequipSlot(e.target.dataset.slot);
+    else if (act === "unload") unloadElixir(tipItem);
     hideTip();
   });
   tip.addEventListener("mouseenter", () => {

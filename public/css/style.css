@@ -176,6 +176,7 @@ input { background: #0e0e14; border: 1px solid var(--line); color: var(--ink); p
 #item-tip { display: none; position: fixed; z-index: 9999; max-width: 280px; background: #0e0e15; border: 1px solid var(--gold); padding: 8px 10px; font-size: 13px; line-height: 1.6; }
 #item-tip .up { color: #9ccc65; }
 #item-tip .down { color: #ff8a80; }
+.tip-title { display: flex; justify-content: space-between; gap: 12px; align-items: baseline; }
 .tip-actions { margin-top: 6px; display: flex; gap: 6px; }
 .tip-actions button { background: var(--panel2); color: var(--gold2); border: 1px solid var(--gold); padding: 4px 14px; border-radius: 2px; cursor: pointer; font-size: 13px; }
 .tip-actions button:hover { background: rgba(201,168,106,.15); }

@@ -11,6 +11,15 @@ and push to `main` on https://github.com/itzRealEzra/ashen-fantasy.
 
 ## [Unreleased]
 
+## [0.7.4] - 2026-10-16
+### Changed
+- Tooltip layout per spec: name + rarity header, type line (armor /
+  consumable / materials), info block, then action buttons.
+- Tooltips now appear only where actions exist (bag gear/consumables,
+  equipped slots, loaded elixirs) — materials show none.
+- Equipped doll slots tooltip an Unequip button; elixir slots tooltip
+  Use + Unload.
+
 ## [0.7.3] - 2026-10-16
 ### Fixed
 - Tooltips usable again: the tip element now loads before the script so its
