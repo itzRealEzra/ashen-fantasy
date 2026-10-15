@@ -81,9 +81,10 @@ input { background: #0e0e14; border: 1px solid var(--line); color: var(--ink); p
 .hamb.collapsed { transform: rotate(90deg); color: var(--gold); }
 .top-name, .top-realm { border-right: 1px solid var(--line); padding: 12px 20px; }
 .top-qi { margin-left: auto; padding: 12px 20px; color: var(--gold2); }
-.shell-body { display: flex; flex: 1; min-height: 0; }
-.sidebar { width: 220px; flex: none; border-right: 1px solid var(--line); display: flex; flex-direction: column; overflow: hidden; opacity: 1; transition: width .3s ease, opacity .22s ease; }
-.sidebar:not(.open) { width: 0; opacity: 0; border-right-color: transparent; }
+.shell-body { display: flex; flex: 1; min-height: 0; position: relative; }
+/* Sidebar floats above the canvas — opening/closing never resizes .content */
+.sidebar { position: absolute; top: 0; left: 0; bottom: 0; width: 220px; z-index: 10; background: var(--panel); border-right: 1px solid var(--line); display: flex; flex-direction: column; overflow: hidden; opacity: 1; visibility: visible; transform: translateX(0); transition: transform .3s ease, opacity .22s ease, visibility 0s; box-shadow: 8px 0 24px rgba(0,0,0,.55); }
+.sidebar:not(.open) { transform: translateX(-102%); opacity: 0; visibility: hidden; border-right-color: transparent; box-shadow: none; transition: transform .3s ease, opacity .22s ease, visibility 0s .3s; }
 .sidebar .side-btn, .sidebar .side-foot { white-space: nowrap; }
 .side-btn { background: none; border: none; border-bottom: 1px solid var(--line); color: var(--ink); padding: 22px; font-size: 16px; letter-spacing: 2px; cursor: pointer; text-align: center; }
 .side-btn.active, .side-btn:hover { background: #241d0e; color: var(--gold2); }
@@ -107,6 +108,6 @@ input { background: #0e0e14; border: 1px solid var(--line); color: var(--ink); p
   .roll-list { max-height: 320px; }
   .game-title { font-size: 36px; }
   .shell-body { flex-direction: column; }
-  .sidebar { width: 100%; max-height: 300px; transition: max-height .3s ease, opacity .22s ease; }
-  .sidebar:not(.open) { display: block; width: 100%; max-height: 0; opacity: 0; border-right: none; }
+  .sidebar { width: min(78vw, 260px); max-height: none; }
+  .sidebar:not(.open) { width: min(78vw, 260px); max-height: none; border-right-color: transparent; }
 }

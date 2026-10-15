@@ -10,6 +10,12 @@ and push to `main` on https://github.com/itzRealEzra/ashen-fantasy.
 
 ## [Unreleased]
 
+## [0.1.4] - 2026-10-15
+### Changed
+- Sidebar is now an overlay above the canvas: it slides in/out with
+  translate + fade (with shadow and focus-safe hiding) while `.content`
+  keeps its full size and never stretches. Applies on desktop and mobile.
+
 ## [0.1.3] - 2026-10-15
 ### Changed
 - Removed the "MAIN GAME OPEN SIDE BAR MENU" placeholder header; the game
