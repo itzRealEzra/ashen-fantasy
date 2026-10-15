@@ -347,11 +347,29 @@ GEAR = [
     _gear("frozen_tear", "Frozen Tear", "necklace", "💧", "Someone's last winter, kept.", {"atk": 18, "crit": 6, "critDmg": 30}),
 ]
 
+# Gear rarity follows root-rarity colors (valley Mortal -> peaks Immortal).
+_GEAR_RARITY = {**{i: "Earth" for i in (
+    "bamboo_cutter", "claw_dagger", "bamboo_hat", "boarhide_vest", "jade_core",
+    "iron_vambraces", "panther_cloak", "hide_boots", "bamboo_greaves",
+    "jade_ring", "bronze_circlet", "fang_necklace")},
+    **{i: "Heaven" for i in (
+    "ember_brand", "ember_ward", "horned_helm", "magma_plate", "ember_core",
+    "magma_gauntlets", "ashen_mantle", "ember_treads", "magma_legguards",
+    "ember_crown", "ember_pendant")},
+    **{i: "Immortal" for i in (
+    "frostbite_edge", "ice_mirror", "frost_crown", "glacial_robe", "frost_core",
+    "frost_bracers", "roc_cloak", "snowwalkers", "frost_leggings",
+    "frost_diadem", "frozen_tear")}}
+for _g in GEAR:
+    _g["rarity"] = _GEAR_RARITY.get(_g["id"], "Mortal")
+
 CONSUMABLES = [
     _con("healing_pill", "Healing Pill", "💊", "Crude but effective. Restores 40% HP.", heal_pct=40),
     _con("qi_pill", "Qi Pill", "🔮", "Condensed morning mist. Grants 15% of a stage in Qi.", qi_pct=15),
     _con("spirit_meal", "Spirit Meal", "🍱", "A hot otherworldly lunch. Restores 15% HP and a little Qi.", heal_pct=15, qi_pct=5),
 ]
+for _c in CONSUMABLES:
+    _c["rarity"] = "Earth"
 
 def _slug(name):
     return re.sub(r"[^a-z0-9]+", "_", name.lower()).strip("_")
@@ -359,7 +377,7 @@ def _slug(name):
 _ZERO = {"atk": 0, "def": 0, "hp": 0, "crit": 0, "critDmg": 0}
 # Every battle material becomes an inventory item (crafting coming soon).
 MATERIALS = [{"id": _slug(name), "name": name, "kind": "material", "slot": None,
-              "glyph": "✦", "desc": "Battle loot. (Crafting coming soon.)",
+              "glyph": "✦", "rarity": "Mortal", "desc": "Battle loot. (Crafting coming soon.)",
               "stats": dict(_ZERO)}
              for name in sorted({l["item"] for a in AREAS for m in a["mobs"] for l in m["loot"]})]
 
@@ -534,7 +552,7 @@ def build_player(username, picks):
         "seclusion": False,
         "equipment": {s: None for s in EQUIP_SLOTS},
         "inventory": {"healing_pill": 3},
-        "elixirs": ["healing_pill", None, None, None],
+        "elixirs": [None, None, None, None],
         "hp": None,  # client-tracked; full on first load
         "last_seen": time.time(),
         "roots": roots,
@@ -543,7 +561,7 @@ def build_player(username, picks):
 
 
 class Handler(BaseHTTPRequestHandler):
-    server_version = "AshenFantasy/0.7.0"
+    server_version = "AshenFantasy/0.7.1"
 
     def log_message(self, fmt, *args):
         pass  # quiet

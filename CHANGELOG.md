@@ -11,6 +11,21 @@ and push to `main` on https://github.com/itzRealEzra/ashen-fantasy.
 
 ## [Unreleased]
 
+## [0.7.1] - 2026-10-16
+### Added
+- Gear rarity (Mortal/Earth/Heaven/Immortal by tier) with rarity-colored
+  hover tooltips, including live stat comparison vs the equipped piece
+  (green/red deltas, "click to equip" hint).
+### Changed
+- Inventory fills the tab with no dead space (bag grid scrolls internally).
+- Bag gear equips on click; consumables/materials still open the detail box.
+- Inspect placeholder removed — the detail box only renders when an item
+  with actions is selected.
+- Bag tabs are square-cornered like the rest of the UI.
+- New characters no longer start with a loaded elixir (pills stay in bag).
+### Fixed
+- Equipping the last of a stack clears a stale detail selection.
+
 ## [0.7.0] - 2026-10-16
 ### Added
 - Inventory + Equipment tab: paper-doll with head/sec weapon/chest, main

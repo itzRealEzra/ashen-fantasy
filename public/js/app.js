@@ -1,6 +1,6 @@
 /* Ashen Fantasy — vanilla JS state machine: username -> roots -> main */
 const $ = (id) => document.getElementById(id);
-const CLIENT_VERSION = "0.7.0"; // must match server.py server_version + footer
+const CLIENT_VERSION = "0.7.1"; // must match server.py server_version + footer
 const state = {
   username: localStorage.getItem("af_user") || "",
   rollId: null,
@@ -615,6 +615,8 @@ $("hamburger").onclick = () => {
 
 // ---------- inventory + equipment (v0.7.0) ----------
 let invTab = "all", invSel = null;
+const ITEM_RARITY_COLORS = { Mortal: "#9aa0a6", Earth: "#7cb342", Heaven: "#42a5f5",
+  Immortal: "#ab47bc", Divine: "#ffb300", Primordial: "#ff3d00" };
 const DOLL_ROWS = [
   [{ s: "sec_weapon", label: "Sec weapon" }, { s: "head", label: "Head" }, { s: "chest", label: "Chest" }],
   [{ s: "main_weapon", label: "Main weapon" }, { s: "core", label: "Core" }, { s: "arm", label: "Arm" }],
@@ -629,15 +631,60 @@ function describeUse(it) {
   return parts.join(" and ") || "usable";
 }
 
+// Hover tooltip: rarity-colored name, stats, and for gear a live
+// comparison against what is currently equipped in that slot.
+function itemTipHtml(itemId) {
+  const it = ITEM_BY_ID[itemId];
+  if (!it) return "";
+  const col = ITEM_RARITY_COLORS[it.rarity] || "#e8e0cf";
+  let h = `<b style="color:${col}">${esc(it.glyph)} ${esc(it.name)}</b><br/>` +
+    `<small class="muted">${esc(it.rarity || "")} ${esc(it.kind)}${it.slot ? " · " + esc(it.slot) : ""}</small><br/>${esc(it.desc)}`;
+  const st = Object.entries(it.stats || {}).filter(([, v]) => v).map(([k, v]) => `${k}+${v}`).join(" · ");
+  if (st) h += `<br/><span class="inv-stats">${esc(st)}</span>`;
+  if (it.kind === "consumable" && it.use) h += `<br/><span class="inv-stats">${esc(describeUse(it))}</span>`;
+  if (it.kind === "gear") {
+    const p = state.player;
+    const targets = it.slot === "ring" ? ["ring1", "ring2"] : [it.slot];
+    const cur = p && p.equipment ? (targets.map(s => p.equipment[s]).find(x => x) || null) : null;
+    if (cur && cur !== itemId && ITEM_BY_ID[cur]) {
+      const a = ITEM_BY_ID[cur].stats || {}, b = it.stats || {};
+      const cmp = ["atk", "def", "hp", "crit", "critDmg"]
+        .filter(k => (a[k] || 0) !== (b[k] || 0))
+        .map(k => {
+          const d = (b[k] || 0) - (a[k] || 0);
+          return `<span class="${d > 0 ? "up" : "down"}">${k} ${a[k] || 0} → ${b[k] || 0}</span>`;
+        }).join(" · ") || `<span class="muted">identical stats</span>`;
+      h += `<br/><small class="muted">vs ${esc(ITEM_BY_ID[cur].name)}:</small><br/>${cmp}<br/><small class="muted">Click to equip</small>`;
+    } else if (!cur) h += `<br/><small class="muted">Click to equip</small>`;
+  }
+  return h;
+}
+
+function showTip(itemId, x, y) {
+  const tip = $("item-tip");
+  if (!tip) return;
+  tip.innerHTML = itemTipHtml(itemId);
+  if (!tip.innerHTML) return;
+  tip.style.display = "block";
+  tip.style.left = Math.min(window.innerWidth - tip.offsetWidth - 10, x + 14) + "px";
+  tip.style.top = Math.min(window.innerHeight - tip.offsetHeight - 10, y + 14) + "px";
+}
+
+function hideTip() {
+  const tip = $("item-tip");
+  if (tip) tip.style.display = "none";
+}
+
 function renderInventory() {
   const p = state.player;
   if (!p) return;
+  hideTip();
   const root = $("inventory-root");
   if (!root) return;
   const doll = DOLL_ROWS.map(row => `<div class="doll-row">` + row.map(({ s, label }) => {
     const iid = p.equipment && p.equipment[s];
     const it = iid && ITEM_BY_ID[iid];
-    return `<div class="slot${it ? " filled" : ""}" data-slot="${s}" title="${it ? esc(it.name) : label}">` +
+    return `<div class="slot${it ? " filled" : ""}" data-slot="${s}"${it ? ` data-tip="${iid}"` : ""} title="${it ? esc(it.name) : label}">` +
       (it ? `<span class="glyph">${esc(it.glyph)}</span>` : "") +
       `<span class="slot-name">${it ? esc(it.name) : label}</span></div>`;
   }).join("") + `</div>`).join("");
@@ -645,7 +692,7 @@ function renderInventory() {
     const iid = p.elixirs && p.elixirs[i];
     const it = iid && ITEM_BY_ID[iid];
     const n = iid ? (p.inventory[iid] || 0) : 0;
-    return `<div class="slot elixir${it ? " filled" : ""}" data-elixir="${i}" title="${it ? esc(it.name) : "Elixir"}">` +
+    return `<div class="slot elixir${it ? " filled" : ""}" data-elixir="${i}"${it ? ` data-tip="${iid}"` : ""} title="${it ? esc(it.name) : "Elixir"}">` +
       (it ? `<span class="glyph">${esc(it.glyph)}</span>` : "") +
       `<span class="slot-name">${it ? esc(it.name) : "Elixir"}</span>` +
       (it ? `<span class="count">${n}x</span>` : "") + `</div>`;
@@ -658,11 +705,11 @@ function renderInventory() {
   }).sort();
   const grid = entries.map(id => {
     const it = ITEM_BY_ID[id];
-    return `<div class="slot inv-slot${invSel === id ? " sel" : ""}" data-item="${id}" title="${esc(it.name)}">` +
+    return `<div class="slot inv-slot${invSel === id ? " sel" : ""}" data-item="${id}" data-tip="${id}" title="${esc(it.name)}">` +
       `<span class="glyph">${esc(it.glyph)}</span><span class="count">${p.inventory[id]}x</span></div>`;
   }).join("") || `<p class="muted">Empty. Hunt beasts for loot.</p>`;
   const sel = invSel && ITEM_BY_ID[invSel] ? ITEM_BY_ID[invSel] : null;
-  let detail = `<p class="muted">Select an item to inspect it.</p>`;
+  let detail = "";
   if (sel) {
     const st = Object.entries(sel.stats || {}).filter(([, v]) => v).map(([k, v]) => `${k}+${v}`).join(" · ");
     detail = `<b>${esc(sel.glyph)} ${esc(sel.name)}</b> ` +
@@ -676,11 +723,20 @@ function renderInventory() {
   }
   root.innerHTML = `<div class="inv-layout"><div class="inv-doll"><h2>Equipment</h2>${doll}${elix}</div>` +
     `<div class="inv-bag"><h2>Bag</h2><div class="inv-tabs">${tabs}</div><div class="inv-grid">${grid}</div>` +
-    `<div class="inv-detail">${detail}</div></div></div>`;
+    (sel ? `<div class="inv-detail">${detail}</div>` : "") + `</div></div>`;
   root.querySelectorAll(".slot[data-slot]").forEach(el => el.onclick = () => unequipSlot(el.dataset.slot));
   root.querySelectorAll(".slot[data-elixir]").forEach(el => el.onclick = () => useElixir(+el.dataset.elixir));
   root.querySelectorAll(".inv-tab").forEach(el => el.onclick = () => { invTab = el.dataset.tab; renderInventory(); });
-  root.querySelectorAll(".inv-slot").forEach(el => el.onclick = () => { invSel = el.dataset.item; renderInventory(); });
+  root.querySelectorAll(".inv-slot").forEach(el => el.onclick = () => {
+    const id = el.dataset.item;
+    const it = ITEM_BY_ID[id];
+    if (it && it.kind === "gear") equipItem(id); // click gear to equip
+    else { invSel = id; renderInventory(); }
+  });
+  root.querySelectorAll("[data-tip]").forEach(el => {
+    el.onmousemove = e => showTip(el.dataset.tip, e.clientX, e.clientY);
+    el.onmouseleave = hideTip;
+  });
   const eq = $("inv-equip");
   if (eq) eq.onclick = () => equipItem(invSel);
   const us = $("inv-use");
@@ -713,6 +769,7 @@ function equipItem(itemId) {
   takeInv(itemId, 1);
   if (prev) addInv(prev, 1);
   p.equipment[slot] = itemId;
+  if ((p.inventory[itemId] || 0) <= 0 && invSel === itemId) invSel = null;
   afterGearChange();
 }
 
