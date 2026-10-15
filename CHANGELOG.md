@@ -10,6 +10,20 @@ and push to `main` on https://github.com/itzRealEzra/ashen-fantasy.
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-10-16
+### Added
+- New realm ladder: Mortal (major tribulation breakthrough) -> Qi Refinement
+  I-X with 10 minor layers each (101 stages), gentle x1.06 cost curve,
+  bottleneck grind on realm ascents, Dao Insight condensation at the peak.
+### Fixed
+- New characters showed "REALM:-": the topbar realm is now set on entering
+  the main game and kept in sync by every cultivate panel refresh.
+- Qi overflow: gains may exceed the bar; breakthroughs consume only the
+  stage cost and surplus carries into the next stage (client + `/api/sync`).
+### Changed
+- Sidebar starts closed and auto-hides on every panel switch; hamburger
+  starts in the collapsed (gold, rotated) state.
+
 ## [0.2.0] - 2026-10-16
 ### Added
 - Idle cultivation: passive Qi every second (`1.0 x root x realm x mode`),

@@ -143,46 +143,53 @@ BASE_QI_PER_SEC = 1.0
 OFFLINE_CAP_SEC = 8 * 3600
 OFFLINE_EFF = 0.5
 SECLUSION_MULT = 2.0
-REALM_RATE_STEP = 0.15
+REALM_RATE_STEP = 0.12
 ONLINE_GRACE_SEC = 300  # elapsed beyond this counts as offline (capped, 50%)
 MANUAL_ALLOW_MULT = 3.0  # Meditate-click headroom per second in legit-gain calc
+REALM_COST_BASE = 50.0
+REALM_COST_GROWTH = 1.06  # per stage; gentle enough for a 101-stage ladder
 
-_REALM_NAMES = (
-    ["Qi Refining " + r for r in ("I", "II", "III", "IV", "V", "VI", "VII", "VIII", "IX")]
-    + ["Foundation I", "Foundation II", "Foundation III", "Golden Core I"]
-)
-_REALM_BOTTLENECK = {5: 1, 6: 1, 7: 1, 8: 2, 9: 1, 10: 1, 11: 2}
-_REALM_FLAVOR = (
-    "First breath of qi. The dantian stirs.",
-    "Meridians open like spring streams.",
-    "Qi pools steady. The body hardens.",
-    "Night meditation deepens; senses sharpen.",
-    "Half-step threshold. The heart wavers.",
-    "Bottleneck looms. Grind insight through circulation.",
-    "Thunder rumbles far away. Heaven watches.",
-    "The dam is about to break.",
-    "Great bottleneck before Foundation. One step from mortality.",
-    "TRIBULATION: cast off mortality, forge the Dao Foundation!",
-    "Foundation stabilizes. Qi becomes a lake.",
-    "Lake becomes sea. Bottleneck before the Core.",
-    "PEAK: condense the Golden Core. Excess qi becomes Dao Insight.",
+_QI_REFINEMENT_NUMERALS = ("I", "II", "III", "IV", "V", "VI", "VII", "VIII", "IX", "X")
+_MINOR_FLAVOR = (
+    "Qi threads gather like morning mist.",
+    "The dantian warms; meridians hum.",
+    "Breath syncs with the turning of heaven.",
+    "A thin barrier thins further.",
+    "Sweat carries out mortal impurities.",
+    "The layer above glimmers faintly.",
 )
 
 def _build_realms():
+    # Stage 0: Mortal (major breakthrough to step onto the Dao).
+    # Then Qi Refinement I-X, each with 10 minor layers (101 stages total).
+    specs = [("Mortal", 0, True, 0,
+              "A mortal body of flesh and bone. Endure the tribulation and step onto the Dao.")]
+    for r in _QI_REFINEMENT_NUMERALS:
+        for layer in range(1, 11):
+            last = (r == "X" and layer == 10)
+            ascent = (layer == 10 and not last)
+            if last:
+                flavor = "PEAK of Qi Refinement. Excess qi condenses into Dao Insight."
+            elif ascent:
+                flavor = f"Layer 10 of Qi Refinement {r}. Ascend to the next heaven!"
+            else:
+                flavor = _MINOR_FLAVOR[(layer - 1) % len(_MINOR_FLAVOR)]
+            specs.append((f"Qi Refinement {r}", layer, False, 1 if ascent else 0, flavor))
     realms = []
-    cost = 100.0
-    for i, name in enumerate(_REALM_NAMES):
+    for i, (realm, layer, major, bottleneck_req, flavor) in enumerate(specs):
+        name = realm if layer == 0 else f"{realm} · Layer {layer}"
         realms.append({
             "idx": i,
             "name": name,
-            "cost": int(round(cost)),
+            "realm": realm,
+            "layer": layer,
+            "cost": int(round(REALM_COST_BASE * (REALM_COST_GROWTH ** i))),
             "rate_mult": round(1.0 + REALM_RATE_STEP * i, 2),
-            "major": name in ("Foundation I", "Golden Core I"),
-            "bottleneck_req": _REALM_BOTTLENECK.get(i, 0),
-            "flavor": _REALM_FLAVOR[i],
-            "cap": i == len(_REALM_NAMES) - 1,
+            "major": major,
+            "bottleneck_req": bottleneck_req,
+            "flavor": flavor,
+            "cap": i == len(specs) - 1,
         })
-        cost *= 1.6
     return realms
 
 REALMS = _build_realms()
@@ -265,7 +272,7 @@ def build_player(username, picks):
     }
     return {
         "username": username,
-        "realm": "Qi Refining I",
+        "realm": "Mortal",
         "realm_idx": 0,
         "cultivation": 0,
         "cultivation_to_next": REALMS[0]["cost"],
@@ -279,7 +286,7 @@ def build_player(username, picks):
 
 
 class Handler(BaseHTTPRequestHandler):
-    server_version = "AshenFantasy/0.2.0"
+    server_version = "AshenFantasy/0.3.0"
 
     def log_message(self, fmt, *args):
         pass  # quiet
@@ -445,8 +452,9 @@ class Handler(BaseHTTPRequestHandler):
             cultivation = min(claimed, legit)
             stage = REALMS[idx]
             if idx > stored_idx:
-                # breakthrough between syncs: fresh stage, bar restarts
-                cultivation = 0.0
+                # breakthrough between syncs: consume only the old stage cost,
+                # surplus Qi carries into the new stage
+                cultivation = max(0.0, cultivation - REALMS[stored_idx]["cost"])
                 bottleneck = 0
             else:
                 idx = stored_idx

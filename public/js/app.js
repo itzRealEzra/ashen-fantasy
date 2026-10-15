@@ -182,18 +182,23 @@ const TABID = Math.random().toString(36).slice(2);
 const OFFLINE_CAP_SEC = 8 * 3600, OFFLINE_EFF = 0.5;
 
 function fallbackRealms() {
-  const names = ["I","II","III","IV","V","VI","VII","VIII","IX"].map(r => "Qi Refining " + r)
-    .concat(["Foundation I", "Foundation II", "Foundation III", "Golden Core I"]);
-  const bott = {5:1, 6:1, 7:1, 8:2, 9:1, 10:1, 11:2};
-  let cost = 100;
-  return names.map((name, i) => {
-    const s = { idx: i, name, cost: Math.round(cost),
-      rate_mult: Math.round((1 + 0.15 * i) * 100) / 100,
-      major: name === "Foundation I" || name === "Golden Core I",
-      bottleneck_req: bott[i] || 0, flavor: "", cap: i === names.length - 1 };
-    cost *= 1.6;
-    return s;
-  });
+  // Mirrors the server ladder: Mortal (major) + Qi Refinement I-X, 10 layers each.
+  const specs = [{ realm: "Mortal", layer: 0, major: true, bottleneck_req: 0,
+    flavor: "A mortal body of flesh and bone. Endure the tribulation and step onto the Dao." }];
+  for (const r of ["I", "II", "III", "IV", "V", "VI", "VII", "VIII", "IX", "X"])
+    for (let layer = 1; layer <= 10; layer++) {
+      const last = r === "X" && layer === 10;
+      specs.push({ realm: `Qi Refinement ${r}`, layer, major: false,
+        bottleneck_req: layer === 10 && !last ? 1 : 0, flavor: "" });
+    }
+  return specs.map((s, i) => ({
+    idx: i, name: s.layer === 0 ? s.realm : `${s.realm} · Layer ${s.layer}`,
+    realm: s.realm, layer: s.layer,
+    cost: Math.round(50 * Math.pow(1.06, i)),
+    rate_mult: Math.round((1 + 0.12 * i) * 100) / 100,
+    major: s.major, bottleneck_req: s.bottleneck_req, flavor: s.flavor,
+    cap: i === specs.length - 1,
+  }));
 }
 
 async function fetchRealms() {
@@ -216,11 +221,13 @@ function cultRate(p) {
 }
 
 function normalizePlayer(p) {
-  if (typeof p.realm_idx !== "number" || p.realm_idx < 0) {
-    const i = REALM_TABLE.findIndex(s => s.name === p.realm);
-    p.realm_idx = i >= 0 ? i : 0;
+  // Keep numeric progress across ladder changes (clamped); else match by name.
+  let idx = Number.isFinite(+p.realm_idx) ? Math.floor(+p.realm_idx) : -1;
+  if (idx < 0) {
+    idx = REALM_TABLE.findIndex(s => s.name === p.realm);
+    if (idx < 0) idx = 0;
   }
-  p.realm_idx = Math.max(0, Math.min(p.realm_idx, REALM_TABLE.length - 1));
+  p.realm_idx = Math.max(0, Math.min(idx, REALM_TABLE.length - 1));
   const st = stageOf(p);
   p.realm = st.name;
   p.cultivation = Math.max(0, +p.cultivation || 0);
@@ -275,7 +282,8 @@ function etaText(p) {
   if (st.bottleneck_req > 0 && p.bottleneck < st.bottleneck_req)
     return `Bottleneck insight ${p.bottleneck}/${st.bottleneck_req} · ` +
       (need > 0 ? fmtDur(need / rate) + " of qi to brim" : "bar full — grind or break through");
-  return need > 0 ? `≈ ${fmtDur(need / rate)} to breakthrough` : "Ready — BREAKTHROUGH!";
+  if (need > 0) return `≈ ${fmtDur(need / rate)} to breakthrough`;
+  return `Ready — BREAKTHROUGH! (+${Math.floor(-need)} surplus carries over)`;
 }
 
 function refreshCultPanel() {
@@ -283,6 +291,7 @@ function refreshCultPanel() {
   if (!p || !REALM_TABLE.length) return;
   const st = stageOf(p), rate = cultRate(p);
   p.cultivation_to_next = st.cost;
+  $("p-realm").textContent = p.realm;
   $("cult-desc").textContent = `${p.username}, your foundation: ${p.roots.map(r => r.name).join(" + ")} ` +
     `(root ×${p.stats.qi_mult}, realm ×${st.rate_mult}${p.seclusion ? ", seclusion ×2" : ""}). ${st.flavor}`;
   $("cult-rate").textContent = `+${rate.toFixed(2)} Qi/s${p.seclusion ? " — SECLUSION ×2" : ""}`;
@@ -468,7 +477,7 @@ $("breakthrough-btn").onclick = () => {
     }
     p.cultivation -= st.cost;
     p.dao_insight++;
-    log($("cult-log"), `💠 A full bar of Golden Core qi collapses into Dao Insight (${p.dao_insight}). The heavens take note.`);
+    log($("cult-log"), `💠 A full bar of peak-stage qi collapses into Dao Insight (${p.dao_insight}). The heavens take note.`);
     saveLocal(p);
     refreshCultPanel();
     updateQi(p);
@@ -531,10 +540,12 @@ $("breakthrough-btn").onclick = () => {
 };
 
 function advanceRealm(p, msg) {
+  // Consume only the old stage cost — surplus Qi carries into the new stage.
+  const cost = stageOf(p).cost;
+  p.cultivation = Math.max(0, p.cultivation - cost);
   p.realm_idx = Math.min(p.realm_idx + 1, REALM_TABLE.length - 1);
   const st = stageOf(p);
   p.realm = st.name;
-  p.cultivation = 0;
   p.cultivation_to_next = st.cost;
   p.bottleneck = 0;
   stageFlags = { half: false, full: false };
@@ -552,7 +563,9 @@ document.querySelectorAll(".side-btn").forEach(b => b.onclick = () => {
   document.querySelectorAll(".tab").forEach(x => x.classList.remove("active"));
   b.classList.add("active");
   $("tab-" + b.dataset.tab).classList.add("active");
-  if (window.innerWidth < 900) { $("sidebar").classList.remove("open"); $("hamburger").classList.add("collapsed"); }
+  // sidebar auto-hides on every panel switch
+  $("sidebar").classList.remove("open");
+  $("hamburger").classList.add("collapsed");
 });
 $("hamburger").onclick = () => {
   const sb = $("sidebar");
