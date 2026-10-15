@@ -75,15 +75,19 @@
         <button data-tab="character" class="side-btn">CHARACTER</button>
         <button data-tab="cultivate" class="side-btn active">CULTIVATE</button>
         <button data-tab="battle" class="side-btn">BATTLE</button>
-        <div class="side-foot">Ashen Fantasy v0.1.4</div>
+        <div class="side-foot">Ashen Fantasy v0.2.0</div>
       </nav>
       <main class="content">
         <div id="tab-cultivate" class="tab active">
           <h2>CULTIVATE PANEL — DEFAULT OR FIRST PANEL</h2>
           <p id="cult-desc" class="muted"></p>
+          <p id="cult-rate" class="rate-line"></p>
+          <p id="cult-eta" class="muted"></p>
+          <div id="welcome-back" class="welcome" style="display:none"></div>
           <div class="row">
             <button id="meditate-btn" class="btn">🧘 Meditate (+Qi)</button>
             <button id="breakthrough-btn" class="btn gold">⚡ Breakthrough</button>
+            <button id="seclusion-btn" class="btn">⛰ Enter Seclusion (×2 Qi)</button>
           </div>
           <div class="progress"><div id="qi-bar" class="qi-bar"></div></div>
           <div id="cult-log" class="log"></div>

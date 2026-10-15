@@ -10,6 +10,25 @@ and push to `main` on https://github.com/itzRealEzra/ashen-fantasy.
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-10-16
+### Added
+- Idle cultivation: passive Qi every second (`1.0 x root x realm x mode`),
+  live rate display and breakthrough ETA in the Cultivate panel.
+- Offline gains: capped at 8h at 50% efficiency with a welcome-back summary.
+- 13-stage realm ladder (Qi Refining I-IX, Foundation I-III, Golden Core I),
+  served as single source of truth via `GET /api/realms`, with per-stage
+  costs, rate multipliers, and flavor lines.
+- Breakthrough depth: bottleneck grinding (insight attempts costing 25% Qi),
+  major-realm tribulations (endure 2 of 3 calamities: thunder/heart/body),
+  and Dao Insight condensation at the Golden Core peak.
+- Closed-door Seclusion mode: x2 Qi rate while battle is forbidden.
+- Server sync (`POST /api/sync` every 30s + on tab hide): authoritative
+  snapshot with rate-cap anti-cheat clamping; players persist across
+  restarts (`players.json` loaded at boot); `GET /api/player` added.
+### Changed
+- Meditate is now a burst supplement with a 5s cooldown instead of the
+  primary Qi source; milestone log lines replace per-action spam.
+
 ## [0.1.4] - 2026-10-15
 ### Changed
 - Sidebar is now an overlay above the canvas: it slides in/out with

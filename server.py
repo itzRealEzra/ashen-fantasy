@@ -135,6 +135,103 @@ LAST_ROLL_BY_IP = {}
 
 USERNAME_RE = re.compile(r"^[A-Za-z0-9_]{3,16}$")
 
+# ----------------------------------------------------------------------------
+# Realm ladder (single source of truth; served via GET /api/realms)
+# cost = Qi needed to breakthrough FROM this stage; rate grows per stage.
+# ----------------------------------------------------------------------------
+BASE_QI_PER_SEC = 1.0
+OFFLINE_CAP_SEC = 8 * 3600
+OFFLINE_EFF = 0.5
+SECLUSION_MULT = 2.0
+REALM_RATE_STEP = 0.15
+ONLINE_GRACE_SEC = 300  # elapsed beyond this counts as offline (capped, 50%)
+MANUAL_ALLOW_MULT = 3.0  # Meditate-click headroom per second in legit-gain calc
+
+_REALM_NAMES = (
+    ["Qi Refining " + r for r in ("I", "II", "III", "IV", "V", "VI", "VII", "VIII", "IX")]
+    + ["Foundation I", "Foundation II", "Foundation III", "Golden Core I"]
+)
+_REALM_BOTTLENECK = {5: 1, 6: 1, 7: 1, 8: 2, 9: 1, 10: 1, 11: 2}
+_REALM_FLAVOR = (
+    "First breath of qi. The dantian stirs.",
+    "Meridians open like spring streams.",
+    "Qi pools steady. The body hardens.",
+    "Night meditation deepens; senses sharpen.",
+    "Half-step threshold. The heart wavers.",
+    "Bottleneck looms. Grind insight through circulation.",
+    "Thunder rumbles far away. Heaven watches.",
+    "The dam is about to break.",
+    "Great bottleneck before Foundation. One step from mortality.",
+    "TRIBULATION: cast off mortality, forge the Dao Foundation!",
+    "Foundation stabilizes. Qi becomes a lake.",
+    "Lake becomes sea. Bottleneck before the Core.",
+    "PEAK: condense the Golden Core. Excess qi becomes Dao Insight.",
+)
+
+def _build_realms():
+    realms = []
+    cost = 100.0
+    for i, name in enumerate(_REALM_NAMES):
+        realms.append({
+            "idx": i,
+            "name": name,
+            "cost": int(round(cost)),
+            "rate_mult": round(1.0 + REALM_RATE_STEP * i, 2),
+            "major": name in ("Foundation I", "Golden Core I"),
+            "bottleneck_req": _REALM_BOTTLENECK.get(i, 0),
+            "flavor": _REALM_FLAVOR[i],
+            "cap": i == len(_REALM_NAMES) - 1,
+        })
+        cost *= 1.6
+    return realms
+
+REALMS = _build_realms()
+
+def stage_rate(player):
+    """Authoritative Qi/sec for sync validation."""
+    try:
+        idx = int(player.get("realm_idx", 0))
+    except (TypeError, ValueError):
+        idx = 0
+    idx = max(0, min(idx, len(REALMS) - 1))
+    try:
+        mult = float(player.get("stats", {}).get("qi_mult", 1.0))
+    except (TypeError, ValueError):
+        mult = 1.0
+    mode = SECLUSION_MULT if player.get("seclusion") else 1.0
+    return BASE_QI_PER_SEC * mult * REALMS[idx]["rate_mult"] * mode
+
+def max_legit_cultivation(stored, elapsed):
+    """Highest cultivation the client could honestly report."""
+    if elapsed < 0:
+        elapsed = 0
+    online = min(elapsed, ONLINE_GRACE_SEC)
+    offline = min(max(elapsed - ONLINE_GRACE_SEC, 0), OFFLINE_CAP_SEC)
+    rate = stage_rate(stored)
+    qi_mult = float(stored.get("stats", {}).get("qi_mult", 1.0))
+    idle = rate * online + rate * offline * OFFLINE_EFF
+    manual = MANUAL_ALLOW_MULT * qi_mult * online
+    return float(stored.get("cultivation", 0)) + idle + manual
+
+def save_players():
+    try:
+        with open(os.path.join(BASE_DIR, "players.json"), "w", encoding="utf-8") as f:
+            json.dump(PLAYERS, f, ensure_ascii=False, indent=2)
+    except OSError:
+        pass
+
+def load_players():
+    try:
+        # utf-8-sig tolerates editors/tools that prepend a BOM
+        with open(os.path.join(BASE_DIR, "players.json"), encoding="utf-8-sig") as f:
+            data = json.load(f)
+        if isinstance(data, dict):
+            PLAYERS.update(data)
+            return len(data)
+    except (OSError, ValueError):
+        pass
+    return 0
+
 def weighted_roll_9():
     """Weighted sample without replacement: pick tier, then unpicked root in tier."""
     pool = list(ROOTS_WITH_CHANCE)
@@ -169,15 +266,20 @@ def build_player(username, picks):
     return {
         "username": username,
         "realm": "Qi Refining I",
+        "realm_idx": 0,
         "cultivation": 0,
-        "cultivation_to_next": 100,
+        "cultivation_to_next": REALMS[0]["cost"],
+        "bottleneck": 0,
+        "dao_insight": 0,
+        "seclusion": False,
+        "last_seen": time.time(),
         "roots": roots,
         "stats": stats,
     }
 
 
 class Handler(BaseHTTPRequestHandler):
-    server_version = "AshenFantasy/0.1.4"
+    server_version = "AshenFantasy/0.2.0"
 
     def log_message(self, fmt, *args):
         pass  # quiet
@@ -224,6 +326,17 @@ class Handler(BaseHTTPRequestHandler):
 
         if path == "/api/health":
             return self._send_json({"ok": True, "roots": len(ROOTS_WITH_CHANCE)})
+
+        if path == "/api/realms":
+            return self._send_json({"realms": REALMS}, cache="max-age=3600")
+
+        if path == "/api/player":
+            qs = parse_qs(parsed.query)
+            username = (qs.get("username") or [""])[0].strip()
+            stored = PLAYERS.get(username)
+            if not stored:
+                return self._send_json({"error": "Unknown cultivator"}, status=404)
+            return self._send_json({"player": stored, "server_time": time.time()})
 
         # static files
         if path == "/" or path == "/index.html":
@@ -300,13 +413,76 @@ class Handler(BaseHTTPRequestHandler):
             player = build_player(username, picks)
             PLAYERS[username] = player
             ROLLS.pop(roll_id, None)  # single use
-            # snapshot to disk (best effort)
-            try:
-                with open(os.path.join(BASE_DIR, "players.json"), "w", encoding="utf-8") as f:
-                    json.dump(PLAYERS, f, ensure_ascii=False, indent=2)
-            except OSError:
-                pass
+            save_players()
             return self._send_json({"ok": True, "player": player})
+
+        if path == "/api/sync":
+            data = self._read_json()
+            username = str(data.get("username") or "").strip()
+            if not USERNAME_RE.match(username):
+                return self._send_json({"error": "Bad username"}, status=400)
+            stored = PLAYERS.get(username)
+            if not stored:
+                return self._send_json({"error": "Unknown cultivator. Create first."}, status=400)
+            now = time.time()
+            try:
+                idx = int(data.get("realm_idx", stored.get("realm_idx", 0)))
+            except (TypeError, ValueError):
+                idx = int(stored.get("realm_idx", 0))
+            idx = max(0, min(idx, len(REALMS) - 1))
+            stored_idx = int(stored.get("realm_idx", 0))
+            # elapsed from SERVER-side last_seen (client clock is untrusted)
+            try:
+                elapsed = now - float(stored.get("last_seen", now))
+            except (TypeError, ValueError):
+                elapsed = 0
+            legit = max_legit_cultivation(stored, elapsed)
+            try:
+                claimed = max(0.0, float(data.get("cultivation", stored.get("cultivation", 0))))
+            except (TypeError, ValueError):
+                claimed = float(stored.get("cultivation", 0))
+            clamped = claimed > legit
+            cultivation = min(claimed, legit)
+            stage = REALMS[idx]
+            if idx > stored_idx:
+                # breakthrough between syncs: fresh stage, bar restarts
+                cultivation = 0.0
+                bottleneck = 0
+            else:
+                idx = stored_idx
+                stage = REALMS[idx]
+                try:
+                    bottleneck = max(0, int(data.get("bottleneck", stored.get("bottleneck", 0))))
+                except (TypeError, ValueError):
+                    bottleneck = 0
+                bottleneck = min(bottleneck, stage["bottleneck_req"])
+            dao_insight = int(stored.get("dao_insight", 0))
+            try:
+                extra_insight = int(data.get("dao_insight", dao_insight))
+            except (TypeError, ValueError):
+                extra_insight = dao_insight
+            if stage["cap"]:
+                # peak of the ladder: overflow condenses into Dao Insight
+                while cultivation >= stage["cost"]:
+                    cultivation -= stage["cost"]
+                    dao_insight += 1
+                # client breakthrough click may report one insight ahead of sync
+                dao_insight = max(dao_insight, min(extra_insight, dao_insight + 1))
+            stored.update({
+                "realm": stage["name"],
+                "realm_idx": idx,
+                "cultivation": cultivation,
+                "cultivation_to_next": stage["cost"],
+                "bottleneck": bottleneck,
+                "dao_insight": dao_insight,
+                "seclusion": bool(data.get("seclusion", stored.get("seclusion", False))),
+                "last_seen": now,
+            })
+            save_players()
+            return self._send_json({
+                "ok": True, "player": stored,
+                "server_time": now, "clamped": clamped,
+            })
 
         return self._send_json({"error": "not found"}, status=404)
 
@@ -318,9 +494,10 @@ def main():
     ap.add_argument("--host", default="127.0.0.1")
     args = ap.parse_args()
     os.makedirs(PUBLIC_DIR, exist_ok=True)
+    loaded = load_players()
     srv = ThreadingHTTPServer((args.host, args.port), Handler)
     print(f"Ashen Fantasy serving at http://{args.host}:{args.port}")
-    print(f"Serving static from: {PUBLIC_DIR}")
+    print(f"Serving static from: {PUBLIC_DIR} ({loaded} saved cultivators loaded)")
     try:
         srv.serve_forever()
     except KeyboardInterrupt:
