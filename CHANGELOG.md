@@ -10,6 +10,21 @@ and push to `main` on https://github.com/itzRealEzra/ashen-fantasy.
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-10-16
+### Added
+- Full battle system: Battle -> realm-gated area list (mockup 1) -> enemy
+  select with loot previews (mockup 2) -> auto-combat (mockup 3).
+- 4 hunting areas x 5 mobs via `GET /api/areas` (Misty Mortal Valley through
+  Frostbite Peaks), with per-mob HP/attack/defense/speed, loot tables, and
+  Qi rewards.
+- Auto-attack bars (player fills in 1s); crits use Character stats; red HP
+  bars, attack log, and a persistent aggregated loot log (`Iron 2x` style)
+  that is never cleared.
+- Kill cycle: enemy dies -> loot drops -> "searching for that same enemy"
+  pause -> same enemy respawns; player death force-leaves to enemy select.
+### Changed
+- Server sync headroom raised to cover battle Qi rewards.
+
 ## [0.5.1] - 2026-10-16
 ### Changed
 - Character panel Qi now ticks live every second instead of only on panel

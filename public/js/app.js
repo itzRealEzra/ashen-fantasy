@@ -326,6 +326,9 @@ async function enterMain(p) {
   refreshCultPanel();
   updateQi(p);
   saveLocal(p);
+  battle.areas = await fetchAreas();
+  loadLoot();
+  showBattleAreas();
   startTick();
   syncPlayer(true);
 }
@@ -552,6 +555,7 @@ function advanceRealm(p, msg) {
 }
 
 document.querySelectorAll(".side-btn").forEach(b => b.onclick = () => {
+  if (b.dataset.tab !== "battle") stopBattle();
   document.querySelectorAll(".side-btn").forEach(x => x.classList.remove("active"));
   document.querySelectorAll(".tab").forEach(x => x.classList.remove("active"));
   b.classList.add("active");
@@ -566,15 +570,241 @@ $("hamburger").onclick = () => {
   $("hamburger").classList.toggle("collapsed", !sb.classList.contains("open"));
 };
 
-$("battle-btn").onclick = () => {
-  const p = state.player;
-  const power = p.stats.physique * 6 + p.stats.comprehension * 4 + Math.random() * 20;
-  const foe = 60 + Math.random() * 40;
-  log($("battle-log"), power > foe
-    ? `⚔ Victory! (${Math.round(power)} vs puppet ${Math.round(foe)}) Your ${esc(p.roots[0].name)} flares. +15 qi insight.`
-    : `✖ Defeated… (${Math.round(power)} vs puppet ${Math.round(foe)}) The puppet's stone fist teaches humility. Cultivate more.`);
-  if (power > foe) { accrue(p, 15); saveLocal(p); }
+// ---------- battle engine (v0.6.0): areas -> enemies -> auto combat ----------
+const battle = {
+  areas: [], view: "areas", area: null, mob: null,
+  php: 1, ehp: 1, pbar: 0, ebar: 0, timer: null,
+  searching: false, kills: 0, atkLog: [], loot: {},
 };
+
+function lootKey() { return "af_loot_" + (state.username || "guest"); }
+function loadLoot() {
+  try { battle.loot = JSON.parse(localStorage.getItem(lootKey()) || "{}"); }
+  catch { battle.loot = {}; }
+}
+function saveLoot() {
+  try { localStorage.setItem(lootKey(), JSON.stringify(battle.loot)); } catch {}
+}
+
+async function fetchAreas() {
+  try {
+    const r = await fetch("/api/areas");
+    const j = await r.json();
+    if (j.areas && j.areas.length) return j.areas;
+  } catch {}
+  return [];
+}
+
+function stopBattle() {
+  if (battle.timer) clearInterval(battle.timer);
+  battle.timer = null;
+  battle.searching = false;
+}
+
+function playerMaxHp(p) { return derivedStats(p).hp; }
+
+function showBattleAreas() {
+  battle.view = "areas";
+  stopBattle();
+  const p = state.player;
+  const root = $("battle-root");
+  root.innerHTML = "<h2>Choose hunting grounds</h2>" + battle.areas.map(a => {
+    const locked = (p.realm_idx | 0) < a.req_idx;
+    return `<div class="area-row${locked ? " locked" : ""}" data-area="${a.id}">
+      <div class="area-left"><b>${esc(a.name)}</b><p class="muted">${esc(a.desc)}</p></div>
+      <div class="area-right">Realm need<br/><b>${esc(a.req)}</b><br/>${esc(a.difficulty)}</div>
+    </div>`;
+  }).join("") || `<p class="muted">No hunting grounds known. Is server.py running?</p>`;
+  root.querySelectorAll(".area-row:not(.locked)").forEach(el => el.onclick = () => {
+    battle.area = battle.areas.find(x => x.id === el.dataset.area);
+    showBattleEnemies("");
+  });
+}
+
+function showBattleEnemies(notice) {
+  battle.view = "enemies";
+  stopBattle();
+  const a = battle.area;
+  const root = $("battle-root");
+  root.innerHTML =
+    `<div class="enemy-head"><h2>${esc(a.name)}</h2><button id="enemy-back" class="btn">Back</button></div>` +
+    `<p class="enemy-notice">${esc(notice || "")}</p>` +
+    `<div class="enemy-grid">` + a.mobs.map(m =>
+      `<div class="enemy-card" data-mob="${m.id}">
+        <b>${esc(m.name)}</b>
+        <div class="realm-tag">${esc(m.realm)}</div>
+        <div class="desc">${esc(m.desc)}</div>
+        <div class="enemy-glyph">${esc(m.glyph)}</div>
+        <div class="enemy-loot">Loot list${m.loot.map(l =>
+          `<div><span>${esc(l.item)}</span><span>${Math.round(l.chance * 100)}%</span></div>`).join("")}</div>
+      </div>`).join("") + `</div>`;
+  $("enemy-back").onclick = showBattleAreas;
+  root.querySelectorAll(".enemy-card").forEach(el => el.onclick = () => {
+    battle.mob = a.mobs.find(x => x.id === el.dataset.mob);
+    startCombat();
+  });
+}
+
+function startCombat() {
+  const p = state.player, m = battle.mob;
+  battle.view = "combat";
+  battle.php = playerMaxHp(p);
+  battle.ehp = m.hp;
+  battle.pbar = 0;
+  battle.ebar = 0;
+  battle.kills = 0;
+  battle.atkLog = [];
+  battle.searching = false;
+  renderCombat();
+  stopBattle();
+  battle.timer = setInterval(battleTick, 100);
+  atkLogLine(`A wild ${m.name} appears!`);
+}
+
+function renderCombat() {
+  const m = battle.mob, a = battle.area;
+  const root = $("battle-root");
+  root.innerHTML =
+    `<div class="combat-head"><h2>${esc(a.name)} — ${esc(m.name)}</h2><button id="combat-leave" class="btn">Leave</button></div>` +
+    `<div class="combat-grid">
+      <div class="combat-side" id="side-player"><img src="/assets/character/character_0_meditating.png" alt="You" /></div>
+      <div class="vs-badge">VS</div>
+      <div class="combat-side" id="side-enemy"><span class="big-glyph">${esc(m.glyph)}</span></div>
+    </div>` +
+    `<div class="hp-row">
+      <div><div class="hp-label"><span>You · HP</span><span id="php-num"></span></div>
+        <div class="hp-bar"><div id="php-fill" class="hp-fill"></div></div>
+        <div class="hp-label"><span>Attack</span></div>
+        <div class="atk-bar"><div id="pbar-fill" class="atk-fill"></div></div></div>
+      <div><div class="hp-label"><span>${esc(m.name)} · HP</span><span id="ehp-num"></span></div>
+        <div class="hp-bar"><div id="ehp-fill" class="hp-fill"></div></div>
+        <div class="hp-label"><span>Attack</span></div>
+        <div class="atk-bar"><div id="ebar-fill" class="atk-fill"></div></div></div>
+    </div>` +
+    `<div id="battle-status"></div>` +
+    `<div class="log" id="atk-log" style="min-height:90px;max-height:150px"></div>` +
+    `<div class="loot-log"><h3>Loot log</h3><div class="loot-rows" id="loot-rows"></div>` +
+    `<div class="kill-count" id="kill-count"></div></div>`;
+  $("combat-leave").onclick = () => showBattleEnemies("");
+  paintCombat();
+}
+
+function setBar(id, frac, attack) {
+  const el = $(id);
+  if (!el) return;
+  el.style.width = Math.min(100, Math.max(0, frac * 100)) + "%";
+  if (attack) el.classList.toggle("full", frac >= 1);
+}
+
+function paintBars() {
+  const p = state.player, m = battle.mob;
+  if (!p || !m) return;
+  setBar("php-fill", battle.php / playerMaxHp(p));
+  setBar("ehp-fill", battle.ehp / m.hp);
+  const pn = $("php-num"), en = $("ehp-num");
+  if (pn) pn.textContent = `${Math.max(0, Math.ceil(battle.php))} / ${playerMaxHp(p)}`;
+  if (en) en.textContent = `${Math.max(0, Math.ceil(battle.ehp))} / ${m.hp}`;
+  setBar("pbar-fill", battle.pbar, true);
+  setBar("ebar-fill", battle.ebar, true);
+}
+
+function paintCombat() {
+  paintBars();
+  const m = battle.mob;
+  const lr = $("loot-rows");
+  if (lr) lr.innerHTML = Object.keys(battle.loot).sort().map(k =>
+    `<div><span>${esc(k)}</span><span>${battle.loot[k]}x</span></div>`).join("") ||
+    `<div><span class="muted">No loot yet — slay something.</span><span></span></div>`;
+  const kc = $("kill-count");
+  if (kc) kc.textContent = battle.kills ? `${m.name} slain ×${battle.kills}` : "";
+  const st = $("battle-status");
+  if (st) st.innerHTML = battle.searching ? `<div class="searching">Searching for that same enemy…</div>` : "";
+}
+
+function flash(id) {
+  const el = $(id);
+  if (!el) return;
+  el.classList.remove("hit");
+  void el.offsetWidth;
+  el.classList.add("hit");
+}
+
+function strikeDmg(atk, crit, critDmg, dfn) {
+  let dmg = Math.max(1, atk * (0.9 + Math.random() * 0.2) - dfn * 0.5);
+  const isCrit = Math.random() * 100 < crit;
+  if (isCrit) dmg *= critDmg / 100;
+  return { dmg: Math.round(dmg), isCrit };
+}
+
+function atkLogLine(msg) {
+  battle.atkLog.push(msg);
+  if (battle.atkLog.length > 30) battle.atkLog.shift();
+  const el = $("atk-log");
+  if (el) {
+    el.textContent = battle.atkLog.join("\n");
+    el.scrollTop = el.scrollHeight;
+  }
+}
+
+function battleTick() {
+  const p = state.player, m = battle.mob;
+  if (!p || !m || battle.view !== "combat" || battle.searching) return;
+  battle.pbar += 0.1 / 1.0; // base attack: 1 second to fill the bar
+  battle.ebar += 0.1 / m.speed;
+  if (battle.pbar >= 1) {
+    battle.pbar = 0;
+    const d = derivedStats(p);
+    const s = strikeDmg(d.atk, d.crit, d.critDmg, m.def);
+    battle.ehp -= s.dmg;
+    flash("side-enemy");
+    atkLogLine(`You attacked ${s.dmg} dmg${s.isCrit ? " (crit!)" : ""}.`);
+  }
+  if (battle.ebar >= 1 && battle.ehp > 0) {
+    battle.ebar = 0;
+    const d = derivedStats(p);
+    const s = strikeDmg(m.atk, m.crit, m.crit_dmg, d.def);
+    battle.php -= s.dmg;
+    flash("side-player");
+    atkLogLine(`${m.name} attacked ${s.dmg} dmg${s.isCrit ? " (crit!)" : ""}.`);
+  }
+  if (battle.ehp <= 0) return onMobDeath();
+  if (battle.php <= 0) return onPlayerDeath();
+  paintBars();
+}
+
+function onMobDeath() {
+  const p = state.player, m = battle.mob;
+  battle.kills++;
+  const drops = [];
+  for (const l of m.loot) {
+    if (Math.random() < l.chance) {
+      const n = l.min + Math.floor(Math.random() * (l.max - l.min + 1));
+      battle.loot[l.item] = (battle.loot[l.item] || 0) + n;
+      drops.push(`${l.item} ${n}x`);
+    }
+  }
+  saveLoot();
+  accrue(p, m.qi);
+  saveLocal(p);
+  updateQi(p);
+  atkLogLine(`${m.name} dies${drops.length ? " — loot: " + drops.join(", ") : " — no loot"}. +${m.qi} Qi.`);
+  battle.searching = true;
+  battle.pbar = 0;
+  battle.ebar = 0;
+  paintCombat();
+  setTimeout(() => {
+    if (battle.view !== "combat") return;
+    battle.ehp = m.hp;
+    battle.searching = false;
+    atkLogLine(`A wild ${m.name} appears!`);
+    paintCombat();
+  }, 2000);
+}
+
+function onPlayerDeath() {
+  stopBattle();
+  showBattleEnemies(`You were defeated by ${battle.mob.name} — dragged out of the hunt. Heal up and return.`);
+}
 
 // boot
 if (state.username) $("username-input").value = state.username;

@@ -145,7 +145,123 @@ OFFLINE_EFF = 0.5
 SECLUSION_MULT = 2.0
 REALM_RATE_STEP = 0.15
 ONLINE_GRACE_SEC = 300  # elapsed beyond this counts as offline (capped, 50%)
-MANUAL_ALLOW_MULT = 3.0  # Meditate-click headroom per second in legit-gain calc
+MANUAL_ALLOW_MULT = 6.0  # headroom per second: meditate clicks + battle Qi rewards
+
+# ----------------------------------------------------------------------------
+# Hunting areas (single source of truth; served via GET /api/areas)
+# req_idx gates by player realm. Loot rolls are client-side; Qi rewards flow
+# through accrue() and the /api/sync clamp like any other honest gain.
+# ----------------------------------------------------------------------------
+def _mob(id, name, realm, desc, glyph, hp, atk, dfn, speed, qi, loot):
+    return {"id": id, "name": name, "realm": realm, "desc": desc, "glyph": glyph,
+            "hp": hp, "atk": atk, "def": dfn, "crit": 5, "crit_dmg": 150,
+            "speed": speed, "qi": qi, "loot": loot}
+
+def _loot(item, chance, mn, mx):
+    return {"item": item, "chance": chance, "min": mn, "max": mx}
+
+AREAS = [
+    {"id": "misty_valley", "name": "Misty Mortal Valley", "req_idx": 0,
+     "req": "Mortal", "difficulty": "Easy",
+     "desc": "Low mists, weak beasts. A safe first hunt for a new cultivator.",
+     "mobs": [
+        _mob("stone_puppet", "Stone Puppet", "Mortal construct",
+             "A training puppet left by a fallen sect. Slow, sturdy, harmless.",
+             "🗿", 80, 8, 2, 1.6, 6,
+             [_loot("Iron", 0.6, 1, 2), _loot("Stone", 0.5, 1, 2)]),
+        _mob("ash_rat", "Ash Rat", "Mortal beast",
+             "Fat rat nesting in cremation ashes. Fast, cowardly, crunchy.",
+             "🐀", 35, 4, 0, 0.9, 3,
+             [_loot("Cinder", 0.5, 1, 1), _loot("Rat Fang", 0.3, 1, 1)]),
+        _mob("mud_crab", "Mud Crab", "Mortal beast",
+             "Sideways menace of the mudflats. Thick shell, soft heart.",
+             "🦀", 50, 5, 3, 1.8, 4,
+             [_loot("Crab Shell", 0.6, 1, 2), _loot("Mud Pearl", 0.15, 1, 1)]),
+        _mob("dust_wolf", "Dust Wolf", "Mortal beast",
+             "Thin wolf prowling the grave roads. Hungry enough to try you.",
+             "🐺", 60, 7, 1, 1.3, 5,
+             [_loot("Wolf Fang", 0.5, 1, 2), _loot("Hide", 0.4, 1, 1)]),
+        _mob("sprout_treant", "Sprout Treant", "Mortal spirit",
+             "A grumpy sapling that woke up wrong. Swings branches wildly.",
+             "🌱", 70, 6, 2, 1.7, 5,
+             [_loot("Spirit Wood", 0.55, 1, 2), _loot("Dewdrop", 0.3, 1, 1)]),
+     ]},
+    {"id": "bamboo_forest", "name": "Whispering Bamboo Forest", "req_idx": 3,
+     "req": "Qi Refinement Realm III", "difficulty": "Normal",
+     "desc": "Wind talks through green stalks. Things with teeth listen.",
+     "mobs": [
+        _mob("bamboo_viper", "Bamboo Viper", "Refinement beast",
+             "Green as the stalks it hides in. Strikes before the hiss.",
+             "🐍", 160, 13, 5, 1.1, 10,
+             [_loot("Venom Gland", 0.5, 1, 1), _loot("Snakeskin", 0.45, 1, 2)]),
+        _mob("ironback_boar", "Ironback Boar", "Refinement beast",
+             "Charges first, thinks never. Its back can turn a blade.",
+             "🐗", 260, 16, 8, 1.7, 14,
+             [_loot("Iron Tusk", 0.5, 1, 2), _loot("Boar Hide", 0.4, 1, 2)]),
+        _mob("mist_gibbon", "Mist Gibbon", "Refinement beast",
+             "Swings laughing through the fog. Drops fruit, and fists.",
+             "🐒", 180, 14, 4, 1.0, 12,
+             [_loot("Spirit Fruit", 0.4, 1, 2), _loot("Misty Pelt", 0.4, 1, 1)]),
+        _mob("thorn_panther", "Thorn Panther", "Refinement beast",
+             "A shadow with thorns for whiskers. You will not see it first.",
+             "🐆", 240, 18, 6, 1.2, 16,
+             [_loot("Panther Claw", 0.5, 1, 2), _loot("Thorn Vine", 0.35, 1, 2)]),
+        _mob("bamboo_wraith", "Bamboo Wraith", "Refinement spirit",
+             "The grudge of a felled grove, rattling like dry leaves.",
+             "👻", 200, 15, 3, 1.4, 18,
+             [_loot("Wraith Wisp", 0.4, 1, 1), _loot("Spirit Sliver", 0.3, 1, 1)]),
+     ]},
+    {"id": "ember_caverns", "name": "Ember Caverns", "req_idx": 6,
+     "req": "Qi Refinement Realm VI", "difficulty": "Hard",
+     "desc": "The stone breathes heat. Everything down here is angry.",
+     "mobs": [
+        _mob("flame_imp", "Flame Imp", "Refinement fiend",
+             "Small, rude, flammable-adjacent. Throws cinders at guests.",
+             "😈", 420, 25, 10, 1.1, 30,
+             [_loot("Imp Horn", 0.5, 1, 1), _loot("Ember", 0.6, 1, 3)]),
+        _mob("magma_lizard", "Magma Lizard", "Refinement beast",
+             "Basks in lava flows. Its scales still glow at midnight.",
+             "🦎", 550, 28, 14, 1.6, 38,
+             [_loot("Magma Scale", 0.5, 1, 2), _loot("Fire Gland", 0.35, 1, 1)]),
+        _mob("cinder_golem", "Cinder Golem", "Refinement construct",
+             "A furnace given fists. Slow, inevitable, extremely hot.",
+             "🗿", 700, 32, 16, 2.0, 48,
+             [_loot("Cinder Core", 0.4, 1, 1), _loot("Obsidian Shard", 0.45, 1, 2)]),
+        _mob("ash_wraith", "Ash Wraith", "Refinement spirit",
+             "What the volcano buried, the volcano remembers.",
+             "🌫️", 480, 30, 8, 1.3, 42,
+             [_loot("Ashen Veil", 0.35, 1, 1), _loot("Grudge Ember", 0.4, 1, 1)]),
+        _mob("inferno_bat", "Inferno Bat", "Refinement beast",
+             "A screech with wings, trailing sparks through black tunnels.",
+             "🦇", 400, 26, 6, 0.9, 34,
+             [_loot("Bat Wing", 0.5, 1, 2), _loot("Searing Blood", 0.3, 1, 2)]),
+     ]},
+    {"id": "frostbite_peaks", "name": "Frostbite Peaks", "req_idx": 8,
+     "req": "Qi Refinement Realm VIII", "difficulty": "Brutal",
+     "desc": "White silence that kills the unprepared. Only apex predators.",
+     "mobs": [
+        _mob("frost_alpha", "Frost Wolf Alpha", "Refinement alpha",
+             "Leads the blizzard pack. Its howl freezes marrow.",
+             "🐺", 950, 42, 18, 1.3, 70,
+             [_loot("Alpha Fang", 0.5, 1, 2), _loot("Frost Pelt", 0.45, 1, 2)]),
+        _mob("ice_revenant", "Ice Revenant", "Refinement spirit",
+             "A frozen cultivator that never stopped climbing.",
+             "🧊", 1100, 46, 22, 1.7, 85,
+             [_loot("Revenant Shard", 0.4, 1, 1), _loot("Glacial Core", 0.3, 1, 1)]),
+        _mob("snow_yak", "Snow Yak Demon", "Refinement beast",
+             "A mountain that moos. Gore first, questions later.",
+             "🐂", 1400, 50, 26, 2.0, 100,
+             [_loot("Yak Horn", 0.45, 1, 2), _loot("Snow Lotus", 0.25, 1, 1)]),
+        _mob("blizzard_roc", "Blizzard Roc", "Refinement beast",
+             "Its wings are the storm. Its shadow is the last thing many see.",
+             "🦅", 1000, 48, 16, 1.0, 90,
+             [_loot("Roc Feather", 0.5, 1, 3), _loot("Storm Eye", 0.2, 1, 1)]),
+        _mob("frozen_jiao", "Frozen Jiao", "Refinement dragon-kin",
+             "A river dragon flash-frozen mid-ascent. Proud, ancient, furious.",
+             "🐉", 1500, 55, 24, 1.5, 140,
+             [_loot("Jiao Scale", 0.4, 1, 2), _loot("Dragon Dew", 0.2, 1, 1)]),
+     ]},
+]
 REALM_COST_BASE = 50.0
 REALM_COST_GROWTH = 1.6  # per realm breakthrough
 
@@ -281,7 +397,7 @@ def build_player(username, picks):
 
 
 class Handler(BaseHTTPRequestHandler):
-    server_version = "AshenFantasy/0.5.1"
+    server_version = "AshenFantasy/0.6.0"
 
     def log_message(self, fmt, *args):
         pass  # quiet
@@ -325,6 +441,9 @@ class Handler(BaseHTTPRequestHandler):
             roots_sorted = sorted(ROOTS_WITH_CHANCE,
                                   key=lambda r: (RARITY_ORDER.index(r["rarity"]), r["name"]))
             return self._send_json({"roots": roots_sorted}, cache="max-age=3600")
+
+        if path == "/api/areas":
+            return self._send_json({"areas": AREAS}, cache="max-age=3600")
 
         if path == "/api/health":
             return self._send_json({"ok": True, "roots": len(ROOTS_WITH_CHANCE)})
