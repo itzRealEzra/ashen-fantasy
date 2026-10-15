@@ -21,6 +21,11 @@ function log(el, msg) {
   el.textContent += msg + "\n";
   el.scrollTop = el.scrollHeight;
 }
+// Single-line event message for the cultivate panel (pure-idle layout).
+function cEvent(msg) {
+  const el = $("cult-event");
+  if (el) el.textContent = msg;
+}
 
 // ---------- username ----------
 $("username-btn").onclick = () => {
@@ -176,7 +181,7 @@ $("confirm-btn").onclick = async () => {
 
 // ---------- idle cultivation engine (v0.2.0) ----------
 let REALM_TABLE = [];
-let tickTimer = null, syncTimer = null, lastTick = 0, medCdUntil = 0;
+let tickTimer = null, syncTimer = null, lastTick = 0;
 let stageFlags = { half: false, full: false };
 const TABID = Math.random().toString(36).slice(2);
 const OFFLINE_CAP_SEC = 8 * 3600, OFFLINE_EFF = 0.5;
@@ -225,7 +230,7 @@ function stageOf(p) {
 
 function cultRate(p) {
   const st = stageOf(p);
-  return 1.0 * p.stats.qi_mult * st.rate_mult * (p.seclusion ? 2 : 1);
+  return 1.0 * p.stats.qi_mult * st.rate_mult;
 }
 
 function normalizePlayer(p) {
@@ -242,7 +247,7 @@ function normalizePlayer(p) {
   p.cultivation_to_next = st.cost;
   p.bottleneck = Math.max(0, Math.min(p.bottleneck | 0, st.bottleneck_req));
   p.dao_insight = p.dao_insight | 0;
-  p.seclusion = !!p.seclusion;
+  p.seclusion = false; // seclusion retired in v0.4.1 (pure idle)
   if (!p.last_seen) p.last_seen = Date.now() / 1000;
   return p;
 }
@@ -259,39 +264,20 @@ function accrue(p, amt, quiet) {
     while (p.cultivation >= st.cost) {
       p.cultivation -= st.cost;
       p.dao_insight++;
-      if (!quiet) log($("cult-log"), `✦ Excess qi condenses into Dao Insight (${p.dao_insight}).`);
+      if (!quiet) cEvent(`✦ Excess qi condenses into Dao Insight (${p.dao_insight}).`);
     }
   } else if (!quiet) {
     const frac = p.cultivation / st.cost;
     if (frac >= 0.5 && !stageFlags.half) {
       stageFlags.half = true;
-      log($("cult-log"), "Your qi churns at half-full. The bottleneck trembles…");
+      cEvent("Your qi churns at half-full. The bottleneck trembles…");
     }
     if (frac >= 1 && !stageFlags.full) {
       stageFlags.full = true;
-      log($("cult-log"), "Qi brims over! Attempt a BREAKTHROUGH.");
+      cEvent("Qi brims over! Attempt a BREAKTHROUGH.");
     }
   }
   updateQi(p);
-}
-
-function fmtDur(s) {
-  s = Math.max(0, Math.ceil(s));
-  const m = Math.floor(s / 60);
-  return m > 0 ? `${m}m ${s % 60}s` : `${s}s`;
-}
-
-function etaText(p) {
-  const st = stageOf(p), rate = cultRate(p);
-  const need = st.cost - p.cultivation;
-  if (st.cap) return p.dao_insight > 0
-    ? `${p.dao_insight} Dao Insight condensed — the ladder ends here (for now)`
-    : "Peak of the ladder — excess qi becomes Dao Insight";
-  if (st.bottleneck_req > 0 && p.bottleneck < st.bottleneck_req)
-    return `Bottleneck insight ${p.bottleneck}/${st.bottleneck_req} · ` +
-      (need > 0 ? fmtDur(need / rate) + " of qi to brim" : "bar full — grind or break through");
-  if (need > 0) return `≈ ${fmtDur(need / rate)} to breakthrough`;
-  return `Ready — BREAKTHROUGH! (+${Math.floor(-need)} surplus carries over)`;
 }
 
 function refreshCultPanel() {
@@ -299,16 +285,9 @@ function refreshCultPanel() {
   if (!p || !REALM_TABLE.length) return;
   const st = stageOf(p), rate = cultRate(p);
   p.cultivation_to_next = st.cost;
-  // Topbar shows the realm only (layers live in the cultivate/character panels).
+  // Topbar shows the realm only; the art panel shows rate + breakthrough.
   $("p-realm").textContent = st.realm;
-  $("cult-desc").textContent = `${p.username}, your foundation: ${p.roots.map(r => r.name).join(" + ")} ` +
-    `(root ×${p.stats.qi_mult}, realm ×${st.rate_mult}${p.seclusion ? ", seclusion ×2" : ""}). ${st.flavor}`;
-  $("cult-rate").textContent = `+${rate.toFixed(2)} Qi/s${p.seclusion ? " — SECLUSION ×2" : ""}`;
-  $("cult-eta").textContent = etaText(p);
-  const sb = $("seclusion-btn");
-  sb.textContent = p.seclusion ? "⛰ Emerge from Seclusion" : "⛰ Enter Seclusion (×2 Qi)";
-  sb.classList.toggle("seclusion-on", !!p.seclusion);
-  $("battle-btn").disabled = !!p.seclusion;
+  $("cult-rate").textContent = `+${rate.toFixed(1)}/s Qi`;
   renderChar(p);
 }
 
@@ -322,17 +301,13 @@ async function enterMain(p) {
   // offline gains: capped at 8h, 50% efficiency
   const nowS = Date.now() / 1000;
   const elapsed = Math.max(0, nowS - (p.last_seen || nowS));
-  $("welcome-back").style.display = "none";
   if (elapsed > 60) {
     const gain = cultRate(p) * Math.min(elapsed, OFFLINE_CAP_SEC) * OFFLINE_EFF;
     accrue(p, gain, true);
     const h = Math.floor(elapsed / 3600), m = Math.floor((elapsed % 3600) / 60);
-    $("welcome-back").style.display = "block";
-    $("welcome-back").textContent =
-      `Welcome back, ${p.username}. ${h}h ${m}m away — passive circulation gained +${Math.floor(gain)} Qi (50% efficiency).`;
-    log($("cult-log"), `— ${p.username} returns after ${h}h ${m}m. +${Math.floor(gain)} Qi gathered in absence. —`);
+    cEvent(`Welcome back — ${h}h ${m}m away, +${Math.floor(gain)} Qi gathered in absence.`);
   } else {
-    log($("cult-log"), `— ${p.username} steps onto the cultivation path. Realm: ${p.realm}. —`);
+    cEvent(`${p.username} steps onto the cultivation path. Realm: ${stageOf(p).realm}.`);
   }
   refreshCultPanel();
   updateQi(p);
@@ -345,7 +320,7 @@ function renderChar(p) {
   if (!REALM_TABLE.length) return;
   const st = stageOf(p);
   $("char-sheet").innerHTML =
-    `<p><b>${esc(p.username)}</b> · ${esc(p.realm)} · Qi ×${p.stats.qi_mult} · Compr ${p.stats.comprehension} · Phys ${p.stats.physique} · Fort ${p.stats.fortune} · 💠 Dao Insight ×${p.dao_insight}${p.seclusion ? " · ⛰ Secluded" : ""}</p>` +
+    `<p><b>${esc(p.username)}</b> · ${esc(p.realm)} · Qi ×${p.stats.qi_mult} · Compr ${p.stats.comprehension} · Phys ${p.stats.physique} · Fort ${p.stats.fortune} · 💠 Dao Insight ×${p.dao_insight}</p>` +
     `<p class="muted">${esc(st.flavor)}</p>` +
     p.roots.map(r => `<div class="char-card" style="border-left-color:${r.color}"><b style="color:${r.color}">${esc(r.name)}</b> <small>${esc(r.rarity)} · ${esc(r.element)}</small><br/>${esc(r.desc)}<br/><small>Qi ×${r.qi_mult} · C${r.comprehension} P${r.physique} F${r.fortune}</small></div>`).join("");
 }
@@ -354,7 +329,6 @@ function updateQi(p) {
   $("p-name").textContent = p.username;
   $("p-qi").textContent = Math.floor(p.cultivation);
   $("qi-bar").style.width = Math.min(100, p.cultivation / p.cultivation_to_next * 100) + "%";
-  if ($("cult-eta")) $("cult-eta").textContent = REALM_TABLE.length ? etaText(p) : "";
 }
 
 // single-tab tick ownership: background tabs render but do not accrue
@@ -420,14 +394,14 @@ async function syncPlayer(initial) {
         $("p-realm").textContent = stageOf(p).realm;
       }
       if (j.clamped && !initial)
-        log($("cult-log"), "Heaven corrects your meridians — reported qi exceeded honest gains. (clamped)");
+        cEvent("Heaven corrects your meridians — reported qi exceeded honest gains. (clamped)");
       renderChar(p);
       refreshCultPanel();
       updateQi(p);
       saveLocal(p);
     }
   } catch {
-    if (initial) log($("cult-log"), "Heaven is silent (server unreachable) — cultivating locally.");
+    if (initial) cEvent("Heaven is silent (server unreachable) — cultivating locally.");
   }
   syncing = false;
 }
@@ -442,51 +416,18 @@ document.addEventListener("visibilitychange", () => {
   }
 });
 
-$("meditate-btn").onclick = () => {
-  const p = state.player;
-  const now = Date.now();
-  if (now < medCdUntil || !p) return;
-  medCdUntil = now + 5000;
-  const btn = $("meditate-btn");
-  btn.disabled = true;
-  const iv = setInterval(() => {
-    const left = Math.ceil((medCdUntil - Date.now()) / 1000);
-    if (left <= 0) {
-      clearInterval(iv);
-      btn.disabled = false;
-      btn.textContent = "🧘 Meditate (+Qi)";
-    } else btn.textContent = `🧘 Meditate (${left}s)`;
-  }, 250);
-  const gain = Math.round((8 + Math.random() * 8) * p.stats.qi_mult);
-  accrue(p, gain);
-  saveLocal(p);
-  log($("cult-log"), `Meditated one cycle… +${gain} qi (×${p.stats.qi_mult}). incense curls.`);
-};
-
-$("seclusion-btn").onclick = () => {
-  const p = state.player;
-  if (!p) return;
-  p.seclusion = !p.seclusion;
-  log($("cult-log"), p.seclusion
-    ? "⛰ You seal the cave mouth. Seclusion begins — Qi flows twice as fast, but battle is forbidden."
-    : "⛰ You emerge from seclusion, dusting off your robes.");
-  saveLocal(p);
-  refreshCultPanel();
-  syncPlayer(false);
-};
-
 $("breakthrough-btn").onclick = () => {
   const p = state.player;
   if (!p) return;
   const st = stageOf(p);
   if (st.cap) {
     if (p.cultivation < st.cost) {
-      log($("cult-log"), `Peak unmoved. Need ${st.cost - Math.floor(p.cultivation)} more qi to condense insight.`);
+      cEvent(`Peak unmoved. Need ${st.cost - Math.floor(p.cultivation)} more qi to condense insight.`);
       return;
     }
     p.cultivation -= st.cost;
     p.dao_insight++;
-    log($("cult-log"), `💠 A full bar of peak-stage qi collapses into Dao Insight (${p.dao_insight}). The heavens take note.`);
+    cEvent(`💠 A full bar of peak-stage qi collapses into Dao Insight (${p.dao_insight}). The heavens take note.`);
     saveLocal(p);
     refreshCultPanel();
     updateQi(p);
@@ -494,14 +435,14 @@ $("breakthrough-btn").onclick = () => {
     return;
   }
   if (p.cultivation < p.cultivation_to_next) {
-    log($("cult-log"), `Bottleneck holds. Need ${p.cultivation_to_next - Math.floor(p.cultivation)} more qi. Fortune ${p.stats.fortune} watches.`);
+    cEvent(`Bottleneck holds. Need ${p.cultivation_to_next - Math.floor(p.cultivation)} more qi. Fortune ${p.stats.fortune} watches.`);
     return;
   }
   // bottleneck grinding: insight attempts cost 25% qi each
   if (p.bottleneck < st.bottleneck_req) {
     p.bottleneck++;
     p.cultivation = Math.floor(p.cultivation * 0.75);
-    log($("cult-log"), p.bottleneck >= st.bottleneck_req
+    cEvent(p.bottleneck >= st.bottleneck_req
       ? `💥 Bottleneck SHATTERED! Insight ${p.bottleneck}/${st.bottleneck_req} — attempt the breakthrough again!`
       : `Grinding the bottleneck… insight ${p.bottleneck}/${st.bottleneck_req} (−25% qi dispersed). Circulate and try again.`);
     saveLocal(p);
@@ -517,19 +458,21 @@ $("breakthrough-btn").onclick = () => {
       ["Body tempering", p.stats.physique],
     ];
     let endured = 0;
+    const trialNotes = [];
     for (const [nm, stat] of trials) {
       const roll = Math.random() * 10 + stat * 0.12;
       if (roll > 6.5) {
         endured++;
-        log($("cult-log"), `  ✓ ${nm} endured (heaven roll ${roll.toFixed(1)}).`);
-      } else log($("cult-log"), `  ✗ ${nm} overwhelms you (heaven roll ${roll.toFixed(1)}).`);
+        trialNotes.push(`✓ ${nm}`);
+      } else trialNotes.push(`✗ ${nm}`);
     }
+    cEvent(`Tribulation: ${trialNotes.join(" · ")} (${endured}/3 endured).`);
     if (endured >= 2) {
       advanceRealm(p, `⚡ TRIBULATION PASSED (${endured}/3)! Realm rises. Heavenly thunder bows.`);
     } else {
       const loss = 0.25 + Math.random() * 0.25;
       p.cultivation = Math.floor(p.cultivation * (1 - loss));
-      log($("cult-log"), `☠ Tribulation failed (${endured}/3) — ${Math.round(loss * 100)}% of qi disperses. Your insight remains; temper yourself and return.`);
+      cEvent(`☠ Tribulation failed (${endured}/3) — ${Math.round(loss * 100)}% of qi disperses. Your insight remains; temper yourself and return.`);
       saveLocal(p);
       refreshCultPanel();
       updateQi(p);
@@ -541,7 +484,7 @@ $("breakthrough-btn").onclick = () => {
     advanceRealm(p, "⚡ Breakthrough! The bottleneck dissolves like mist.");
   } else {
     p.cultivation = Math.floor(p.cultivation * 0.5);
-    log($("cult-log"), "☠ Breakthrough failed — qi deviates! Half your qi disperses. Meditate and try again.");
+    cEvent("☠ Breakthrough failed — qi deviates! Half your qi disperses. Circulate qi and try again.");
     saveLocal(p);
     refreshCultPanel();
     updateQi(p);
@@ -559,7 +502,7 @@ function advanceRealm(p, msg) {
   p.bottleneck = 0;
   stageFlags = { half: false, full: false };
   $("p-realm").textContent = st.realm;
-  log($("cult-log"), `${msg} Realm rises: ${p.realm}. ${st.flavor}`);
+  cEvent(`${msg} Realm rises: ${p.realm}. ${st.flavor}`);
   saveLocal(p);
   renderChar(p);
   refreshCultPanel();
@@ -584,15 +527,11 @@ $("hamburger").onclick = () => {
 
 $("battle-btn").onclick = () => {
   const p = state.player;
-  if (p.seclusion) {
-    log($("battle-log"), "⛰ You are in closed-door seclusion. Emerge before seeking battle.");
-    return;
-  }
   const power = p.stats.physique * 6 + p.stats.comprehension * 4 + Math.random() * 20;
   const foe = 60 + Math.random() * 40;
   log($("battle-log"), power > foe
     ? `⚔ Victory! (${Math.round(power)} vs puppet ${Math.round(foe)}) Your ${esc(p.roots[0].name)} flares. +15 qi insight.`
-    : `✖ Defeated… (${Math.round(power)} vs puppet ${Math.round(foe)}) The puppet's stone fist teaches humility. Meditate more.`);
+    : `✖ Defeated… (${Math.round(power)} vs puppet ${Math.round(foe)}) The puppet's stone fist teaches humility. Cultivate more.`);
   if (power > foe) { accrue(p, 15); saveLocal(p); }
 };
 

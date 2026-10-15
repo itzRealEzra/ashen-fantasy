@@ -10,6 +10,17 @@ and push to `main` on https://github.com/itzRealEzra/ashen-fantasy.
 
 ## [Unreleased]
 
+## [0.4.1] - 2026-10-16
+### Added
+- Cultivate panel rebuilt per mockup with provided art: meditating
+  character (`assets/character/character_0_meditating.png`, gentle hover
+  animation) over the cultivation backdrop (`assets/background/cultivation_panel.png`),
+  wide Qi progress bar, `+X/s Qi` rate line, boxed BREAKTHROUGH button, and
+  a single-line event message replacing the scrolling log.
+### Removed
+- Meditate button (pure idle now) and the Seclusion mode + Emerge button;
+  battle lock and rate multiplier retired with them.
+
 ## [0.4.0] - 2026-10-16
 ### Changed
 - Realm ladder collapsed to 11 stages: Mortal (major tribulation) then Qi
