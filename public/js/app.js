@@ -1,5 +1,6 @@
 /* Ashen Fantasy — vanilla JS state machine: username -> roots -> main */
 const $ = (id) => document.getElementById(id);
+const CLIENT_VERSION = "0.6.1"; // must match server.py server_version + footer
 const state = {
   username: localStorage.getItem("af_user") || "",
   rollId: null,
@@ -808,3 +809,29 @@ function onPlayerDeath() {
 
 // boot
 if (state.username) $("username-input").value = state.username;
+checkServerFresh();
+
+// Warn plainly (not just console 404s) when the server is unreachable or
+// older than this client — e.g. a stale server.py left running after a pull.
+function serverAlert(msg) {
+  let el = $("server-alert");
+  if (!el) {
+    el = document.createElement("div");
+    el.id = "server-alert";
+    document.body.prepend(el);
+  }
+  el.textContent = msg;
+  el.style.display = "block";
+}
+
+async function checkServerFresh() {
+  try {
+    const r = await fetch("/api/health");
+    const j = await r.json();
+    if (!String(j.version || "").endsWith(CLIENT_VERSION)) {
+      serverAlert(`Server/client version mismatch (server: ${j.version || "unknown"}, client: v${CLIENT_VERSION}). Restart server.py from the latest pull.`);
+    }
+  } catch {
+    serverAlert("Cannot reach the game server. Start it with: python server.py");
+  }
+}

@@ -5,10 +5,19 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 versioning follows [Semantic Versioning](https://semver.org/).
 
 Policy: every code update must add an entry here and bump the version
-(`server.py` `server_version`, footer in `public/index.html`), then commit
+(`server.py` `server_version`, `CLIENT_VERSION` in `public/js/app.js`,
+footer in `public/index.html`), then commit
 and push to `main` on https://github.com/itzRealEzra/ashen-fantasy.
 
 ## [Unreleased]
+
+## [0.6.1] - 2026-10-16
+### Added
+- Client/server version handshake: `/api/health` reports the server
+  version and the client shows a plain-language banner (instead of a bare
+  console 404) when the server is unreachable or older than the client.
+### Fixed
+- `/favicon.ico` now answers 204 instead of serving the app shell.
 
 ## [0.6.0] - 2026-10-16
 ### Added

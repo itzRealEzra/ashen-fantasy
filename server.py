@@ -397,7 +397,7 @@ def build_player(username, picks):
 
 
 class Handler(BaseHTTPRequestHandler):
-    server_version = "AshenFantasy/0.6.0"
+    server_version = "AshenFantasy/0.6.1"
 
     def log_message(self, fmt, *args):
         pass  # quiet
@@ -446,7 +446,13 @@ class Handler(BaseHTTPRequestHandler):
             return self._send_json({"areas": AREAS}, cache="max-age=3600")
 
         if path == "/api/health":
-            return self._send_json({"ok": True, "roots": len(ROOTS_WITH_CHANCE)})
+            return self._send_json({"ok": True, "roots": len(ROOTS_WITH_CHANCE),
+                                    "version": self.server_version})
+
+        if path == "/favicon.ico":
+            self.send_response(204)
+            self.end_headers()
+            return
 
         if path == "/api/realms":
             return self._send_json({"realms": REALMS}, cache="max-age=3600")
