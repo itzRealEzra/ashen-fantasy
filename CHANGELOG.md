@@ -10,6 +10,14 @@ and push to `main` on https://github.com/itzRealEzra/ashen-fantasy.
 
 ## [Unreleased]
 
+## [0.1.3] - 2026-10-15
+### Changed
+- Removed the "MAIN GAME OPEN SIDE BAR MENU" placeholder header; the game
+  shell now starts directly with the topbar.
+- Sidebar open/close is animated: smooth width slide + fade on desktop,
+  height collapse + fade on mobile; hamburger icon rotates and turns gold
+  when the sidebar is closed.
+
 ## [0.1.2] - 2026-10-15
 ### Changed
 - True full-screen layout with no dead space: screens are full-bleed

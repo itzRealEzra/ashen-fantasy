@@ -237,9 +237,13 @@ document.querySelectorAll(".side-btn").forEach(b => b.onclick = () => {
   document.querySelectorAll(".tab").forEach(x => x.classList.remove("active"));
   b.classList.add("active");
   $("tab-" + b.dataset.tab).classList.add("active");
-  if (window.innerWidth < 900) $("sidebar").classList.remove("open");
+  if (window.innerWidth < 900) { $("sidebar").classList.remove("open"); $("hamburger").classList.add("collapsed"); }
 });
-$("hamburger").onclick = () => $("sidebar").classList.toggle("open");
+$("hamburger").onclick = () => {
+  const sb = $("sidebar");
+  sb.classList.toggle("open");
+  $("hamburger").classList.toggle("collapsed", !sb.classList.contains("open"));
+};
 
 $("battle-btn").onclick = () => {
   const p = state.player;
