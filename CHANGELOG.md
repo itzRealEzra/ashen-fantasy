@@ -11,6 +11,12 @@ and push to `main` on https://github.com/itzRealEzra/ashen-fantasy.
 
 ## [Unreleased]
 
+## [0.7.5] - 2026-10-16
+### Changed
+- Tooltip trimmed to name + rarity, description, stats, and actions —
+  Type/Info rows removed and the duplicated effect line is gone
+  (descriptions already state the effect).
+
 ## [0.7.4] - 2026-10-16
 ### Changed
 - Tooltip layout per spec: name + rarity header, type line (armor /

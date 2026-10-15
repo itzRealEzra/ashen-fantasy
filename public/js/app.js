@@ -1,6 +1,6 @@
 /* Ashen Fantasy — vanilla JS state machine: username -> roots -> main */
 const $ = (id) => document.getElementById(id);
-const CLIENT_VERSION = "0.7.4"; // must match server.py server_version + footer
+const CLIENT_VERSION = "0.7.5"; // must match server.py server_version + footer
 const state = {
   username: localStorage.getItem("af_user") || "",
   rollId: null,
@@ -625,12 +625,7 @@ const DOLL_ROWS = [
   [{ s: "ring1", label: "Ring 1" }, { s: "ring2", label: "Ring 2" }, { s: "necklace", label: "Necklace" }, { s: "headpiece", label: "Headpiece" }],
 ];
 
-function describeUse(it) {
-  const parts = [];
-  if (it.use.heal_pct) parts.push(`restores ${it.use.heal_pct}% HP`);
-  if (it.use.qi_pct) parts.push(`grants Qi worth ${it.use.qi_pct}% of stage`);
-  return parts.join(" and ") || "usable";
-}
+// Hover tooltip. Layout: name + rarity / desc / stats / actions.
 
 // Hover tooltip. Layout: name + rarity / type / info / actions.
 // ctx: { unequip: slot } on equipped doll slots, { unload: idx } on elixir
@@ -640,12 +635,10 @@ function itemTipHtml(itemId, ctx) {
   if (!it) return "";
   ctx = ctx || {};
   const col = ITEM_RARITY_COLORS[it.rarity] || "#e8e0cf";
-  const type = it.kind === "gear" ? "armor" : it.kind === "consumable" ? "consumable" : "materials";
   let h = `<div class="tip-title"><b>${esc(it.glyph)} ${esc(it.name)}</b><span style="color:${col}">${esc(it.rarity || "")}</span></div>` +
-    `<div>Type: ${type}</div><div>Info:</div><div class="muted">${esc(it.desc)}</div>`;
+    `<div class="muted">${esc(it.desc)}</div>`;
   const st = Object.entries(it.stats || {}).filter(([, v]) => v).map(([k, v]) => `${k}+${v}`).join(" · ");
   if (st) h += `<div><span class="inv-stats">${esc(st)}</span></div>`;
-  if (it.kind === "consumable" && it.use) h += `<div><span class="inv-stats">${esc(describeUse(it))}</span></div>`;
   if (it.kind === "gear" && !ctx.unequip) {
     const p = state.player;
     const targets = it.slot === "ring" ? ["ring1", "ring2"] : [it.slot];
