@@ -11,6 +11,14 @@ and push to `main` on https://github.com/itzRealEzra/ashen-fantasy.
 
 ## [Unreleased]
 
+## [0.7.8] - 2026-10-16
+### Fixed
+- Elixir loadout deduplicated everywhere, not just on load: normalize
+  heals legacy saves (e.g. Healing Pill in all 4 slots) and `/api/sync`
+  enforces one slot per consumable server-side. Gear needs no dedup —
+  equipping consumes from the stack, so two identical rings are two real
+  rings.
+
 ## [0.7.7] - 2026-10-16
 ### Fixed
 - Bag tooltips are state-aware: an equipped item with nothing left to

@@ -561,7 +561,7 @@ def build_player(username, picks):
 
 
 class Handler(BaseHTTPRequestHandler):
-    server_version = "AshenFantasy/0.7.7"
+    server_version = "AshenFantasy/0.7.8"
 
     def log_message(self, fmt, *args):
         pass  # quiet
@@ -785,8 +785,11 @@ class Handler(BaseHTTPRequestHandler):
             elixirs = [None, None, None, None]
             elix_in = data.get("elixirs") or []
             if isinstance(elix_in, list):
+                seen_elix = set()
                 for i, x in enumerate(elix_in[:4]):
-                    if x in ITEM_BY_ID and ITEM_BY_ID[x]["kind"] == "consumable":
+                    # one consumable per loadout: first occurrence wins
+                    if x in ITEM_BY_ID and ITEM_BY_ID[x]["kind"] == "consumable" and x not in seen_elix:
+                        seen_elix.add(x)
                         elixirs[i] = x
             stored.update({
                 "realm": stage["name"],

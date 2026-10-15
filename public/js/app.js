@@ -1,6 +1,6 @@
 /* Ashen Fantasy — vanilla JS state machine: username -> roots -> main */
 const $ = (id) => document.getElementById(id);
-const CLIENT_VERSION = "0.7.7"; // must match server.py server_version + footer
+const CLIENT_VERSION = "0.7.8"; // must match server.py server_version + footer
 const state = {
   username: localStorage.getItem("af_user") || "",
   rollId: null,
@@ -272,9 +272,14 @@ function normalizePlayer(p) {
     if (!ITEM_BY_ID[k] || !(p.inventory[k] > 0)) delete p.inventory[k];
   }
   if (!Array.isArray(p.elixirs)) p.elixirs = [null, null, null, null];
+  // One consumable per loadout: first occurrence wins, later dupes cleared.
+  // (Heals saves created before the dedup fix, e.g. Healing Pill x4.)
+  const seenElixir = new Set();
   p.elixirs = [0, 1, 2, 3].map(i => {
     const x = p.elixirs[i];
-    return (x && ITEM_BY_ID[x] && ITEM_BY_ID[x].kind === "consumable") ? x : null;
+    if (!x || !ITEM_BY_ID[x] || ITEM_BY_ID[x].kind !== "consumable" || seenElixir.has(x)) return null;
+    seenElixir.add(x);
+    return x;
   });
   clampHp(p);
   if (!p.last_seen) p.last_seen = Date.now() / 1000;
