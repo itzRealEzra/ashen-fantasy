@@ -10,6 +10,10 @@ and push to `main` on https://github.com/itzRealEzra/ashen-fantasy.
 
 ## [Unreleased]
 
+## [0.4.4] - 2026-10-16
+### Fixed
+- Character centering fine-tuned with a 4.1px optical nudge on the art.
+
 ## [0.4.3] - 2026-10-16
 ### Changed
 - Cultivate event message line removed for a cleaner panel.
