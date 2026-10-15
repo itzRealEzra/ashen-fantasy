@@ -561,7 +561,7 @@ def build_player(username, picks):
 
 
 class Handler(BaseHTTPRequestHandler):
-    server_version = "AshenFantasy/0.7.6"
+    server_version = "AshenFantasy/0.7.7"
 
     def log_message(self, fmt, *args):
         pass  # quiet

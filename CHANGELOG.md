@@ -11,6 +11,12 @@ and push to `main` on https://github.com/itzRealEzra/ashen-fantasy.
 
 ## [Unreleased]
 
+## [0.7.7] - 2026-10-16
+### Fixed
+- Bag tooltips are state-aware: an equipped item with nothing left to
+  equip now offers Unequip (with the right slot) instead of a misleading
+  Equip; bag clicks follow the same rule.
+
 ## [0.7.6] - 2026-10-16
 ### Changed
 - Consumable tooltips now offer Use + Equip (loading an elixir slot is

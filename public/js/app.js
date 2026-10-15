@@ -1,6 +1,6 @@
 /* Ashen Fantasy — vanilla JS state machine: username -> roots -> main */
 const $ = (id) => document.getElementById(id);
-const CLIENT_VERSION = "0.7.6"; // must match server.py server_version + footer
+const CLIENT_VERSION = "0.7.7"; // must match server.py server_version + footer
 const state = {
   username: localStorage.getItem("af_user") || "",
   rollId: null,
@@ -625,6 +625,19 @@ const DOLL_ROWS = [
   [{ s: "ring1", label: "Ring 1" }, { s: "ring2", label: "Ring 2" }, { s: "necklace", label: "Necklace" }, { s: "headpiece", label: "Headpiece" }],
 ];
 
+// What should bag gear do: equip another, or unequip what's worn?
+// Unequip wins when there is nothing left to equip.
+function bagGearAction(itemId) {
+  const p = state.player, it = ITEM_BY_ID[itemId];
+  if (!it || it.kind !== "gear" || !((p.inventory[itemId] || 0) > 0)) return null;
+  const eq = p.equipment || {};
+  const targets = it.slot === "ring" ? ["ring1", "ring2"] : [it.slot];
+  const worn = targets.find(s => eq[s] === itemId) || null;
+  const free = targets.find(s => !eq[s]) || null;
+  if (worn && !free) return { act: "unequip", slot: worn };
+  return { act: "equip", slot: null };
+}
+
 // Hover tooltip. Layout: name + rarity / desc / stats / actions.
 
 // Hover tooltip. Layout: name + rarity / type / info / actions.
@@ -660,7 +673,12 @@ function itemTipHtml(itemId, ctx) {
   let acts = "";
   if (ctx.unequip) acts += `<button data-act="unequip" data-slot="${esc(ctx.unequip)}">Unequip</button>`;
   else if (ctx.unload != null) acts += `<button data-act="use">Use</button><button data-act="unload" data-slot="${ctx.unload}">Unload</button>`;
-  else if (it.kind === "gear" && owned > 0) acts += `<button data-act="equip">Equip</button>`;
+  else if (it.kind === "gear" && owned > 0) {
+    // Accurate label via the same rule the bag click uses.
+    const a = bagGearAction(itemId);
+    if (a && a.act === "unequip") acts += `<button data-act="unequip" data-slot="${esc(a.slot)}">Unequip</button>`;
+    else acts += `<button data-act="equip">Equip</button>`;
+  }
   else if (it.kind === "consumable" && owned > 0) acts += `<button data-act="use">Use</button><button data-act="elixir">Equip</button>`;
   if (acts) h += `<div class="tip-actions">${acts}</div>`;
   return h;
@@ -752,7 +770,11 @@ function renderInventory() {
   root.querySelectorAll(".inv-slot").forEach(el => el.onclick = () => {
     const id = el.dataset.item;
     const it = ITEM_BY_ID[id];
-    if (it && it.kind === "gear") equipItem(id); // click gear to equip
+    if (it && it.kind === "gear") {
+      const a = bagGearAction(id); // mirror the tooltip: nothing left -> remove
+      if (a && a.act === "unequip") unequipSlot(a.slot);
+      else equipItem(id);
+    }
     else if (it) useConsumable(id); // click consumable to use (waste-guarded)
   });
   root.querySelectorAll("[data-tip].inv-slot").forEach(el => {
