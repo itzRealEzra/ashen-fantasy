@@ -11,6 +11,13 @@ and push to `main` on https://github.com/itzRealEzra/ashen-fantasy.
 
 ## [Unreleased]
 
+## [0.7.6] - 2026-10-16
+### Changed
+- Consumable tooltips now offer Use + Equip (loading an elixir slot is
+  equipping it) instead of Use + Elixir.
+- Tooltip shows the item type value again (armor/consumable/materials),
+  still without the old Type:/Info: labels.
+
 ## [0.7.5] - 2026-10-16
 ### Changed
 - Tooltip trimmed to name + rarity, description, stats, and actions —

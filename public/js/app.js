@@ -1,6 +1,6 @@
 /* Ashen Fantasy — vanilla JS state machine: username -> roots -> main */
 const $ = (id) => document.getElementById(id);
-const CLIENT_VERSION = "0.7.5"; // must match server.py server_version + footer
+const CLIENT_VERSION = "0.7.6"; // must match server.py server_version + footer
 const state = {
   username: localStorage.getItem("af_user") || "",
   rollId: null,
@@ -636,6 +636,7 @@ function itemTipHtml(itemId, ctx) {
   ctx = ctx || {};
   const col = ITEM_RARITY_COLORS[it.rarity] || "#e8e0cf";
   let h = `<div class="tip-title"><b>${esc(it.glyph)} ${esc(it.name)}</b><span style="color:${col}">${esc(it.rarity || "")}</span></div>` +
+    `<div><small class="muted">${it.kind === "gear" ? "armor" : it.kind === "consumable" ? "consumable" : "materials"}</small></div>` +
     `<div class="muted">${esc(it.desc)}</div>`;
   const st = Object.entries(it.stats || {}).filter(([, v]) => v).map(([k, v]) => `${k}+${v}`).join(" · ");
   if (st) h += `<div><span class="inv-stats">${esc(st)}</span></div>`;
@@ -660,7 +661,7 @@ function itemTipHtml(itemId, ctx) {
   if (ctx.unequip) acts += `<button data-act="unequip" data-slot="${esc(ctx.unequip)}">Unequip</button>`;
   else if (ctx.unload != null) acts += `<button data-act="use">Use</button><button data-act="unload" data-slot="${ctx.unload}">Unload</button>`;
   else if (it.kind === "gear" && owned > 0) acts += `<button data-act="equip">Equip</button>`;
-  else if (it.kind === "consumable" && owned > 0) acts += `<button data-act="use">Use</button><button data-act="elixir">Elixir</button>`;
+  else if (it.kind === "consumable" && owned > 0) acts += `<button data-act="use">Use</button><button data-act="elixir">Equip</button>`;
   if (acts) h += `<div class="tip-actions">${acts}</div>`;
   return h;
 }
