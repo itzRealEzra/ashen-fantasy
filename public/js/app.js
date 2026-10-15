@@ -21,10 +21,23 @@ function log(el, msg) {
   el.textContent += msg + "\n";
   el.scrollTop = el.scrollHeight;
 }
-// Single-line event message for the cultivate panel (pure-idle layout).
+// Single-line event message for the cultivate panel: slides in,
+// then fades out after a few seconds.
+let eventTimer = null;
 function cEvent(msg) {
   const el = $("cult-event");
-  if (el) el.textContent = msg;
+  if (!el) return;
+  el.textContent = msg;
+  el.classList.remove("show");
+  void el.offsetWidth; // restart the entrance animation
+  el.classList.add("show");
+  if (eventTimer) clearTimeout(eventTimer);
+  eventTimer = setTimeout(() => el.classList.remove("show"), 4000);
+}
+// Breakthrough is only offered once the stage threshold is truly met.
+function breakthroughReady(p) {
+  const st = stageOf(p);
+  return p.cultivation >= st.cost && p.bottleneck >= st.bottleneck_req;
 }
 
 // ---------- username ----------
@@ -111,7 +124,7 @@ async function doRoll(first) {
     anim.textContent = "Roll failed — is server.py running?";
   }
   btn.disabled = false;
-  btn.textContent = "REROLL 【 Roll Again 】";
+  btn.textContent = "Roll again";
 }
 
 function renderRollList() {
@@ -274,7 +287,7 @@ function accrue(p, amt, quiet) {
     }
     if (frac >= 1 && !stageFlags.full) {
       stageFlags.full = true;
-      cEvent("Qi brims over! Attempt a BREAKTHROUGH.");
+      cEvent("Qi brims over! Attempt a breakthrough.");
     }
   }
   updateQi(p);
@@ -288,6 +301,7 @@ function refreshCultPanel() {
   // Topbar shows the realm only; the art panel shows rate + breakthrough.
   $("p-realm").textContent = st.realm;
   $("cult-rate").textContent = `+${rate.toFixed(1)}/s Qi`;
+  $("breakthrough-btn").classList.toggle("show", breakthroughReady(p));
   renderChar(p);
 }
 
@@ -329,6 +343,8 @@ function updateQi(p) {
   $("p-name").textContent = p.username;
   $("p-qi").textContent = Math.floor(p.cultivation);
   $("qi-bar").style.width = Math.min(100, p.cultivation / p.cultivation_to_next * 100) + "%";
+  const bb = $("breakthrough-btn");
+  if (bb) bb.classList.toggle("show", REALM_TABLE.length ? breakthroughReady(p) : false);
 }
 
 // single-tab tick ownership: background tabs render but do not accrue
@@ -443,7 +459,7 @@ $("breakthrough-btn").onclick = () => {
     p.bottleneck++;
     p.cultivation = Math.floor(p.cultivation * 0.75);
     cEvent(p.bottleneck >= st.bottleneck_req
-      ? `💥 Bottleneck SHATTERED! Insight ${p.bottleneck}/${st.bottleneck_req} — attempt the breakthrough again!`
+      ? `💥 Bottleneck shattered! Insight ${p.bottleneck}/${st.bottleneck_req} — attempt the breakthrough again!`
       : `Grinding the bottleneck… insight ${p.bottleneck}/${st.bottleneck_req} (−25% qi dispersed). Circulate and try again.`);
     saveLocal(p);
     refreshCultPanel();
@@ -468,7 +484,7 @@ $("breakthrough-btn").onclick = () => {
     }
     cEvent(`Tribulation: ${trialNotes.join(" · ")} (${endured}/3 endured).`);
     if (endured >= 2) {
-      advanceRealm(p, `⚡ TRIBULATION PASSED (${endured}/3)! Realm rises. Heavenly thunder bows.`);
+      advanceRealm(p, `⚡ Tribulation passed (${endured}/3)! Realm rises. Heavenly thunder bows.`);
     } else {
       const loss = 0.25 + Math.random() * 0.25;
       p.cultivation = Math.floor(p.cultivation * (1 - loss));

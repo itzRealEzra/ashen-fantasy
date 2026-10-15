@@ -10,6 +10,17 @@ and push to `main` on https://github.com/itzRealEzra/ashen-fantasy.
 
 ## [Unreleased]
 
+## [0.4.2] - 2026-10-16
+### Added
+- Dantian glow over the meditating figure's lower abdomen: warm radial
+  pulse plus a slow rotating qi ring, glowing nonstop.
+- Breakthrough button stays hidden until the stage threshold is truly met
+  (full bar and bottleneck satisfied), then rises in with an animation.
+- Cultivate event line now slides in and fades out after ~4 seconds.
+### Changed
+- UI labels use first-letter casing (Name, Realm, Breakthrough, sidebar
+  and panel headings); the character art itself is static again.
+
 ## [0.4.1] - 2026-10-16
 ### Added
 - Cultivate panel rebuilt per mockup with provided art: meditating

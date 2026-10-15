@@ -12,7 +12,7 @@
 <!-- ============ SCREEN: USERNAME ============ -->
 <section id="screen-username" class="screen active">
   <div class="title-wrap">
-    <div class="game-title">ASHEN FANTASY</div>
+    <div class="game-title">Ashen Fantasy</div>
     <div class="game-sub">灰燼仙途 · A Text-Based Cultivation RPG</div>
     <div class="card username-card">
       <h2>Step Into the Jianghu</h2>
@@ -30,11 +30,11 @@
 <!-- ============ SCREEN: REROLL ROOT PANEL ============ -->
 <section id="screen-roots" class="screen">
   <div class="panel-frame">
-    <div class="panel-title">REROLL ROOT PANEL — Roll 9, Choose 3 as Foundation</div>
+    <div class="panel-title">Reroll root panel — roll 9, choose 3 as foundation</div>
     <div class="root-grid">
       <!-- LEFT: selected detail -->
       <aside class="col left">
-        <h3>SELECTED ROOT<br/>DESCRIPTION AND STATS</h3>
+        <h3>Selected root<br/>description and stats</h3>
         <div id="detail-box" class="detail-box">
           <p class="muted">Click a rolled root to inspect it.<br/><br/>Then tick ☑ up to 3 roots as your starting foundation.</p>
         </div>
@@ -44,17 +44,17 @@
 
       <!-- CENTER: roll area -->
       <div class="col center">
-        <div class="center-head">SHOW ROLLED ROOTS HERE</div>
+        <div class="center-head">Show rolled roots here</div>
         <div id="roll-stage" class="roll-stage">
-          <div id="roll-anim" class="roll-anim">PLAY ANIMATED ROLL HERE</div>
+          <div id="roll-anim" class="roll-anim">Play animated roll here</div>
         </div>
         <div id="roll-list" class="roll-list"></div>
-        <button id="roll-btn" class="btn big">ROLL 【 Roll 9 Roots 】</button>
+        <button id="roll-btn" class="btn big">Roll 9 roots</button>
       </div>
 
       <!-- RIGHT: index -->
       <aside class="col right">
-        <h3>ROOT INDEX<br/><span class="small">SHOW ALL AVAILABLE ROOT AND ITS CHANCES</span></h3>
+        <h3>Root index<br/><span class="small">show all available root and its chances</span></h3>
         <div id="root-index" class="root-index"><p class="muted">Loading…</p></div>
       </aside>
     </div>
@@ -66,35 +66,38 @@
   <div class="game-shell">
     <header class="topbar">
       <button id="hamburger" class="hamb collapsed" aria-label="menu">☰</button>
-      <div class="top-name">NAME: <span id="p-name">—</span></div>
-      <div class="top-realm">REALM: <span id="p-realm">—</span></div>
+      <div class="top-name">Name: <span id="p-name">—</span></div>
+      <div class="top-realm">Realm: <span id="p-realm">—</span></div>
       <div class="top-qi"><span id="p-qi">0</span> Qi</div>
     </header>
     <div class="shell-body">
       <nav id="sidebar" class="sidebar">
-        <button data-tab="character" class="side-btn">CHARACTER</button>
-        <button data-tab="cultivate" class="side-btn active">CULTIVATE</button>
-        <button data-tab="battle" class="side-btn">BATTLE</button>
-        <div class="side-foot">Ashen Fantasy v0.4.1</div>
+        <button data-tab="character" class="side-btn">Character</button>
+        <button data-tab="cultivate" class="side-btn active">Cultivate</button>
+        <button data-tab="battle" class="side-btn">Battle</button>
+        <div class="side-foot">Ashen Fantasy v0.4.2</div>
       </nav>
       <main class="content">
         <div id="tab-cultivate" class="tab active">
           <div class="cult-stage">
-            <img id="cult-art" src="/assets/character/character_0_meditating.png" alt="Meditating cultivator" />
+            <div class="cult-figure">
+              <img id="cult-art" src="/assets/character/character_0_meditating.png" alt="Meditating cultivator" />
+              <div class="dantian" aria-hidden="true"></div>
+            </div>
           </div>
           <div class="cult-qi">
             <div class="progress cult-progress"><div id="qi-bar" class="qi-bar"></div></div>
             <p id="cult-rate" class="rate-line">+1/s Qi</p>
-            <button id="breakthrough-btn" class="btn gold cult-break">BREAKTHROUGH</button>
+            <button id="breakthrough-btn" class="btn gold cult-break">Breakthrough</button>
             <p id="cult-event" class="cult-event"></p>
           </div>
         </div>
         <div id="tab-character" class="tab">
-          <h2>CHARACTER</h2>
+          <h2>Character</h2>
           <div id="char-sheet"></div>
         </div>
         <div id="tab-battle" class="tab">
-          <h2>BATTLE (prototype)</h2>
+          <h2>Battle (prototype)</h2>
           <p class="muted">Challenge the Stone Puppet. Power = physique + sword intent (comprehension).</p>
           <button id="battle-btn" class="btn red">⚔ Spar Stone Puppet</button>
           <div id="battle-log" class="log"></div>
