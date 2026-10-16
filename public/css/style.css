@@ -14,9 +14,15 @@
 html, body { height: 100%; }
 body {
   margin: 0; background: var(--bg); color: var(--ink);
-  font-family: "Ma Shan Zheng", "Kaiti", "STKaiti", Georgia, serif;
+  font-family: "Segoe UI", system-ui, -apple-system, "Helvetica Neue", Arial, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+  font-size: 15px;
+  user-select: none; -webkit-user-select: none;
   height: 100vh; height: 100dvh; overflow: hidden;
 }
+input, textarea { user-select: text; -webkit-user-select: text; }
 .mist {
   position: fixed; inset: 0; pointer-events: none; opacity: .25;
   background: radial-gradient(ellipse at 20% 10%, #2a2438 0%, transparent 50%),
@@ -154,33 +160,52 @@ input { background: #0e0e14; border: 1px solid var(--line); color: var(--ink); p
 /* inventory + equipment (doll left, bag right) */
 #tab-inventory.active { display: flex; flex-direction: column; height: 100%; }
 #inventory-root { flex: 1; min-height: 0; display: flex; }
-.inv-layout { display: grid; grid-template-columns: 340px minmax(0, 1fr); gap: 12px; flex: 1; width: 100%; min-height: 0; }
+.inv-layout { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; flex: 1; width: 100%; min-height: 0; }
 .inv-doll { border: 1px solid var(--line); background: var(--panel); padding: 12px; overflow-y: auto; }
 .inv-doll h2, .inv-bag h2 { margin: 0 0 8px; font-size: 18px; }
-.doll-row { display: flex; justify-content: center; gap: 8px; margin-bottom: 8px; }
+.doll-row { display: flex; justify-content: space-evenly; gap: 8px; margin-bottom: 8px; }
 .slot { width: 72px; height: 72px; border: 1px solid var(--line); border-radius: 6px; background: #0e0e15; display: flex; flex-direction: column; align-items: center; justify-content: center; cursor: pointer; position: relative; }
 .slot:hover { border-color: var(--gold); }
 .slot .glyph { font-size: 28px; line-height: 1; }
-.slot .slot-name { font-size: 9px; color: var(--muted); margin-top: 2px; text-align: center; }
+.slot .slot-name { font-size: 10px; color: var(--muted); margin-top: 2px; text-align: center; }
 .slot.filled { border-color: var(--gold); background: var(--panel2); }
-.slot .count { position: absolute; right: 4px; bottom: 2px; font-size: 11px; color: var(--gold2); }
+.slot .count { position: absolute; right: 3px; bottom: 3px; font-size: 10px; line-height: 1.4; color: var(--gold2); background: rgba(8, 8, 12, .85); border: 1px solid var(--line); border-radius: 3px; padding: 0 4px; }
 .slot.elixir { border-style: dashed; }
 .inv-bag { border: 1px solid var(--line); background: var(--panel); padding: 12px; overflow-y: auto; min-height: 0; display: flex; flex-direction: column; }
 .inv-tabs { display: flex; gap: 6px; margin-bottom: 10px; flex-wrap: wrap; }
 .inv-tab { background: var(--panel2); border: 1px solid var(--line); color: var(--muted); padding: 6px 14px; border-radius: 2px; cursor: pointer; font-size: 13px; }
 .inv-tab.active { color: var(--gold2); border-color: var(--gold); }
-.inv-grid { display: grid; grid-template-columns: repeat(8, 1fr); gap: 6px; flex: 1; min-height: 120px; overflow-y: auto; align-content: start; }
-.inv-slot { aspect-ratio: 1; }
+.inv-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(56px, 1fr)); gap: 6px; flex: 1; min-height: 120px; overflow-y: auto; align-content: start; }
+.inv-grid .slot { width: auto; height: auto; aspect-ratio: 1; }
+.inv-grid .slot .glyph { font-size: 22px; }
+.inv-grid .inv-slot { border-color: var(--rc, var(--line)); }
+.inv-grid .inv-slot:hover { border-color: var(--gold); box-shadow: 0 0 6px rgba(240, 212, 154, .3); }
+.inv-grid .inv-empty { border-style: dashed; border-color: #2b251c; background: #0a0a10; cursor: default; pointer-events: none; }
 .inv-stats { color: var(--gold2); font-size: 13px; }
+.empty-msg { margin: 0 0 8px; }
+/* stats notification — bottom-right corner of the screen, ~3s then fade */
+#stat-notice { position: fixed; right: 16px; bottom: 24px; transform: translateY(10px); z-index: 400;
+  display: flex; flex-direction: column; gap: 2px; align-items: flex-end; background: rgba(14, 14, 21, .96);
+  border: 1px solid var(--gold); padding: 6px 12px; font-size: 14px; line-height: 1.5;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, .55);
+  opacity: 0; visibility: hidden; pointer-events: none;
+  transition: opacity .3s ease, transform .3s ease, visibility 0s .3s; }
+#stat-notice.show { opacity: 1; visibility: visible; transform: translateY(0);
+  transition: opacity .3s ease, transform .3s ease, visibility 0s; }
+#stat-notice div { text-align: right; }
+#stat-notice span { color: var(--ink); }
+#stat-notice b.up { color: #9ccc65; font-weight: 600; }
+#stat-notice b.down { color: #ff6b6b; font-weight: 600; }
 /* floating item tooltip (hover) with rarity + compare colors */
-#item-tip { display: none; position: fixed; z-index: 9999; max-width: 280px; background: #0e0e15; border: 1px solid var(--gold); padding: 8px 10px; font-size: 13px; line-height: 1.6; }
+#item-tip { display: none; position: fixed; z-index: 9999; max-width: 280px; background: #0e0e15; border: 1px solid var(--gold); padding: 8px 10px; font-size: 13px; line-height: 1.6; opacity: 0; transition: opacity .12s ease; }
+#item-tip.on { opacity: 1; }
 #item-tip .up { color: #9ccc65; }
 #item-tip .down { color: #ff8a80; }
 .tip-title { display: flex; justify-content: space-between; gap: 12px; align-items: baseline; }
 .tip-actions { margin-top: 6px; display: flex; gap: 6px; }
 .tip-actions button { background: var(--panel2); color: var(--gold2); border: 1px solid var(--gold); padding: 4px 14px; border-radius: 2px; cursor: pointer; font-size: 13px; }
 .tip-actions button:hover { background: rgba(201,168,106,.15); }
-@media (max-width: 900px) { .inv-layout { grid-template-columns: 1fr; } .inv-grid { grid-template-columns: repeat(6, 1fr); } }
+@media (max-width: 900px) { .inv-layout { grid-template-columns: 1fr; } .inv-grid { grid-template-columns: repeat(auto-fill, minmax(48px, 1fr)); } }
 /* cultivate art panel (mockup layout: art, qi bar, rate, breakthrough) */
 #tab-cultivate.active { display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 100%; gap: 8px; padding: 8px 0; }
 .cult-stage { width: 100%; flex: 1; min-height: 220px; display: flex; align-items: center; justify-content: center; background: #0e0e15 url("/assets/background/cultivation_panel.png") center / cover no-repeat; overflow: hidden; }

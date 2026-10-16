@@ -1,6 +1,6 @@
 /* Ashen Fantasy — vanilla JS state machine: username -> roots -> main */
 const $ = (id) => document.getElementById(id);
-const CLIENT_VERSION = "0.7.8"; // must match server.py server_version + footer
+const CLIENT_VERSION = "0.7.17"; // must match server.py server_version + footer
 const state = {
   username: localStorage.getItem("af_user") || "",
   rollId: null,
@@ -38,7 +38,10 @@ function cEvent(msg) {
 // Breakthrough is only offered once the stage threshold is truly met.
 function breakthroughReady(p) {
   const st = stageOf(p);
-  return p.cultivation >= st.cost && p.bottleneck >= st.bottleneck_req;
+  // Qi alone gates the button: the bottleneck grind IS this button
+  // (clicking at full qi spends 25% per insight), so also gating on
+  // bottleneck would hide the only way to ever satisfy it.
+  return p.cultivation >= st.cost;
 }
 
 // ---------- username ----------
@@ -281,6 +284,16 @@ function normalizePlayer(p) {
     seenElixir.add(x);
     return x;
   });
+  // Re-place loaded pills into their named slots (Combat / Healing / Qi /
+  // Protection) so the labels stay true — also heals legacy saves.
+  const loadedPills = p.elixirs.filter(Boolean);
+  p.elixirs = [null, null, null, null];
+  for (const id of loadedPills) {
+    const pref = elixirPreferredSlot(ITEM_BY_ID[id]);
+    let i = pref >= 0 && !p.elixirs[pref] ? pref : p.elixirs.findIndex(x => !x);
+    if (i < 0) continue;
+    p.elixirs[i] = id;
+  }
   clampHp(p);
   if (!p.last_seen) p.last_seen = Date.now() / 1000;
   return p;
@@ -407,7 +420,11 @@ function derivedStats(p) {
 
 function updateQi(p) {
   $("p-name").textContent = p.username;
-  $("qi-bar").style.width = Math.min(100, p.cultivation / p.cultivation_to_next * 100) + "%";
+  // Single source of truth: always the current stage cost, never a stale
+  // cached cultivation_to_next (bar and button can never disagree).
+  const cost = stageOf(p).cost;
+  p.cultivation_to_next = cost;
+  $("qi-bar").style.width = Math.min(100, cost > 0 ? p.cultivation / cost * 100 : 100) + "%";
   // Character panel Qi stays live between full re-renders.
   const cq = $("char-qi");
   if (cq && REALM_TABLE.length)
@@ -446,10 +463,14 @@ function startTick() {
     const rate = cultRate(p);
     const gain = dt <= 300 ? rate * dt : rate * 300 + rate * (dt - 300) * OFFLINE_EFF;
     accrue(p, gain);
-    // slow wound recovery while not fighting (consumables heal instantly)
-    if (battle.view !== "combat" && REALM_TABLE.length) {
+    // slow wound recovery whenever no fight is running (even if the
+    // battle view is stale — timer is the single source of "in combat")
+    if (!battle.timer && REALM_TABLE.length) {
       const max = playerMaxHp(p);
-      if (p.hp < max) p.hp = Math.min(max, p.hp + max * 0.02 * dt);
+      // invalid hp (legacy save / null clobber) = full, like clampHp —
+      // never start wound recovery from zero
+      if (!(p.hp > 0)) p.hp = max;
+      else if (p.hp < max) p.hp = Math.min(max, p.hp + max * 0.02 * dt);
     }
     saveLocal(p);
   }, 1000);
@@ -478,6 +499,8 @@ async function syncPlayer(initial) {
     });
     const j = await r.json();
     if (j.ok && j.player) {
+      // hp is client-tracked; the server only holds null — never let it clobber
+      if (!(j.player.hp > 0)) delete j.player.hp;
       const wasRealm = p.realm_idx;
       Object.assign(p, j.player);
       if (p.realm_idx !== wasRealm) {
@@ -525,8 +548,8 @@ $("breakthrough-btn").onclick = () => {
     syncPlayer(false);
     return;
   }
-  if (p.cultivation < p.cultivation_to_next) {
-    cEvent(`Bottleneck holds. Need ${p.cultivation_to_next - Math.floor(p.cultivation)} more qi. Fortune ${p.stats.fortune} watches.`);
+  if (p.cultivation < st.cost) {
+    cEvent(`Bottleneck holds. Need ${st.cost - Math.floor(p.cultivation)} more qi. Fortune ${p.stats.fortune} watches.`);
     return;
   }
   // bottleneck grinding: insight attempts cost 25% qi each
@@ -602,7 +625,12 @@ function advanceRealm(p, msg) {
 }
 
 document.querySelectorAll(".side-btn").forEach(b => b.onclick = () => {
-  if (b.dataset.tab !== "battle") stopBattle();
+  if (b.dataset.tab !== "battle") {
+    // Leaving the battle panel mid-hunt auto-leaves the fight:
+    // persist HP, stop ticks, clear the loot log, reset to the area list.
+    if (battle.timer || battle.view === "combat") leaveActiveHunt();
+    else stopBattle();
+  }
   if (b.dataset.tab === "inventory") renderInventory();
   document.querySelectorAll(".side-btn").forEach(x => x.classList.remove("active"));
   document.querySelectorAll(".tab").forEach(x => x.classList.remove("active"));
@@ -624,10 +652,17 @@ let tipItem = null, tipHideTimer = null;
 const ITEM_RARITY_COLORS = { Mortal: "#9aa0a6", Earth: "#7cb342", Heaven: "#42a5f5",
   Immortal: "#ab47bc", Divine: "#ffb300", Primordial: "#ff3d00" };
 const DOLL_ROWS = [
-  [{ s: "sec_weapon", label: "Sec weapon" }, { s: "head", label: "Head" }, { s: "chest", label: "Chest" }],
-  [{ s: "main_weapon", label: "Main weapon" }, { s: "core", label: "Core" }, { s: "arm", label: "Arm" }],
-  [{ s: "back", label: "Back" }, { s: "boots", label: "Boots" }, { s: "legs", label: "Legs" }],
-  [{ s: "ring1", label: "Ring 1" }, { s: "ring2", label: "Ring 2" }, { s: "necklace", label: "Necklace" }, { s: "headpiece", label: "Headpiece" }],
+  [{ s: "sec_weapon", label: "Off-Hand", type: "Secondary Weapon" }, { s: "head", label: "Headgear", type: "Helmet / Circlet" }, { s: "chest", label: "Cuirass", type: "Body Armor" }],
+  [{ s: "main_weapon", label: "Armament", type: "Primary Weapon" }, { s: "core", label: "Spirit Core", type: "Cultivation Artifact" }, { s: "arm", label: "Bracers", type: "Arm Armor" }],
+  [{ s: "back", label: "Mantle", type: "Cloak / Cape" }, { s: "boots", label: "Warboots", type: "Foot Armor" }, { s: "legs", label: "Legguards", type: "Leg Armor" }],
+  [{ s: "ring1", label: "Spirit Ring I", type: "Accessory" }, { s: "ring2", label: "Spirit Ring II", type: "Accessory" }, { s: "necklace", label: "Jade Pendant", type: "Accessory" }, { s: "headpiece", label: "Immortal Crown", type: "Artifact" }],
+];
+// Elixir row is four named slots; pills load into their named slot.
+const ELIXIR_SLOTS = [
+  { name: "Combat Pill", type: "Offensive Consumable" },
+  { name: "Healing Pill", type: "Recovery Consumable" },
+  { name: "Qi Pill", type: "Cultivation Consumable" },
+  { name: "Protection Pill", type: "Defensive Consumable" },
 ];
 
 // What should bag gear do: equip another, or unequip what's worn?
@@ -647,7 +682,8 @@ function bagGearAction(itemId) {
 
 // Hover tooltip. Layout: name + rarity / type / info / actions.
 // ctx: { unequip: slot } on equipped doll slots, { unload: idx } on elixir
-// slots, {} in the bag. Tooltips only exist where actions exist.
+// slots, {} in the bag (consumables self-detect a loaded slot and offer
+// Use + Unequip). Tooltips only exist where actions exist.
 function itemTipHtml(itemId, ctx) {
   const it = ITEM_BY_ID[itemId];
   if (!it) return "";
@@ -677,51 +713,77 @@ function itemTipHtml(itemId, ctx) {
   const owned = p && p.inventory ? (p.inventory[itemId] || 0) : 0;
   let acts = "";
   if (ctx.unequip) acts += `<button data-act="unequip" data-slot="${esc(ctx.unequip)}">Unequip</button>`;
-  else if (ctx.unload != null) acts += `<button data-act="use">Use</button><button data-act="unload" data-slot="${ctx.unload}">Unload</button>`;
+  else if (ctx.unload != null) acts += `<button data-act="use">Use</button><button data-act="unload" data-slot="${ctx.unload}">Unequip</button>`;
   else if (it.kind === "gear" && owned > 0) {
     // Accurate label via the same rule the bag click uses.
     const a = bagGearAction(itemId);
     if (a && a.act === "unequip") acts += `<button data-act="unequip" data-slot="${esc(a.slot)}">Unequip</button>`;
     else acts += `<button data-act="equip">Equip</button>`;
   }
-  else if (it.kind === "consumable" && owned > 0) acts += `<button data-act="use">Use</button><button data-act="elixir">Equip</button>`;
+  else if (it.kind === "consumable" && owned > 0) {
+    // Already loaded? Mirror the elixir-slot tooltip: Use + Unequip.
+    const idx = p.elixirs ? p.elixirs.findIndex(x => x === itemId) : -1;
+    if (idx >= 0) acts += `<button data-act="use">Use</button><button data-act="unload" data-slot="${idx}">Unequip</button>`;
+    else acts += `<button data-act="use">Use</button><button data-act="elixir">Equip</button>`;
+  }
   if (acts) h += `<div class="tip-actions">${acts}</div>`;
   return h;
 }
 
-let tipCtxKey = "";
-function showTip(itemId, x, y, ctx) {
+let tipCtxKey = "", lastTipHtml = "";
+function showTipHtml(html, x, y, key, itemId) {
   ensureTipWired();
   const tip = $("item-tip");
-  if (!tip) return;
-  const key = itemId + "|" + (ctx && ctx.unequip ? "u" + ctx.unequip : ctx && ctx.unload != null ? "l" + ctx.unload : "b");
+  if (!tip || !html) return;
+  if (tipHideTimer) { clearTimeout(tipHideTimer); tipHideTimer = null; }
   if (tipItem === itemId && tipCtxKey === key && tip.style.display === "block") {
-    // Same item + context: keep the tooltip (and its buttons) perfectly still.
-    if (tipHideTimer) { clearTimeout(tipHideTimer); tipHideTimer = null; }
+    // Same target + context: keep the tooltip (and its buttons) perfectly
+    // still — no rewrite, no reposition, no flicker.
     return;
   }
-  tip.innerHTML = itemTipHtml(itemId, ctx);
-  if (!tip.innerHTML) return;
+  if (lastTipHtml !== html) { tip.innerHTML = html; lastTipHtml = html; }
   tipItem = itemId;
   tipCtxKey = key;
-  if (tipHideTimer) { clearTimeout(tipHideTimer); tipHideTimer = null; }
   tip.style.display = "block";
+  tip.classList.add("on");
   tip.style.left = Math.min(window.innerWidth - tip.offsetWidth - 10, x + 14) + "px";
   tip.style.top = Math.min(window.innerHeight - tip.offsetHeight - 10, y + 14) + "px";
 }
 
+function showTip(itemId, x, y, ctx) {
+  const key = itemId + "|" + (ctx && ctx.unequip ? "u" + ctx.unequip : ctx && ctx.unload != null ? "l" + ctx.unload : "b");
+  showTipHtml(itemTipHtml(itemId, ctx), x, y, key, itemId);
+}
+
+// Custom tooltip for empty slots — name, category, and how to fill it
+// (replaces the slow native title).
+function showSlotTip(name, type, hint, x, y, key) {
+  const html = `<div class="tip-title"><b>${esc(name)}</b><span style="color:var(--muted)">${esc(type)}</span></div>` +
+    `<div class="muted">Empty slot.</div><div class="muted">${esc(hint)}</div>`;
+  showTipHtml(html, x, y, "slot|" + key, null);
+}
+
 function hideTip() {
   const tip = $("item-tip");
-  if (tip) tip.style.display = "none";
+  if (tip) { tip.classList.remove("on"); tip.style.display = "none"; }
   tipItem = null;
   tipCtxKey = "";
+  // lastTipHtml intentionally kept: re-showing the same item skips the
+  // innerHTML rewrite entirely.
   if (tipHideTimer) { clearTimeout(tipHideTimer); tipHideTimer = null; }
 }
 
 // Grace period so the cursor can travel from the slot onto the tooltip.
+// Re-checks :hover when it fires — the slot's mouseleave can run AFTER the
+// tooltip's mouseenter, which used to schedule a hide right under the cursor.
 function scheduleHideTip() {
   if (tipHideTimer) clearTimeout(tipHideTimer);
-  tipHideTimer = setTimeout(hideTip, 350);
+  tipHideTimer = setTimeout(() => {
+    tipHideTimer = null;
+    const tip = $("item-tip");
+    if (tip && tip.matches && tip.matches(":hover")) return;
+    hideTip();
+  }, 350);
 }
 
 function renderInventory() {
@@ -730,57 +792,78 @@ function renderInventory() {
   hideTip();
   const root = $("inventory-root");
   if (!root) return;
-  const doll = DOLL_ROWS.map(row => `<div class="doll-row">` + row.map(({ s, label }) => {
+  const doll = DOLL_ROWS.map(row => `<div class="doll-row">` + row.map(({ s, label, type }) => {
     const iid = p.equipment && p.equipment[s];
     const it = iid && ITEM_BY_ID[iid];
-    return `<div class="slot${it ? " filled" : ""}" data-slot="${s}"${it ? ` data-tip="${iid}"` : ` title="${label}"`}>` +
+    return `<div class="slot${it ? " filled" : ""}" data-slot="${s}"${it ? ` data-tip="${iid}"` : ` data-slot-name="${esc(label)}" data-slot-type="${esc(type)}"`}>` +
       (it ? `<span class="glyph">${esc(it.glyph)}</span>` : "") +
-      `<span class="slot-name">${it ? esc(it.name) : label}</span></div>`;
+      `<span class="slot-name">${it ? esc(it.name) : esc(label)}</span></div>`;
   }).join("") + `</div>`).join("");
   const elix = `<div class="doll-row">` + [0, 1, 2, 3].map(i => {
     const iid = p.elixirs && p.elixirs[i];
     const it = iid && ITEM_BY_ID[iid];
     const n = iid ? (p.inventory[iid] || 0) : 0;
-    return `<div class="slot elixir${it ? " filled" : ""}" data-elixir="${i}"${it ? ` data-tip="${iid}"` : ` title="Elixir"`}>` +
+    const slot = ELIXIR_SLOTS[i];
+    return `<div class="slot elixir${it ? " filled" : ""}" data-elixir="${i}"${it ? ` data-tip="${iid}"` : ` data-slot-name="${esc(slot.name)}" data-slot-type="${esc(slot.type)}"`}>` +
       (it ? `<span class="glyph">${esc(it.glyph)}</span>` : "") +
-      `<span class="slot-name">${it ? esc(it.name) : "Elixir"}</span>` +
+      `<span class="slot-name">${it ? esc(it.name) : esc(slot.name)}</span>` +
       (it ? `<span class="count">${n}x</span>` : "") + `</div>`;
   }).join("") + `</div>`;
   const tabs = [["all", "All"], ["gear", "Gear"], ["consumable", "Consumable"], ["material", "Materials"]]
     .map(([v, l]) => `<button class="inv-tab${invTab === v ? " active" : ""}" data-tab="${v}">${l}</button>`).join("");
+  // Hidden in bag while equipped: any consumable loaded into an elixir
+  // slot, and worn gear with no free slot left (a spare ring still shows
+  // while a finger is free so it can be worn too).
+  const eq = p.equipment || {};
+  const hidden = new Set((p.elixirs || []).filter(Boolean));
+  Object.keys(eq).forEach(s => {
+    const id = eq[s];
+    const it = id && ITEM_BY_ID[id];
+    if (!it) return;
+    const t = equipTargets(it);
+    if (t.some(x => eq[x] === id) && !t.some(x => !eq[x])) hidden.add(id);
+  });
   const entries = Object.keys(p.inventory || {}).filter(id => {
     const it = ITEM_BY_ID[id];
-    return it && (p.inventory[id] > 0) && (invTab === "all" || it.kind === invTab);
+    return it && (p.inventory[id] > 0) && !hidden.has(id) && (invTab === "all" || it.kind === invTab);
   }).sort();
   const grid = entries.map(id => {
     const it = ITEM_BY_ID[id];
+    const rc = ITEM_RARITY_COLORS[it.rarity] || "";
     // Tooltips only where actions exist: gear + consumables, never materials.
-    return `<div class="slot inv-slot" data-item="${id}"${it.kind === "material" ? ` title="${esc(it.name)}"` : ` data-tip="${id}"`}>` +
+    return `<div class="slot inv-slot" data-item="${id}"${it.kind === "material" ? ` title="${esc(it.name)}"` : ` data-tip="${id}"`}${rc ? ` style="--rc:${rc}"` : ""}>` +
       `<span class="glyph">${esc(it.glyph)}</span><span class="count">${p.inventory[id]}x</span></div>`;
-  }).join("") || `<p class="muted">Empty. Hunt beasts for loot.</p>`;
+  }).join("");
+  // Empty cells so the bag always reads as a real 48-slot RPG grid.
+  const emptyCells = entries.length < 48
+    ? Array.from({ length: 48 - entries.length }, () => `<div class="slot inv-empty" aria-hidden="true"></div>`).join("")
+    : "";
+  const emptyMsg = entries.length ? "" : `<p class="muted empty-msg">Empty. Hunt beasts for loot.</p>`;
   root.innerHTML = `<div class="inv-layout"><div class="inv-doll"><h2>Equipment</h2>${doll}${elix}</div>` +
-    `<div class="inv-bag"><h2>Bag</h2><div class="inv-tabs">${tabs}</div><div class="inv-grid">${grid}</div>` +
-    `</div></div>`;
+    `<div class="inv-bag"><h2>Bag</h2><div class="inv-tabs">${tabs}</div>${emptyMsg}` +
+    `<div class="inv-grid">${grid}${emptyCells}</div></div></div>`;
   root.querySelectorAll(".slot[data-slot]").forEach(el => {
     el.onclick = () => unequipSlot(el.dataset.slot);
-    el.onmousemove = e => { if (el.dataset.tip) showTip(el.dataset.tip, e.clientX, e.clientY, { unequip: el.dataset.slot }); };
+    el.onmousemove = e => {
+      if (el.dataset.tip) showTip(el.dataset.tip, e.clientX, e.clientY, { unequip: el.dataset.slot });
+      else showSlotTip(el.dataset.slotName, el.dataset.slotType, "Bag → hover an item → Equip.", e.clientX, e.clientY, el.dataset.slot);
+    };
     el.onmouseleave = scheduleHideTip;
   });
   root.querySelectorAll(".slot[data-elixir]").forEach(el => {
     el.onclick = () => useElixir(+el.dataset.elixir);
-    el.onmousemove = e => { if (el.dataset.tip) showTip(el.dataset.tip, e.clientX, e.clientY, { unload: +el.dataset.elixir }); };
+    el.onmousemove = e => {
+      if (el.dataset.tip) showTip(el.dataset.tip, e.clientX, e.clientY, { unload: +el.dataset.elixir });
+      else showSlotTip(el.dataset.slotName, el.dataset.slotType, "Bag → hover a pill → Equip.", e.clientX, e.clientY, "e" + el.dataset.elixir);
+    };
     el.onmouseleave = scheduleHideTip;
   });
   root.querySelectorAll(".inv-tab").forEach(el => el.onclick = () => { invTab = el.dataset.tab; renderInventory(); });
   root.querySelectorAll(".inv-slot").forEach(el => el.onclick = () => {
-    const id = el.dataset.item;
-    const it = ITEM_BY_ID[id];
-    if (it && it.kind === "gear") {
-      const a = bagGearAction(id); // mirror the tooltip: nothing left -> remove
-      if (a && a.act === "unequip") unequipSlot(a.slot);
-      else equipItem(id);
-    }
-    else if (it) useConsumable(id); // click consumable to use (waste-guarded)
+    const it = ITEM_BY_ID[el.dataset.item];
+    // No equip-on-click in the bag: gear actions live on the tooltip
+    // buttons only. Clicking a consumable still uses it.
+    if (it && it.kind === "consumable") useConsumable(el.dataset.item);
   });
   root.querySelectorAll("[data-tip].inv-slot").forEach(el => {
     el.onmousemove = e => showTip(el.dataset.tip, e.clientX, e.clientY);
@@ -792,7 +875,43 @@ function equipTargets(it) {
   return it.slot === "ring" ? ["ring1", "ring2"] : [it.slot];
 }
 
-function afterGearChange() {
+// ---------- stats notification: bottom-center popup on gear change ----------
+const STAT_NOTICE_LABELS = { hp: "HP", atk: "ATK", def: "DEF", crit: "Crit", critDmg: "Crit DMG" };
+const STAT_NOTICE_KEYS = ["hp", "atk", "def", "crit", "critDmg"];
+
+// Rows for a gear change. Up: "HP: 500 → +550" green, down: "HP: 550 ← 500"
+// red. Empty string when no stat moved (no popup then).
+function statNoticeHtml(before, after) {
+  const rows = [];
+  for (const k of STAT_NOTICE_KEYS) {
+    const a = before[k] || 0, b = after[k] || 0;
+    if (a === b) continue;
+    const label = STAT_NOTICE_LABELS[k];
+    if (b > a) rows.push(`<div><span>${label}: ${a} →</span> <b class="up">+${b}</b></div>`);
+    else rows.push(`<div><span>${label}: ${a} ←</span> <b class="down">${b}</b></div>`);
+  }
+  return rows.join("");
+}
+
+let statNoticeTimer = null;
+function notifyStatChange(before, after) {
+  const html = statNoticeHtml(before, after);
+  if (!html) return;
+  let el = $("stat-notice");
+  if (!el) {
+    el = document.createElement("div");
+    el.id = "stat-notice";
+    document.body.appendChild(el);
+  }
+  el.innerHTML = html;
+  el.classList.remove("show");
+  void el.offsetWidth; // restart the fade-in
+  el.classList.add("show");
+  if (statNoticeTimer) clearTimeout(statNoticeTimer);
+  statNoticeTimer = setTimeout(() => el.classList.remove("show"), 3000);
+}
+
+function afterGearChange(before) {
   const p = state.player;
   clampHp(p);
   saveLocal(p);
@@ -801,27 +920,30 @@ function afterGearChange() {
   refreshCultPanel();
   updateQi(p);
   syncPlayer(false);
+  if (before) notifyStatChange(before, derivedStats(p));
 }
 
 function equipItem(itemId) {
   const p = state.player, it = ITEM_BY_ID[itemId];
   if (!it || it.kind !== "gear" || (p.inventory[itemId] || 0) <= 0) return;
+  const before = derivedStats(p);
   const targets = equipTargets(it);
   const slot = targets.find(s => !p.equipment[s]) || targets[0];
   const prev = p.equipment[slot];
   takeInv(itemId, 1);
   if (prev) addInv(prev, 1);
   p.equipment[slot] = itemId;
-  afterGearChange();
+  afterGearChange(before);
 }
 
 function unequipSlot(slot) {
   const p = state.player;
   const prev = p.equipment && p.equipment[slot];
   if (!prev) return;
+  const before = derivedStats(p);
   p.equipment[slot] = null;
   addInv(prev, 1);
-  afterGearChange();
+  afterGearChange(before);
 }
 
 function useConsumable(itemId) {
@@ -846,12 +968,23 @@ function useConsumable(itemId) {
   syncPlayer(false);
 }
 
+// Which named slot a pill belongs to: Combat(0) / Healing(1) / Qi(2) / Protection(3).
+function elixirPreferredSlot(it) {
+  const u = (it && it.use) || {};
+  if (u.atk_pct || u.crit_pct || u.dmg_pct) return 0;
+  if (u.heal_pct) return 1;
+  if (u.qi_pct) return 2;
+  if (u.def_pct || u.shield_pct) return 3;
+  return -1;
+}
+
 function loadElixirSlot(itemId) {
   const p = state.player, it = ITEM_BY_ID[itemId];
   if (!it || it.kind !== "consumable" || (p.inventory[itemId] || 0) <= 0) return;
   p.elixirs = p.elixirs.map(x => x === itemId ? null : x); // no duplicates
-  let i = p.elixirs.findIndex(x => !x);
-  if (i < 0) i = 0;
+  const pref = elixirPreferredSlot(it);
+  let i = pref >= 0 && !p.elixirs[pref] ? pref : p.elixirs.findIndex(x => !x);
+  if (i < 0) i = pref >= 0 ? pref : 0;
   p.elixirs[i] = itemId;
   saveLocal(p);
   renderInventory();
@@ -886,6 +1019,13 @@ function loadLoot() {
 }
 function saveLoot() {
   try { localStorage.setItem(lootKey(), JSON.stringify(battle.loot)); } catch {}
+}
+
+// The loot log belongs to one hunt: leaving the fight wipes it.
+function clearLootLog() {
+  battle.loot = {};
+  battle.kills = 0;
+  saveLoot();
 }
 
 async function fetchAreas() {
@@ -934,6 +1074,16 @@ function stopBattle() {
   if (battle.timer) clearInterval(battle.timer);
   battle.timer = null;
   battle.searching = false;
+}
+
+// Exit whatever hunt is running (panel switch): save hp, stop the fight,
+// wipe the loot log, and land back on the area list.
+function leaveActiveHunt() {
+  if (battle.timer) persistBattleHp(false);
+  stopBattle();
+  battle.mob = null;
+  clearLootLog();
+  showBattleAreas();
 }
 
 function playerMaxHp(p) { return derivedStats(p).hp; }
@@ -1024,7 +1174,13 @@ function renderCombat() {
     `<div id="battle-status"></div>` +
     `<div class="loot-log"><h3>Loot log</h3><div class="loot-rows" id="loot-rows"></div>` +
     `<div class="kill-count" id="kill-count"></div></div>`;
-  $("combat-leave").onclick = () => { persistBattleHp(false); showBattleEnemies(""); };
+  $("combat-leave").onclick = () => {
+    persistBattleHp(false);
+    stopBattle();
+    battle.mob = null;
+    clearLootLog();
+    showBattleEnemies("");
+  };
   paintCombat();
 }
 
@@ -1127,9 +1283,12 @@ function onMobDeath() {
 }
 
 function onPlayerDeath() {
+  const name = battle.mob ? battle.mob.name : "the enemy";
   stopBattle();
   persistBattleHp(true);
-  showBattleEnemies(`You were defeated by ${battle.mob.name} — dragged out of the hunt. Heal up and return.`);
+  battle.mob = null;
+  clearLootLog();
+  showBattleEnemies(`You were defeated by ${name} — dragged out of the hunt. Heal up and return.`);
 }
 
 // boot

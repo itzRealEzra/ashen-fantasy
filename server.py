@@ -267,18 +267,6 @@ AREAS = [
 # Item database (single source of truth; served via GET /api/items)
 # kind: gear (equippable) / consumable (usable) / material (future crafting)
 # ----------------------------------------------------------------------------
-def _gear(id, name, slot, glyph, desc, **stats):
-    base = {"atk": 0, "def": 0, "hp": 0, "crit": 0, "critDmg": 0}
-    base.update(stats)
-    return {"id": id, "name": name, "kind": "gear", "slot": slot,
-            "glyph": glyph, "desc": desc, "stats": base}
-
-def _con(id, name, glyph, desc, heal_pct=0, qi_pct=0):
-    return {"id": id, "name": name, "kind": "consumable", "slot": None,
-            "glyph": glyph, "desc": desc,
-            "stats": {"atk": 0, "def": 0, "hp": 0, "crit": 0, "critDmg": 0},
-            "use": {"heal_pct": heal_pct, "qi_pct": qi_pct}}
-
 def _gear(id, name, slot, glyph, desc, stats=None):
     base = {"atk": 0, "def": 0, "hp": 0, "crit": 0, "critDmg": 0}
     if stats:
@@ -561,7 +549,7 @@ def build_player(username, picks):
 
 
 class Handler(BaseHTTPRequestHandler):
-    server_version = "AshenFantasy/0.7.8"
+    server_version = "AshenFantasy/0.7.17"
 
     def log_message(self, fmt, *args):
         pass  # quiet
@@ -805,8 +793,10 @@ class Handler(BaseHTTPRequestHandler):
                 "last_seen": now,
             })
             save_players()
+            # hp is client-tracked and always null here — never echo it back
             return self._send_json({
-                "ok": True, "player": stored,
+                "ok": True,
+                "player": {k: v for k, v in stored.items() if k != "hp"},
                 "server_time": now, "clamped": clamped,
             })
 

@@ -11,6 +11,96 @@ and push to `main` on https://github.com/itzRealEzra/ashen-fantasy.
 
 ## [Unreleased]
 
+## [0.7.17] - 2026-10-16
+### Fixed
+- Breakthrough button deadlock: it no longer hides while the bottleneck
+  is unmet (grinding the bottleneck is done BY clicking it), and the qi
+  bar/button now both read the live stage cost instead of a possibly
+  stale cached value — a full 29K bar always shows the button.
+- Leaving a battle now wipes the loot log (Leave button, defeat, or
+  switching panels mid-hunt) instead of carrying it into the next fight.
+- Wound recovery no longer freezes: regen keys off "no fight running"
+  instead of the battle view, which used to stay stuck on "combat"
+  after a panel switch — that's why HP sat at e.g. 59/725 forever.
+- Switching panels during a fight auto-leaves it: HP is persisted, the
+  tick stops, the log clears, and the battle screen resets to the area
+  list (no more frozen combat screen when returning).
+- New characters no longer start fights at ~41/675 HP: `/api/sync`
+  echoed the server's `hp: null` over the client-tracked value and
+  wound recovery then "regened" from zero — sync now ignores null
+  server HP, the sync response no longer includes the field, and
+  invalid HP snaps to full (same rule as clampHp).
+- server.py: removed dead duplicate `_gear`/`_con` definitions.
+### Changed
+- `.env` is git-ignored.
+
+## [0.7.16] - 2026-10-16
+### Fixed
+- Tooltip no longer ticks/flickers during continuous hovering: the
+  hide-timer now re-checks whether the cursor is on the tooltip before
+  hiding (slot-mouseleave could run after tooltip-mouseenter and schedule
+  a hide right under the cursor), identical content skips the innerHTML
+  rewrite entirely, and repeat-hovers of the same target keep the
+  tooltip perfectly still. Added a subtle 0.12s fade-in.
+
+## [0.7.15] - 2026-10-16
+### Changed
+- Stats notification is now a small chip in the bottom-right corner
+  (14px, compact padding, right-aligned rows) instead of a large
+  bottom-center popup.
+
+## [0.7.14] - 2026-10-16
+### Added
+- Stats notification: equipping or unequipping gear pops a bottom-center
+  readout of every stat that moved — gains as `HP: 500 → +550` (green),
+  losses as `HP: 550 ← 500` (red) — visible ~3 seconds, then it fades
+  out. No popup when the change moves no stats.
+
+## [0.7.13] - 2026-10-16
+### Changed
+- UI font switched to a smooth system sans (Segoe UI stack) with
+  antialiasing and a slightly larger base/label size.
+- Empty equipment and elixir slots show a custom tooltip (slot name,
+  category, and how to fill it) instead of the slow native title.
+### Fixed
+- Double-click no longer draws the blue text-selection highlight anywhere
+  (inputs remain selectable).
+
+## [0.7.12] - 2026-10-16
+### Changed
+- Equipment slots renamed to RPG names: Off-Hand, Armament, Mantle,
+  Headgear, Spirit Core, Cuirass, Bracers, Warboots, Legguards, Spirit
+  Ring I/II, Jade Pendant, Immortal Crown. Empty slots show their
+  category on hover.
+- Elixir row is now four named slots — Combat Pill, Healing Pill, Qi
+  Pill, Protection Pill (offensive / recovery / cultivation / defensive).
+  Pills auto-load into their named slot; legacy saves are re-slotted on
+  boot.
+
+## [0.7.11] - 2026-10-16
+### Changed
+- Inventory layout is half/half: Equipment doll on the left half, Bag on
+  the right half; doll rows spread evenly across their half.
+- Clicking gear in the bag no longer equips it — gear actions are on the
+  tooltip buttons only (consumables still use on click).
+
+## [0.7.10] - 2026-10-16
+### Changed
+- Bag is a real RPG grid: uniform square cells sized to the panel width,
+  rarity-colored borders, chip-style stack counts, and a persistent
+  48-slot layout with dashed empty cells.
+- Equipped items are hidden from the bag: loaded elixir consumables and
+  worn gear with no free slot left (a spare ring stays visible while a
+  finger is free so it can still be worn).
+
+## [0.7.9] - 2026-10-16
+### Changed
+- Elixir removal button renamed Unload -> Unequip everywhere (doll slots
+  and bag tooltips).
+### Fixed
+- Bag tooltips for an already-loaded consumable now offer Use + Unequip,
+  matching the elixir slot, instead of a misleading Use + Equip.
+
 ## [0.7.8] - 2026-10-16
 ### Fixed
 - Elixir loadout deduplicated everywhere, not just on load: normalize
