@@ -365,7 +365,8 @@ def _slug(name):
 _ZERO = {"atk": 0, "def": 0, "hp": 0, "crit": 0, "critDmg": 0}
 # Every battle material becomes an inventory item (crafting coming soon).
 MATERIALS = [{"id": _slug(name), "name": name, "kind": "material", "slot": None,
-              "glyph": "✦", "rarity": "Mortal", "desc": "Battle loot. (Crafting coming soon.)",
+              "glyph": "✦", "rarity": "Mortal",
+              "desc": "Battle loot. Crafting is deferred — no recipe system yet.",
               "stats": dict(_ZERO)}
              for name in sorted({l["item"] for a in AREAS for m in a["mobs"] for l in m["loot"]})]
 
@@ -375,27 +376,46 @@ EQUIP_SLOTS = ("head", "sec_weapon", "chest", "main_weapon", "core", "arm",
                "back", "boots", "legs", "ring1", "ring2", "necklace", "headpiece")
 
 # Bonus gear/consumable drops merged into /api/areas (mob_id -> drops).
+# Every gear piece has a source: its tier's area (see GEAR tier comments).
 _GEAR_DROPS = {
-    "stone_puppet": [("worn_iron_sword", 0.08, 1, 1), ("healing_pill", 0.10, 1, 1)],
-    "ash_rat": [("twig_pin", 0.06, 1, 1)],
-    "mud_crab": [("wooden_shield", 0.07, 1, 1)],
-    "dust_wolf": [("wolf_fang_blade", 0.07, 1, 1), ("copper_ring", 0.06, 1, 1)],
-    "sprout_treant": [("cloth_hood", 0.07, 1, 1), ("healing_pill", 0.08, 1, 1)],
-    "bamboo_viper": [("bamboo_hat", 0.06, 1, 1)],
-    "ironback_boar": [("bamboo_cutter", 0.06, 1, 1), ("boarhide_vest", 0.06, 1, 1)],
-    "mist_gibbon": [("spirit_meal", 0.12, 1, 1), ("wood_beads", 0.06, 1, 1)],
-    "thorn_panther": [("claw_dagger", 0.06, 1, 1)],
-    "bamboo_wraith": [("qi_pill", 0.08, 1, 1)],
-    "flame_imp": [("ember_brand", 0.05, 1, 1), ("healing_pill", 0.08, 1, 1)],
-    "magma_lizard": [("magma_plate", 0.05, 1, 1)],
-    "cinder_golem": [("ember_ward", 0.05, 1, 1)],
-    "ash_wraith": [("ashen_mantle", 0.05, 1, 1), ("qi_pill", 0.08, 1, 1)],
-    "inferno_bat": [("ember_crown", 0.04, 1, 1)],
-    "frost_alpha": [("frostbite_edge", 0.04, 1, 1), ("fang_necklace", 0.05, 1, 1)],
-    "ice_revenant": [("glacial_robe", 0.04, 1, 1), ("qi_pill", 0.08, 1, 1)],
-    "snow_yak": [("snowwalkers", 0.04, 1, 1), ("spirit_meal", 0.10, 1, 1)],
-    "blizzard_roc": [("roc_cloak", 0.04, 1, 1)],
-    "frozen_jiao": [("frozen_tear", 0.04, 1, 1), ("frost_diadem", 0.03, 1, 1)],
+    # tier 1 — mortal valley finds
+    "stone_puppet": [("worn_iron_sword", 0.08, 1, 1), ("healing_pill", 0.10, 1, 1),
+                     ("straw_cloak", 0.06, 1, 1), ("linen_pants", 0.07, 1, 1)],
+    "ash_rat": [("twig_pin", 0.06, 1, 1), ("cloth_wraps", 0.07, 1, 1)],
+    "mud_crab": [("wooden_shield", 0.07, 1, 1), ("clay_core", 0.06, 1, 1),
+                 ("straw_sandals", 0.05, 1, 1)],
+    "dust_wolf": [("wolf_fang_blade", 0.07, 1, 1), ("copper_ring", 0.06, 1, 1),
+                  ("hide_guard", 0.07, 1, 1)],
+    "sprout_treant": [("cloth_hood", 0.07, 1, 1), ("healing_pill", 0.08, 1, 1),
+                      ("linen_robe", 0.07, 1, 1)],
+    # tier 2 — bamboo forest spoils
+    "bamboo_viper": [("bamboo_hat", 0.06, 1, 1), ("hide_boots", 0.06, 1, 1),
+                     ("bronze_circlet", 0.05, 1, 1)],
+    "ironback_boar": [("bamboo_cutter", 0.06, 1, 1), ("boarhide_vest", 0.06, 1, 1),
+                      ("iron_vambraces", 0.06, 1, 1), ("bamboo_greaves", 0.05, 1, 1)],
+    "mist_gibbon": [("spirit_meal", 0.12, 1, 1), ("wood_beads", 0.06, 1, 1),
+                    ("jade_core", 0.06, 1, 1)],
+    "thorn_panther": [("claw_dagger", 0.06, 1, 1), ("panther_cloak", 0.05, 1, 1)],
+    "bamboo_wraith": [("qi_pill", 0.08, 1, 1), ("jade_ring", 0.05, 1, 1)],
+    # tier 3 — ember cavern relics
+    "flame_imp": [("ember_brand", 0.05, 1, 1), ("healing_pill", 0.08, 1, 1),
+                  ("horned_helm", 0.05, 1, 1)],
+    "magma_lizard": [("magma_plate", 0.05, 1, 1), ("magma_gauntlets", 0.05, 1, 1)],
+    "cinder_golem": [("ember_ward", 0.05, 1, 1), ("ember_core", 0.05, 1, 1),
+                     ("magma_legguards", 0.04, 1, 1)],
+    "ash_wraith": [("ashen_mantle", 0.05, 1, 1), ("qi_pill", 0.08, 1, 1),
+                   ("ember_pendant", 0.05, 1, 1)],
+    "inferno_bat": [("ember_crown", 0.04, 1, 1), ("ember_treads", 0.05, 1, 1)],
+    # tier 4 — frostbite peak treasures
+    "frost_alpha": [("frostbite_edge", 0.04, 1, 1), ("fang_necklace", 0.05, 1, 1),
+                    ("frost_crown", 0.04, 1, 1)],
+    "ice_revenant": [("glacial_robe", 0.04, 1, 1), ("qi_pill", 0.08, 1, 1),
+                     ("ice_mirror", 0.04, 1, 1)],
+    "snow_yak": [("snowwalkers", 0.04, 1, 1), ("spirit_meal", 0.10, 1, 1),
+                 ("frost_bracers", 0.04, 1, 1)],
+    "blizzard_roc": [("roc_cloak", 0.04, 1, 1), ("frost_leggings", 0.04, 1, 1)],
+    "frozen_jiao": [("frozen_tear", 0.04, 1, 1), ("frost_diadem", 0.03, 1, 1),
+                    ("frost_core", 0.04, 1, 1)],
 }
 
 def areas_with_drops():
@@ -479,6 +499,33 @@ def max_legit_cultivation(stored, elapsed):
     manual = MANUAL_ALLOW_MULT * qi_mult * online
     return float(stored.get("cultivation", 0)) + idle + manual
 
+def pill_qi_used(stored, inv_in, hi_idx):
+    """Qi actually granted by qi pills consumed since the last sync.
+    Counted from the inventory delta so /api/sync never clamps honest pill use."""
+    if not isinstance(inv_in, dict):
+        return 0.0
+    prev = stored.get("inventory") or {}
+    if not isinstance(prev, dict):
+        prev = {}
+    hi = max(0, min(int(hi_idx or 0), len(REALMS) - 1))
+    cost = REALMS[hi]["cost"]
+    total = 0.0
+    for k, it in ITEM_BY_ID.items():
+        if it.get("kind") != "consumable":
+            continue
+        qi_pct = float((it.get("use") or {}).get("qi_pct") or 0)
+        if qi_pct <= 0:
+            continue
+        try:
+            before = max(0, int(prev.get(k, 0) or 0))
+            after = max(0, int(inv_in.get(k, 0) or 0))
+        except (TypeError, ValueError):
+            continue
+        if before > after:
+            total += cost * qi_pct / 100.0 * (before - after)
+    return total
+
+
 def save_players():
     try:
         with open(os.path.join(BASE_DIR, "players.json"), "w", encoding="utf-8") as f:
@@ -540,7 +587,7 @@ def build_player(username, picks):
         "seclusion": False,
         "equipment": {s: None for s in EQUIP_SLOTS},
         "inventory": {"healing_pill": 3},
-        "elixirs": [None, None, None, None],
+        "elixirs": [None, None, None],
         "hp": None,  # client-tracked; full on first load
         "last_seen": time.time(),
         "roots": roots,
@@ -549,7 +596,7 @@ def build_player(username, picks):
 
 
 class Handler(BaseHTTPRequestHandler):
-    server_version = "AshenFantasy/0.7.17"
+    server_version = "AshenFantasy/0.7.18"
 
     def log_message(self, fmt, *args):
         pass  # quiet
@@ -618,7 +665,10 @@ class Handler(BaseHTTPRequestHandler):
             stored = PLAYERS.get(username)
             if not stored:
                 return self._send_json({"error": "Unknown cultivator"}, status=404)
-            return self._send_json({"player": stored, "server_time": time.time()})
+            # hp is client-tracked and always null here — never echo it back
+            return self._send_json(
+                {"player": {k: v for k, v in stored.items() if k != "hp"},
+                 "server_time": time.time()})
 
         # static files
         if path == "/" or path == "/index.html":
@@ -680,6 +730,11 @@ class Handler(BaseHTTPRequestHandler):
             picks = data.get("picks") or []
             if not USERNAME_RE.match(username):
                 return self._send_json({"error": "Username must be 3-16 chars: letters, numbers, _"}, status=400)
+            if username in PLAYERS:
+                # never silently overwrite an existing cultivator
+                return self._send_json(
+                    {"error": "That name already walks the jianghu. Continue that cultivator, or choose another."},
+                    status=409)
             if not isinstance(picks, list) or len(picks) != 3 or len(set(picks)) != 3:
                 return self._send_json({"error": "You must select exactly 3 distinct roots"}, status=400)
             roll = ROLLS.get(roll_id)
@@ -718,7 +773,8 @@ class Handler(BaseHTTPRequestHandler):
                 elapsed = now - float(stored.get("last_seen", now))
             except (TypeError, ValueError):
                 elapsed = 0
-            legit = max_legit_cultivation(stored, elapsed)
+            legit = max_legit_cultivation(stored, elapsed) + pill_qi_used(
+                stored, data.get("inventory"), max(stored_idx, idx))
             try:
                 claimed = max(0.0, float(data.get("cultivation", stored.get("cultivation", 0))))
             except (TypeError, ValueError):
@@ -727,9 +783,8 @@ class Handler(BaseHTTPRequestHandler):
             cultivation = min(claimed, legit)
             stage = REALMS[idx]
             if idx > stored_idx:
-                # breakthrough between syncs: consume only the old stage cost,
-                # surplus Qi carries into the new stage
-                cultivation = max(0.0, cultivation - REALMS[stored_idx]["cost"])
+                # breakthrough: the client already spent the stage cost and
+                # carries the surplus into the new stage — do NOT deduct again
                 bottleneck = 0
             else:
                 idx = stored_idx
@@ -749,8 +804,9 @@ class Handler(BaseHTTPRequestHandler):
                 while cultivation >= stage["cost"]:
                     cultivation -= stage["cost"]
                     dao_insight += 1
-                # client breakthrough click may report one insight ahead of sync
-                dao_insight = max(dao_insight, min(extra_insight, dao_insight + 1))
+            # insight is monotonic: the client may condense several times
+            # between syncs (a +1 clamp would roll honest progress back)
+            dao_insight = max(dao_insight, extra_insight)
             # equipment / inventory / elixirs: accept only known items in valid slots
             equip_in = data.get("equipment") or {}
             equipment = {s: None for s in EQUIP_SLOTS}
@@ -770,12 +826,12 @@ class Handler(BaseHTTPRequestHandler):
                             inventory[k] = max(0, min(int(v), 9999))
                         except (TypeError, ValueError):
                             pass
-            elixirs = [None, None, None, None]
+            elixirs = [None, None, None]
             elix_in = data.get("elixirs") or []
             if isinstance(elix_in, list):
                 seen_elix = set()
-                for i, x in enumerate(elix_in[:4]):
-                    # one consumable per loadout: first occurrence wins
+                for i, x in enumerate(elix_in[:3]):
+                    # one pill per named slot: first occurrence wins
                     if x in ITEM_BY_ID and ITEM_BY_ID[x]["kind"] == "consumable" and x not in seen_elix:
                         seen_elix.add(x)
                         elixirs[i] = x

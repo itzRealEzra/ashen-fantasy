@@ -1,6 +1,6 @@
 /* Ashen Fantasy — vanilla JS state machine: username -> roots -> main */
 const $ = (id) => document.getElementById(id);
-const CLIENT_VERSION = "0.7.17"; // must match server.py server_version + footer
+const CLIENT_VERSION = "0.7.18"; // must match server.py server_version + footer
 const state = {
   username: localStorage.getItem("af_user") || "",
   rollId: null,
@@ -17,10 +17,6 @@ function show(id) {
 }
 function esc(s) {
   return String(s).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
-}
-function log(el, msg) {
-  el.textContent += msg + "\n";
-  el.scrollTop = el.scrollHeight;
 }
 // Single-line event message for the cultivate panel: slides in,
 // then fades out after a few seconds.
@@ -60,9 +56,25 @@ $("username-input").value = state.username;
 // ---------- roots ----------
 async function enterRoots() {
   show("screen-roots");
-  await loadIndex();
   if (state.player && state.player.username === state.username) return enterMain(state.player);
+  // Local save missing (new device / cleared storage): restore the server's
+  // copy instead of forcing a fresh roll that could overwrite it.
+  const remote = await fetchServerPlayer(state.username);
+  if (remote) {
+    state.player = remote;
+    return enterMain(remote);
+  }
+  await loadIndex();
   doRoll(true);
+}
+
+async function fetchServerPlayer(username) {
+  try {
+    const r = await fetch("/api/player?username=" + encodeURIComponent(username));
+    if (!r.ok) return null;
+    const j = await r.json();
+    return j && j.player && j.player.username ? j.player : null;
+  } catch { return null; }
 }
 
 async function loadIndex() {
@@ -116,12 +128,12 @@ async function doRoll(first) {
     if (j.error) { anim.classList.remove("rolling"); anim.textContent = j.error; btn.disabled = false; return; }
     state.rollId = j.roll_id;
     state.rolled = j.roots;
+    state.inspecting = null; // re-roll replaces the offer — re-inspect fresh
     // reveal: show rarest first as climax
     anim.classList.remove("rolling");
     const top = [...j.roots].sort((a,b) => (b.qi_mult||0)-(a.qi_mult||0))[0];
     anim.innerHTML = `<span class="big-root" style="color:${top.color}">✦ ${esc(top.name)}</span><span style="color:${top.color}">${esc(top.rarity)} · ${esc(top.element)}</span><br/>Heaven has spoken — 9 roots revealed.`;
     renderRollList();
-    if (first) log({}, "");
   } catch {
     clearInterval(iv);
     anim.classList.remove("rolling");
@@ -251,6 +263,10 @@ function cultRate(p) {
 }
 
 function normalizePlayer(p) {
+  // restore-safe defaults: a server copy can arrive missing fields
+  if (!p.stats || typeof p.stats !== "object")
+    p.stats = { qi_mult: 1, comprehension: 0, physique: 0, fortune: 0, synergy_bonus: 0 };
+  if (!Array.isArray(p.roots)) p.roots = [];
   // Keep numeric progress across ladder changes (clamped); else match by name.
   let idx = Number.isFinite(+p.realm_idx) ? Math.floor(+p.realm_idx) : -1;
   if (idx < 0) {
@@ -274,20 +290,28 @@ function normalizePlayer(p) {
   for (const k of Object.keys(p.inventory)) {
     if (!ITEM_BY_ID[k] || !(p.inventory[k] > 0)) delete p.inventory[k];
   }
-  if (!Array.isArray(p.elixirs)) p.elixirs = [null, null, null, null];
-  // One consumable per loadout: first occurrence wins, later dupes cleared.
-  // (Heals saves created before the dedup fix, e.g. Healing Pill x4.)
+  // Re-home gear sitting in the wrong doll slot (legacy/corrupt saves):
+  // move it to its real slot when free, else return it to the bag.
+  for (const s of EQUIP_SLOT_LIST) {
+    const id = p.equipment[s];
+    if (!id || !ITEM_BY_ID[id]) continue;
+    const targets = equipTargets(ITEM_BY_ID[id]);
+    if (targets.indexOf(s) >= 0) continue;
+    p.equipment[s] = null;
+    const home = targets.find(t => !p.equipment[t]);
+    if (home) p.equipment[home] = id;
+    else p.inventory[id] = (p.inventory[id] || 0) + 1;
+  }
+  if (!Array.isArray(p.elixirs)) p.elixirs = [];
+  // One slot per pill type: dedup first (heals legacy 4-slot saves),
+  // then re-place into the named slots so the labels stay true.
   const seenElixir = new Set();
-  p.elixirs = [0, 1, 2, 3].map(i => {
-    const x = p.elixirs[i];
-    if (!x || !ITEM_BY_ID[x] || ITEM_BY_ID[x].kind !== "consumable" || seenElixir.has(x)) return null;
+  const loadedPills = p.elixirs.filter(x => {
+    if (!x || !ITEM_BY_ID[x] || ITEM_BY_ID[x].kind !== "consumable" || seenElixir.has(x)) return false;
     seenElixir.add(x);
-    return x;
+    return true;
   });
-  // Re-place loaded pills into their named slots (Combat / Healing / Qi /
-  // Protection) so the labels stay true — also heals legacy saves.
-  const loadedPills = p.elixirs.filter(Boolean);
-  p.elixirs = [null, null, null, null];
+  p.elixirs = [null, null, null];
   for (const id of loadedPills) {
     const pref = elixirPreferredSlot(ITEM_BY_ID[id]);
     let i = pref >= 0 && !p.elixirs[pref] ? pref : p.elixirs.findIndex(x => !x);
@@ -393,7 +417,7 @@ function renderChar(p) {
   $("char-sheet").innerHTML =
     `<p><b>${esc(p.username)}</b> · ${esc(st.realm)}</p>` +
     `<div class="stat-panel">` +
-    `<div><span>HP</span><b>${d.hp}</b></div>` +
+    `<div><span>HP</span><b id="char-hp">${Math.ceil(p.hp > 0 ? p.hp : d.hp)} / ${d.hp}</b></div>` +
     `<div><span>Qi</span><b id="char-qi">${Math.floor(p.cultivation)} <small>(+${cultRate(p).toFixed(1)}/s)</small></b></div>` +
     `<div><span>Attack</span><b>${d.atk}</b></div>` +
     `<div><span>Defense</span><b>${d.def}</b></div>` +
@@ -425,7 +449,12 @@ function updateQi(p) {
   const cost = stageOf(p).cost;
   p.cultivation_to_next = cost;
   $("qi-bar").style.width = Math.min(100, cost > 0 ? p.cultivation / cost * 100 : 100) + "%";
-  // Character panel Qi stays live between full re-renders.
+  // Character panel HP + Qi stay live between full re-renders.
+  const ch = $("char-hp");
+  if (ch && REALM_TABLE.length) {
+    const max = playerMaxHp(p);
+    ch.textContent = `${Math.ceil(p.hp > 0 ? p.hp : max)} / ${max}`;
+  }
   const cq = $("char-qi");
   if (cq && REALM_TABLE.length)
     cq.innerHTML = `${Math.floor(p.cultivation)} <small>(+${cultRate(p).toFixed(1)}/s)</small>`;
@@ -630,6 +659,8 @@ document.querySelectorAll(".side-btn").forEach(b => b.onclick = () => {
     // persist HP, stop ticks, clear the loot log, reset to the area list.
     if (battle.timer || battle.view === "combat") leaveActiveHunt();
     else stopBattle();
+  } else if (battle.view === "areas") {
+    showBattleAreas(); // refresh realm locks after breakthroughs
   }
   if (b.dataset.tab === "inventory") renderInventory();
   document.querySelectorAll(".side-btn").forEach(x => x.classList.remove("active"));
@@ -657,12 +688,12 @@ const DOLL_ROWS = [
   [{ s: "back", label: "Mantle", type: "Cloak / Cape" }, { s: "boots", label: "Warboots", type: "Foot Armor" }, { s: "legs", label: "Legguards", type: "Leg Armor" }],
   [{ s: "ring1", label: "Spirit Ring I", type: "Accessory" }, { s: "ring2", label: "Spirit Ring II", type: "Accessory" }, { s: "necklace", label: "Jade Pendant", type: "Accessory" }, { s: "headpiece", label: "Immortal Crown", type: "Artifact" }],
 ];
-// Elixir row is four named slots; pills load into their named slot.
+// Elixir row: one named slot per pill type that actually exists
+// (three consumables are defined — no labels a pill can never fill).
 const ELIXIR_SLOTS = [
-  { name: "Combat Pill", type: "Offensive Consumable" },
   { name: "Healing Pill", type: "Recovery Consumable" },
   { name: "Qi Pill", type: "Cultivation Consumable" },
-  { name: "Protection Pill", type: "Defensive Consumable" },
+  { name: "Spirit Meal", type: "Restorative Consumable" },
 ];
 
 // What should bag gear do: equip another, or unequip what's worn?
@@ -690,7 +721,7 @@ function itemTipHtml(itemId, ctx) {
   ctx = ctx || {};
   const col = ITEM_RARITY_COLORS[it.rarity] || "#e8e0cf";
   let h = `<div class="tip-title"><b>${esc(it.glyph)} ${esc(it.name)}</b><span style="color:${col}">${esc(it.rarity || "")}</span></div>` +
-    `<div><small class="muted">${it.kind === "gear" ? "armor" : it.kind === "consumable" ? "consumable" : "materials"}</small></div>` +
+    `<div><small class="muted">${it.kind === "gear" ? "armor" : it.kind === "consumable" ? "consumable" : "material"}</small></div>` +
     `<div class="muted">${esc(it.desc)}</div>`;
   const st = Object.entries(it.stats || {}).filter(([, v]) => v).map(([k, v]) => `${k}+${v}`).join(" · ");
   if (st) h += `<div><span class="inv-stats">${esc(st)}</span></div>`;
@@ -799,7 +830,7 @@ function renderInventory() {
       (it ? `<span class="glyph">${esc(it.glyph)}</span>` : "") +
       `<span class="slot-name">${it ? esc(it.name) : esc(label)}</span></div>`;
   }).join("") + `</div>`).join("");
-  const elix = `<div class="doll-row">` + [0, 1, 2, 3].map(i => {
+  const elix = `<div class="doll-row">` + [0, 1, 2].map(i => {
     const iid = p.elixirs && p.elixirs[i];
     const it = iid && ITEM_BY_ID[iid];
     const n = iid ? (p.inventory[iid] || 0) : 0;
@@ -968,13 +999,13 @@ function useConsumable(itemId) {
   syncPlayer(false);
 }
 
-// Which named slot a pill belongs to: Combat(0) / Healing(1) / Qi(2) / Protection(3).
+// Which named slot a pill belongs to: Healing(0) / Qi(1) / Spirit Meal(2).
+// heal+qi (Spirit Meal) is matched first so every pill type has one home.
 function elixirPreferredSlot(it) {
   const u = (it && it.use) || {};
-  if (u.atk_pct || u.crit_pct || u.dmg_pct) return 0;
-  if (u.heal_pct) return 1;
-  if (u.qi_pct) return 2;
-  if (u.def_pct || u.shield_pct) return 3;
+  if (u.heal_pct && u.qi_pct) return 2;
+  if (u.heal_pct) return 0;
+  if (u.qi_pct) return 1;
   return -1;
 }
 
@@ -1009,7 +1040,7 @@ function unloadElixir(itemId) {
 const battle = {
   areas: [], view: "areas", area: null, mob: null,
   php: 1, ehp: 1, pbar: 0, ebar: 0, timer: null,
-  searching: false, kills: 0, loot: {},
+  searching: false, kills: 0, loot: {}, lastQi: 0,
 };
 
 function lootKey() { return "af_loot_" + (state.username || "guest"); }
@@ -1146,6 +1177,7 @@ function startCombat() {
   battle.ebar = 0;
   battle.kills = 0;
   battle.searching = false;
+  battle.lastQi = 0;
   renderCombat();
   stopBattle();
   battle.timer = setInterval(battleTick, 100);
@@ -1213,7 +1245,9 @@ function paintCombat() {
   const kc = $("kill-count");
   if (kc) kc.textContent = battle.kills ? `${m.name} slain ×${battle.kills}` : "";
   const st = $("battle-status");
-  if (st) st.innerHTML = battle.searching ? `<div class="searching">Searching for that same enemy…</div>` : "";
+  if (st) st.innerHTML = battle.searching
+    ? `<div class="searching">Searching for that same enemy…${battle.lastQi ? ` · +${battle.lastQi} Qi` : ""}</div>`
+    : "";
 }
 
 function flash(id) {
@@ -1234,6 +1268,8 @@ function strikeDmg(atk, crit, critDmg, dfn) {
 function battleTick() {
   const p = state.player, m = battle.mob;
   if (!p || !m || battle.view !== "combat" || battle.searching) return;
+  // a survivor of a mutual kill still falls: check before trading blows
+  if (battle.php <= 0) return onPlayerDeath();
   battle.pbar += 0.1 / 1.0; // base attack: 1 second to fill the bar
   battle.ebar += 0.1 / m.speed;
   if (battle.pbar >= 1) {
@@ -1250,6 +1286,9 @@ function battleTick() {
     battle.php -= s.dmg;
     flash("side-player");
   }
+  // mirror into the save every strike: hiding/reloading/closing mid-hunt
+  // keeps the damage (no refresh-heal), and quit-mid-fight keeps the wound
+  p.hp = battle.php;
   if (battle.ehp <= 0) return onMobDeath();
   if (battle.php <= 0) return onPlayerDeath();
   paintBars();
@@ -1271,11 +1310,15 @@ function onMobDeath() {
   saveLocal(p);
   updateQi(p);
   battle.searching = true;
+  battle.lastQi = m.qi;
   battle.pbar = 0;
   battle.ebar = 0;
   paintCombat();
   setTimeout(() => {
-    if (battle.view !== "combat") return;
+    // Only the respawn we are still waiting on may fire: leaving and
+    // re-entering combat (searching=false again) starts a fresh fight
+    // that a stale timer must not heal back to full.
+    if (battle.view !== "combat" || !battle.searching || battle.mob !== m) return;
     battle.ehp = m.hp;
     battle.searching = false;
     paintCombat();

@@ -11,6 +11,50 @@ and push to `main` on https://github.com/itzRealEzra/ashen-fantasy.
 
 ## [Unreleased]
 
+## [0.7.18] - 2026-10-16
+### Fixed
+- Breakthrough Qi no longer vanishes: the server deducted the stage cost a
+  second time on top of the client's spend, wiping the carried surplus on
+  every breakthrough. The client spends; the server stores and validates.
+- Qi Pills are no longer silently rolled back by sync validation: Qi from
+  pills actually consumed between syncs now counts toward the honest-gain
+  ceiling (computed from the inventory delta).
+- Peak-stage Dao Insight can no longer regress: condensing more than once
+  between syncs used to be clamped back to +1 per sync.
+- Existing characters are protected: creating a name that already walks
+  the jianghu is rejected (HTTP 409) instead of silently overwriting it,
+  and a cleared browser restores the server copy via `GET /api/player`
+  instead of forcing a fresh roll.
+- Combat damage is mirrored into the save every strike: hiding, reloading,
+  or closing the tab mid-hunt keeps the damage (no refresh-heal), and a
+  survivor of a mutual kill still falls instead of fighting on at 0 HP.
+- Stale respawn timers can no longer heal a fresh enemy: the 2s search
+  only completes for the fight it belongs to.
+- Battle tab refreshes the hunting-ground list on entry, so realm locks
+  update immediately after a breakthrough.
+- Character save restoration tolerates server copies missing fields
+  (stats/roots get safe defaults in normalize), and gear parked in the
+  wrong doll slot re-homes to its real slot (or back to the bag) instead
+  of rendering a robe as a helmet forever.
+### Changed
+- Elixir slots now match the pills that exist: three named slots
+  (Healing Pill / Qi Pill / Spirit Meal) instead of four labels with two
+  no pill could ever fill; legacy 4-slot saves re-home on boot.
+- All 48 gear pieces now have an acquisition source: the 25 without one
+  were wired into their tier's existing mob drop tables (no new items).
+- Character sheet shows current/max HP (live), not max only.
+- Combat shows the Qi reward of the last kill during the search phase.
+- Material tooltip category reads "material"; material descriptions state
+  plainly that crafting is deferred rather than "coming soon".
+- Roots screen: removed leftover dev placeholders, dead code, and the
+  stale inspection panel after re-rolling.
+### Added
+- Regression suites, stdlib only: `tests/test_client.js` (node; drives the
+  real client functions with DOM stubs) and `tests/test_api.py` (runs the
+  server in-process, never touches `players.json`) — 67 + 36 checks over
+  sync validation, breakthrough math, elixirs, combat, and the
+  server/client/footer version lock.
+
 ## [0.7.17] - 2026-10-16
 ### Fixed
 - Breakthrough button deadlock: it no longer hides while the bottleneck
