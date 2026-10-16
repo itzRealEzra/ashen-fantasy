@@ -6,6 +6,7 @@ Run: python tests/test_api.py"""
 import json
 import os
 import re
+import shutil
 import sys
 import threading
 import time
@@ -113,6 +114,73 @@ try:
     st, j = req("/api/realms")
     ok(st == 200 and len(j.get("realms", [])) > 0, "realms served")
 
+    # ============ 2b. art is resolved by id, live, with an emoji fallback ============
+    # Adding a PNG must show up on the next request without a server restart.
+    st, j = req("/api/areas")
+    mobs = [m for a in j["areas"] for m in a["mobs"]]
+    with_art = [m for m in mobs if m.get("img")]
+    ok(len(with_art) == len(mobs), "every enemy resolves a matching art file")
+    ok(all(m["img"] == "/assets/enemies/%s.png" % m["id"] for m in with_art),
+       "enemy art path is derived from the mob id")
+    st, j = req("/api/items")
+    with_art = [i for i in j["items"] if i.get("img")]
+    ok(len(with_art) > 0, "items resolve art files")
+    ok(all(i["img"] == "/assets/items/%s.png" % i["id"] for i in with_art),
+       "item art path is derived from the item id")
+    ok(all(i["img"].startswith("/assets/") and ".." not in i["img"] for i in with_art),
+       "art paths stay inside the assets folder")
+    no_art = [i for i in j["items"] if not i.get("img")]
+    ok(all(i.get("glyph") for i in no_art), "every item without art still has an emoji glyph")
+
+    # Live pickup: a file dropped in after startup must be picked up.
+    probe_dir = os.path.join(server.PUBLIC_DIR, "assets", "items")
+    probe = os.path.join(probe_dir, "__probe_test__.png")
+    st, before = req("/api/items")
+    before_art = len([i for i in before["items"] if i.get("img")])
+    try:
+        shutil.copyfile(os.path.join(probe_dir, "rat_fur.png"), probe)
+        st, after = req("/api/items")
+        ok(len([i for i in after["items"] if i.get("img")]) == before_art,
+           "an unreferenced png does not attach art to any item")
+    finally:
+        if os.path.exists(probe):
+            os.remove(probe)
+
+    # ============ 2c. item rarity ladder ============
+    # Items use Common -> Mythic; the Mortal -> Primordial ladder belongs to
+    # Spiritual Roots only and must never leak into item data.
+    tiers = ["Common", "Uncommon", "Rare", "Epic", "Legendary", "Mythic"]
+    colors = {"Common": "#9aa0a6", "Uncommon": "#7cb342", "Rare": "#42a5f5",
+              "Epic": "#ab47bc", "Legendary": "#ffb300", "Mythic": "#ff3d00"}
+    ok(server.ITEM_RARITY_ORDER == tiers, "item rarity order is Common -> Mythic")
+    ok(server.ITEM_RARITY_COLORS == colors, "item rarity colors match the spec")
+    ok(not (set(server.ITEM_RARITY_ORDER) & set(server.RARITY_ORDER)),
+       "the item ladder and the root ladder share no names")
+    st, j = req("/api/items")
+    ok(all(i["rarity"] in tiers for i in j["items"]),
+       "every item carries a valid Common->Mythic rarity")
+    ok(all(i["rarity"] == "Common" or i.get("color") == colors[i["rarity"]] for i in j["items"]),
+       "every item ships its rarity color")
+    mats = [i for i in j["items"] if i["kind"] == "material"]
+    ok(any(i["rarity"] == "Rare" for i in mats) and any(i["rarity"] == "Common" for i in mats),
+       "materials span more than one rarity")
+    st, j = req("/api/areas")
+    drops = [l for a in j["areas"] for m in a["mobs"] for l in m["loot"]]
+    ok(drops and all(l["rarity"] in tiers for l in drops),
+       "every drop row carries a valid rarity")
+    # A material's rarity must be the best rarity any beast drops it under.
+    want = {}
+    for l in drops:
+        if l["rarity"] not in want or tiers.index(l["rarity"]) > tiers.index(want[l["item"]]):
+            want[l["item"]] = l["rarity"]
+    got = {i["name"]: i["rarity"] for i in mats}
+    ok(all(got.get(k) == v for k, v in want.items()),
+       "each material's rarity equals the highest rarity it drops under")
+    # Rarity and drop chance are independent, so a Rare item may still be common.
+    rare_or_better = [l for l in drops if tiers.index(l["rarity"]) >= tiers.index("Rare")]
+    ok(rare_or_better and max(l["chance"] for l in rare_or_better) >= 0.5,
+       "at least one Rare+ item drops often, as the spec allows")
+
     # ============ 3. roll cooldown ============
     st, _ = roll()
     ok(st == 200, "first roll succeeds")
@@ -150,11 +218,11 @@ try:
        "breakthrough advances the realm server-side")
 
     # ============ 7. qi pill inventory delta = allowance, not a cheat ============
-    fresh("pill_user", cultivation=100, inventory={"healing_pill": 3, "qi_pill": 2})
+    fresh("pill_user", cultivation=100, inventory={"spirit_meal": 3, "qi_pill": 2})
     cost0 = server.REALMS[0]["cost"]
     claim = 100 + cost0 * 0.15
     st, j = sync("pill_user", cultivation=claim,
-                 inventory={"healing_pill": 3, "qi_pill": 1})
+                 inventory={"spirit_meal": 3, "qi_pill": 1})
     ok(st == 200 and j["clamped"] is False, "one qi pill consumed is never clamped")
     ok(abs(j["player"]["cultivation"] - claim) < 0.01, "pill qi lands in full")
 
@@ -162,7 +230,7 @@ try:
     server.PLAYERS["pill_user"]["cultivation"] = 100
     server.PLAYERS["pill_user"]["last_seen"] = time.time()
     st, j = sync("pill_user", cultivation=claim,
-                 inventory={"healing_pill": 3, "qi_pill": 1})
+                 inventory={"spirit_meal": 3, "qi_pill": 1})
     ok(st == 200 and j["clamped"] is True, "same claim without spending a pill is clamped")
     ok(j["player"]["cultivation"] < claim, "clamped cultivation stays below the claim")
 
@@ -173,25 +241,28 @@ try:
     ok(j["player"]["cultivation"] < 1000, "blatant qi cheat is cut back to legit")
 
     # ============ 9. equipment / inventory / elixir validation ============
+    # The item DB is being rebuilt one item at a time, so this exercises the
+    # slot rules against whatever items exist now: the seed consumables.
     fresh("gear_valid")
     st, j = sync("gear_valid",
-                 equipment={"head": "linen_robe", "chest": "linen_robe",
-                            "ring1": "copper_ring", "boots": "bogus_crown"},
-                 inventory={"cinder": 5, "bogus_item": 9, "healing_pill": -2,
-                            "qi_pill": "many", "spirit_meal": 100000},
-                 elixirs=["qi_pill", "qi_pill", "healing_pill", "spirit_meal"])
+                 equipment={"head": "qi_pill", "chest": "bogus_crown",
+                            "ring1": "spirit_meal", "boots": "bogus_crown"},
+                 inventory={"spirit_meal": 100000, "bogus_item": 9,
+                            "qi_pill": "many", "healing_pill": 4},
+                 elixirs=["qi_pill", "qi_pill", "spirit_meal", "healing_pill"])
     eq = j["player"]["equipment"]
-    ok(st == 200 and eq.get("head") is None, "wrong-slot gear rejected server-side")
-    ok(eq.get("chest") == "linen_robe", "right-slot gear accepted")
-    ok(eq.get("ring1") == "copper_ring" and eq.get("ring2") is None, "ring accepted in a ring slot")
+    ok(st == 200 and eq.get("head") is None, "wrong-slot item rejected server-side")
+    ok(all(v is None for v in eq.values()), "no item equips into a slot it doesn't belong to")
     ok(eq.get("boots") is None, "unknown gear rejected")
     inv = j["player"]["inventory"]
-    ok(inv.get("cinder") == 5, "known material kept")
-    ok("bogus_item" not in inv and "qi_pill" not in inv, "unknown / non-numeric items dropped")
-    ok(inv.get("healing_pill") == 0, "negative counts clamp to zero")
+    ok(inv.get("healing_pill") is None, "removed item dropped from inventory")
     ok(inv.get("spirit_meal") == 9999, "item counts clamp to 9999")
-    ok(j["player"]["elixirs"] == ["qi_pill", None, "healing_pill"],
+    ok("bogus_item" not in inv and "qi_pill" not in inv, "unknown / non-numeric items dropped")
+    ok(j["player"]["elixirs"] == ["qi_pill", None, "spirit_meal"],
        "elixirs dedup to 3 named slots")
+
+    st, j = sync("gear_valid", inventory={"spirit_meal": -2})
+    ok(j["player"]["inventory"].get("spirit_meal") == 0, "negative counts clamp to zero")
 
     # ============ 10. dao insight is monotonic ============
     fresh("insight_sage", cultivation=0, dao_insight=5)

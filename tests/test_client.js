@@ -4,7 +4,9 @@
 const fs = require("fs");
 const path = require("path");
 
-const SRC = fs.readFileSync(path.join(__dirname, "..", "public", "js", "app.js"), "utf8");
+// Normalised to \n so the source-level assertions below match regardless of
+// whether git checked the file out with CRLF or LF line endings.
+const SRC = fs.readFileSync(path.join(__dirname, "..", "public", "js", "app.js"), "utf8").replace(/\r\n/g, "\n");
 function grab(re, name) {
   const m = SRC.match(re);
   if (!m) throw new Error("missing extract: " + name);
@@ -33,12 +35,14 @@ const state = { username: "tester", player: null };
 
 const ZERO_STATS = { atk: 0, def: 0, hp: 0, crit: 0, critDmg: 0 };
 const ITEM_FIXTURE = {
-  healing_pill: { id: "healing_pill", name: "Healing Pill", kind: "consumable", slot: null, glyph: "💊", rarity: "Earth", desc: "", stats: { ...ZERO_STATS }, use: { heal_pct: 40, qi_pct: 0 } },
-  qi_pill: { id: "qi_pill", name: "Qi Pill", kind: "consumable", slot: null, glyph: "🔮", rarity: "Earth", desc: "", stats: { ...ZERO_STATS }, use: { heal_pct: 0, qi_pct: 15 } },
-  spirit_meal: { id: "spirit_meal", name: "Spirit Meal", kind: "consumable", slot: null, glyph: "🍱", rarity: "Earth", desc: "", stats: { ...ZERO_STATS }, use: { heal_pct: 15, qi_pct: 5 } },
-  linen_robe: { id: "linen_robe", name: "Linen Robe", kind: "gear", slot: "chest", glyph: "🥋", rarity: "Mortal", desc: "", stats: { ...ZERO_STATS, def: 4, hp: 30 } },
-  copper_ring: { id: "copper_ring", name: "Copper Ring", kind: "gear", slot: "ring", glyph: "⭕", rarity: "Mortal", desc: "", stats: { ...ZERO_STATS, crit: 2 } },
-  cinder: { id: "cinder", name: "Cinder", kind: "material", slot: null, glyph: "✦", rarity: "Mortal", desc: "", stats: { ...ZERO_STATS } },
+  healing_pill: { id: "healing_pill", name: "Healing Pill", kind: "consumable", slot: null, glyph: "💊", rarity: "Common", desc: "", stats: { ...ZERO_STATS }, use: { heal_pct: 40, qi_pct: 0 } },
+  qi_pill: { id: "qi_pill", name: "Qi Pill", kind: "consumable", slot: null, glyph: "🔮", rarity: "Common", desc: "", stats: { ...ZERO_STATS }, use: { heal_pct: 0, qi_pct: 15 } },
+  spirit_meal: { id: "spirit_meal", name: "Spirit Meal", kind: "consumable", slot: null, glyph: "🍱", rarity: "Common", desc: "", stats: { ...ZERO_STATS }, use: { heal_pct: 15, qi_pct: 5 } },
+  linen_robe: { id: "linen_robe", name: "Linen Robe", kind: "gear", slot: "chest", glyph: "🥋", rarity: "Common", desc: "", stats: { ...ZERO_STATS, def: 4, hp: 30 } },
+  copper_ring: { id: "copper_ring", name: "Copper Ring", kind: "gear", slot: "ring", glyph: "⭕", rarity: "Common", desc: "", stats: { ...ZERO_STATS, crit: 2 } },
+  rat_fur: { id: "rat_fur", name: "Rat Fur", kind: "material", slot: null, glyph: "✦", rarity: "Common", desc: "", stats: { ...ZERO_STATS } },
+  wolf_fang: { id: "wolf_fang", name: "Wolf Fang", kind: "material", slot: null, glyph: "✦", rarity: "Uncommon", desc: "", stats: { ...ZERO_STATS } },
+  beast_core_fragment: { id: "beast_core_fragment", name: "Beast Core Fragment", kind: "material", slot: null, glyph: "✦", rarity: "Rare", desc: "", stats: { ...ZERO_STATS } },
 };
 const mkRealm = (idx, o) => ({
   idx, name: o.name || ("R" + idx), realm: o.name || ("R" + idx), layer: 0,
@@ -84,7 +88,19 @@ const parts = [
   grab(/function unequipSlot\(slot\) \{[\s\S]*?\n\}/, "unequipSlot"),
   grab(/function afterGearChange\(before\) \{[\s\S]*?\n\}/, "afterGearChange"),
   grab(/function useConsumable\(itemId\) \{[\s\S]*?\n\}/, "useConsumable"),
+  grab(/function pillShape\(u\) \{[\s\S]*?\n\}/, "pillShape"),
+  grab(/const ELIXIR_SHAPES = \[[\s\S]*?\n\];/, "ELIXIR_SHAPES"),
   grab(/function elixirPreferredSlot\(it\) \{[\s\S]*?\n\}/, "elixirPreferredSlot"),
+  grab(/function elixirSlots\(\) \{[\s\S]*?\n\}/, "elixirSlots"),
+  grab(/const ITEM_RARITY_COLORS = \{[\s\S]*?Mythic: "#ff3d00" \};/, "ITEM_RARITY_COLORS"),
+  grab(/const SLOT_TYPE_LABELS = \{[\s\S]*?\n\};/, "SLOT_TYPE_LABELS"),
+  grab(/function slotTypeLabel\(s\) \{[\s\S]*?\n\}/, "slotTypeLabel"),
+  grab(/function bagTabOf\(it\) \{[\s\S]*?\n\}/, "bagTabOf"),
+  grab(/const BAG_TABS = \[[\s\S]*?\n\];/, "BAG_TABS"),
+  grab(/function iconHtml\(img, glyph, artCls\) \{[\s\S]*?\n\}/, "iconHtml"),
+  grab(/function dropsFor\(itemName\) \{[\s\S]*?\n\}/, "dropsFor"),
+  grab(/function itemTypeLabel\(it\) \{[\s\S]*?\n\}/, "itemTypeLabel"),
+  grab(/function itemTipHtml\(itemId, ctx\) \{[\s\S]*?\n\}/, "itemTipHtml"),
   grab(/function loadElixirSlot\(itemId\) \{[\s\S]*?\n\}/, "loadElixirSlot"),
   grab(/function unloadElixir\(itemId\) \{[\s\S]*?\n\}/, "unloadElixir"),
   grab(/function useElixir\(i\) \{[\s\S]*?\n\}/, "useElixir"),
@@ -132,6 +148,8 @@ const lib = new Function("__", prelude + parts + `
     advanceRealm, accrue, equipItem, unequipSlot, bagGearAction, useConsumable,
     loadElixirSlot, unloadElixir, elixirPreferredSlot, leaveActiveHunt,
     showBattleAreas, battleTick, derivedStats, playerMaxHp, addInv, takeInv,
+    itemTipHtml, itemTypeLabel, bagTabOf, dropsFor, iconHtml, BAG_TABS, slotTypeLabel,
+    ITEM_RARITY_COLORS,
     clickBreakthrough: () => els["breakthrough-btn"].onclick(),
   };
 `)({ state, els, calls, ITEM_FIXTURE, REALMS_FIXTURE });
@@ -246,13 +264,16 @@ state.player = basePlayer();
   // ============ 6. combat loop: kill, loot, qi, hp mirror, respawn guard ============
   lib.setRealms(REALMS_FIXTURE);
   state.player = basePlayer();
-  const mob = { id: "ash_rat", name: "Ash Rat", hp: 35, atk: 4, def: 0, crit: 5, crit_dmg: 150,
-    speed: 0.9, qi: 3, loot: [{ item: "Cinder", chance: 1, min: 1, max: 1 }] };
+  const mob = { id: "wild_rat", name: "Wild Rat", hp: 35, atk: 4, def: 0, crit: 5, crit_dmg: 150,
+    speed: 0.9, qi: 3, loot: [{ item: "Rat Fur", rarity: "Common", chance: 1, min: 1, max: 1 }] };
   lib.battle.view = "combat";
-  lib.battle.area = { id: "misty_valley", name: "Misty Mortal Valley", mobs: [mob], req_idx: 0, req: "Mortal", difficulty: "Easy", desc: "" };
+  lib.battle.area = { id: "origin_village", name: "Origin Village", mobs: [mob], req_idx: 0, req: "Mortal", difficulty: "Beginner", desc: "" };
   lib.battle.mob = mob;
   lib.battle.php = MAXHP;
   lib.battle.ehp = 35;
+  lib.battle.pbar = 0;      // hold the player's swing so the beast strikes first,
+  lib.battle.ebar = 0.95;   // otherwise a crit one-shots it and no damage is dealt
+  lib.battleTick();
   lib.battle.pbar = 0.95;
   lib.battle.ebar = 0;
   lib.battle.searching = false;
@@ -262,8 +283,8 @@ state.player = basePlayer();
   let ticks = 0;
   while (!lib.battle.searching && ticks < 100) { lib.battleTick(); ticks++; }
   ok(lib.battle.searching, "enemy slain within 10s of combat (" + ticks + " ticks)");
-  ok(state.player.inventory.cinder >= 1, "drop landed in the bag exactly once");
-  ok(lib.battle.loot.Cinder >= 1, "drop recorded in the loot log");
+  ok(state.player.inventory.rat_fur >= 1, "drop landed in the bag exactly once");
+  ok(lib.battle.loot["Rat Fur"] >= 1, "drop recorded in the loot log");
   ok(Math.abs(state.player.cultivation - 3) < 1e-9, "kill granted the mob's qi reward");
   ok(state.player.hp === lib.battle.php && state.player.hp < MAXHP, "combat damage mirrored into the save every strike");
   ok(calls.timeouts.length >= 1, "respawn timer scheduled");
@@ -284,13 +305,13 @@ state.player = basePlayer();
   lib.battle.searching = false;
   lib.battle.php = 0;
   lib.battle.mob = mob;
-  lib.battle.loot = { Cinder: 1 };
+  lib.battle.loot = { "Rat Fur": 1 };
   state.player.hp = 50;
   lib.battleTick();
-  ok(calls.enemies.length && /defeated by Ash Rat/.test(calls.enemies[calls.enemies.length - 1]), "defeat shows the killer's name");
+  ok(calls.enemies.length && /defeated by Wild Rat/.test(calls.enemies[calls.enemies.length - 1]), "defeat shows the killer's name");
   ok(state.player.hp === lib.playerMaxHp(state.player), "defeat revives at full HP");
   ok(lib.battle.mob === null && JSON.stringify(lib.battle.loot) === "{}", "defeat clears mob and loot log");
-  ok(state.player.inventory.cinder >= 1, "items already collected survive defeat");
+  ok(state.player.inventory.rat_fur >= 1, "items already collected survive defeat");
 
   // zero-HP survivor falls before trading blows
   lib.battle.view = "combat";
@@ -310,7 +331,7 @@ state.player = basePlayer();
   lib.battle.view = "combat";
   lib.battle.mob = mob;
   lib.battle.php = 150; // hurt mid-fight, below the 225 max
-  lib.battle.loot = { Cinder: 2 };
+  lib.battle.loot = { "Rat Fur": 2 };
   lib.leaveActiveHunt();
   ok(lib.battle.timer === null, "leaving stops the combat timer");
   ok(state.player.hp === 150, "leaving persists current fight HP");
@@ -319,15 +340,15 @@ state.player = basePlayer();
 
   // ============ 8. area realm locks ============
   lib.battle.areas = [
-    { id: "valley", name: "Valley", desc: "", req_idx: 0, req: "Mortal", difficulty: "Easy", mobs: [] },
+    { id: "village", name: "Village", desc: "", req_idx: 0, req: "Mortal", difficulty: "Beginner", mobs: [] },
     { id: "peaks", name: "Peaks", desc: "", req_idx: 8, req: "QR VIII", difficulty: "Brutal", mobs: [] },
   ];
   state.player = basePlayer();
   state.player.realm_idx = 0;
   lib.showBattleAreas();
-  ok(/class="area-row" data-area="valley"/.test(els["battle-root"].innerHTML) &&
+  ok(/class="area-row" data-area="village"/.test(els["battle-root"].innerHTML) &&
      /class="area-row locked" data-area="peaks"/.test(els["battle-root"].innerHTML),
-    "realm 0: valley open, peaks locked");
+    "realm 0: village open, peaks locked");
   state.player.realm_idx = 8;
   lib.showBattleAreas();
   ok(!/data-area="peaks"/.test(els["battle-root"].innerHTML.replace(/class="area-row" data-area="peaks"/, "")) ||
@@ -394,7 +415,58 @@ state.player = basePlayer();
   ok(r3 === null, "fetchServerPlayer returns null when offline");
   calls.fetch = null;
 
-  // ============ 11. source-level wiring ============
+  // ============ 11. tooltips exist for EVERY item ============
+  // Materials used to fall back to a slow native title attribute. Every item
+  // in the bag must now render the real tooltip.
+  state.player = basePlayer();
+  state.player.inventory = { rat_fur: 3, wolf_fang: 2, beast_core_fragment: 1, qi_pill: 2, linen_robe: 1 };
+  lib.battle.areas = [{
+    id: "origin_village", name: "Origin Village", req_idx: 0, req: "Mortal", difficulty: "Beginner",
+    mobs: [
+      { id: "wild_rat", name: "Wild Rat", realm: "Mortal", desc: "", glyph: "", hp: 40, atk: 6, def: 0, crit: 5, crit_dmg: 150, speed: 1.4, qi: 3,
+        loot: [{ item: "Rat Fur", rarity: "Common", chance: 0.85, min: 1, max: 3 }] },
+      { id: "giant_field_rat", name: "Giant Field Rat", realm: "Mortal", desc: "", glyph: "", hp: 90, atk: 9, def: 2, crit: 5, crit_dmg: 150, speed: 1.2, qi: 5,
+        loot: [{ item: "Rat Fur", rarity: "Common", chance: 0.85, min: 3, max: 5 },
+               { item: "Beast Core Fragment", rarity: "Rare", chance: 0.08, min: 1, max: 1 }] },
+    ],
+  }];
+  const matTip = lib.itemTipHtml("rat_fur", {});
+  ok(!!matTip && /Rat Fur/.test(matTip), "material renders a tooltip");
+  ok(/Material/.test(matTip), "material tooltip is typed Material, not armor");
+  ok(/class="tip-src"/.test(matTip) && /Wild Rat/.test(matTip) && /Giant Field Rat/.test(matTip),
+    "material tooltip lists every beast that drops it");
+  ok(/85%/.test(matTip), "material tooltip shows the drop chance");
+  ok(/Held: 3/.test(matTip), "material tooltip shows how many are held");
+  ok(!/tip-actions/.test(matTip), "material tooltip offers no actions");
+  const conTip = lib.itemTipHtml("qi_pill", {});
+  ok(/Cultivation Consumable/.test(conTip) && /tip-actions/.test(conTip), "consumable tooltip keeps its type + actions");
+  const gearTip = lib.itemTipHtml("linen_robe", {});
+  ok(/Body Armor/.test(gearTip) && /def\+4/.test(gearTip), "gear tooltip shows slot type + stats");
+  ok(/tip-src/.test(gearTip) === false, "gear with no drop source shows no source block");
+  ok(lib.dropsFor("Rat Fur").length === 2 && lib.dropsFor("Nonexistent Thing").length === 0,
+    "dropsFor finds all sources, and none for an unknown item");
+  ok(/<img class="art/.test(lib.iconHtml("/assets/items/rat_fur.png", "✦", "art-slot")) &&
+     /<span class="glyph">/.test(lib.iconHtml(null, "✦", "art-slot")),
+    "icon renders art when present, emoji otherwise");
+
+  // ============ 12. item rarity ladder (Common -> Mythic) ============
+  const RARITY_KEYS = Object.keys(lib.ITEM_RARITY_COLORS);
+  ok(["Common", "Uncommon", "Rare", "Epic", "Legendary", "Mythic"].every(k => RARITY_KEYS.includes(k)),
+    "item rarity ladder is Common -> Mythic");
+  ok(!RARITY_KEYS.some(k => k === "Mortal" || k === "Primordial"),
+    "the old root rarity names are gone from the item ladder");
+  ok(lib.ITEM_RARITY_COLORS.Mythic === "#ff3d00" && lib.ITEM_RARITY_COLORS.Legendary === "#ffb300" &&
+     lib.ITEM_RARITY_COLORS.Epic === "#ab47bc",
+    "rarity colors match the spec (crimson / gold / purple)");
+  ok(/Common/.test(lib.itemTipHtml("rat_fur", {})), "tooltip shows the item's rarity");
+  ok(/Uncommon/.test(lib.itemTipHtml("wolf_fang", {})) || /color:#7cb342/.test(lib.itemTipHtml("wolf_fang", {})),
+    "an Uncommon material is colored green in its tooltip");
+  const rareTip = lib.itemTipHtml("beast_core_fragment", {});
+  ok(/Rare/.test(rareTip) && /color:#42a5f5/.test(rareTip), "a Rare material is colored blue in its tooltip");
+  ok(/8%/.test(rareTip) && /Rare/.test(rareTip), "the drop list carries each drop's rarity");
+  ok(/1x/.test(rareTip), "the drop list shows quantity");
+
+  // ============ 13. source-level wiring ============
   ok(/else if \(battle\.view === "areas"\) \{\s*\n\s*showBattleAreas\(\)/.test(SRC), "battle tab refreshes area locks on entry");
   ok(/!battle\.searching \|\| battle\.mob !== m/.test(SRC), "respawn guard checks the live fight");
   ok(/p\.hp = battle\.php;/.test(SRC), "hp mirror present in battleTick");
@@ -403,6 +475,8 @@ state.player = basePlayer();
   ok(/const elix = `<div class="doll-row">` \+ \[0, 1, 2\]\.map/.test(SRC), "elixir row renders 3 slots");
   ok(/name: "Combat Pill"|name: "Protection Pill"/.test(SRC) === false, "unfillable pill labels removed");
   ok(/Crafting is deferred/.test(SRC) === false, "material wording lives server-side (no stale client copy)");
+  ok(/it\.kind === "material" \? ` title=/.test(SRC) === false, "no native title tooltip left in the bag");
+  ok(/data-item="\$\{id\}" data-tip="\$\{id\}"/.test(SRC), "every bag slot carries data-tip");
 
   console.log("\n" + pass + " passed, " + fail + " failed");
   process.exit(fail ? 1 : 0);

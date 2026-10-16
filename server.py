@@ -152,121 +152,105 @@ MANUAL_ALLOW_MULT = 6.0  # headroom per second: meditate clicks + battle Qi rewa
 # req_idx gates by player realm. Loot rolls are client-side; Qi rewards flow
 # through accrue() and the /api/sync clamp like any other honest gain.
 # ----------------------------------------------------------------------------
-def _mob(id, name, realm, desc, glyph, hp, atk, dfn, speed, qi, loot):
-    return {"id": id, "name": name, "realm": realm, "desc": desc, "glyph": glyph,
+def _mob(id, name, realm, difficulty, desc, glyph, hp, atk, dfn, speed, qi, loot):
+    return {"id": id, "name": name, "realm": realm, "difficulty": difficulty,
+            "desc": desc, "glyph": glyph,
             "hp": hp, "atk": atk, "def": dfn, "crit": 5, "crit_dmg": 150,
             "speed": speed, "qi": qi, "loot": loot}
 
-def _loot(item, chance, mn, mx):
-    return {"item": item, "chance": chance, "min": mn, "max": mx}
+# A mob's loot list, written as (item, rarity, chance%, min, max).
+def _drops(*rows):
+    return [{"item": i, "rarity": r, "chance": c / 100.0, "min": mn, "max": mx}
+            for (i, r, c, mn, mx) in rows]
 
 AREAS = [
-    {"id": "misty_valley", "name": "Misty Mortal Valley", "req_idx": 0,
-     "req": "Mortal", "difficulty": "Easy",
-     "desc": "Low mists, weak beasts. A safe first hunt for a new cultivator.",
+    {"id": "origin_village", "name": "Origin Village", "req_idx": 0,
+     "req": "Mortal", "difficulty": "Beginner",
+     "desc": "A peaceful village where new cultivators begin their journey, "
+             "complete basic quests, and learn the fundamentals of combat.",
      "mobs": [
-        _mob("stone_puppet", "Stone Puppet", "Mortal construct",
-             "A training puppet left by a fallen sect. Slow, sturdy, harmless.",
-             "🗿", 80, 8, 2, 1.6, 6,
-             [_loot("Iron", 0.6, 1, 2), _loot("Stone", 0.5, 1, 2)]),
-        _mob("ash_rat", "Ash Rat", "Mortal beast",
-             "Fat rat nesting in cremation ashes. Fast, cowardly, crunchy.",
-             "🐀", 35, 4, 0, 0.9, 3,
-             [_loot("Cinder", 0.5, 1, 1), _loot("Rat Fang", 0.3, 1, 1)]),
-        _mob("mud_crab", "Mud Crab", "Mortal beast",
-             "Sideways menace of the mudflats. Thick shell, soft heart.",
-             "🦀", 50, 5, 3, 1.8, 4,
-             [_loot("Crab Shell", 0.6, 1, 2), _loot("Mud Pearl", 0.15, 1, 1)]),
-        _mob("dust_wolf", "Dust Wolf", "Mortal beast",
-             "Thin wolf prowling the grave roads. Hungry enough to try you.",
-             "🐺", 60, 7, 1, 1.3, 5,
-             [_loot("Wolf Fang", 0.5, 1, 2), _loot("Hide", 0.4, 1, 1)]),
-        _mob("sprout_treant", "Sprout Treant", "Mortal spirit",
-             "A grumpy sapling that woke up wrong. Swings branches wildly.",
-             "🌱", 70, 6, 2, 1.7, 5,
-             [_loot("Spirit Wood", 0.55, 1, 2), _loot("Dewdrop", 0.3, 1, 1)]),
-     ]},
-    {"id": "bamboo_forest", "name": "Whispering Bamboo Forest", "req_idx": 3,
-     "req": "Qi Refinement Realm III", "difficulty": "Normal",
-     "desc": "Wind talks through green stalks. Things with teeth listen.",
-     "mobs": [
-        _mob("bamboo_viper", "Bamboo Viper", "Refinement beast",
-             "Green as the stalks it hides in. Strikes before the hiss.",
-             "🐍", 160, 13, 5, 1.1, 10,
-             [_loot("Venom Gland", 0.5, 1, 1), _loot("Snakeskin", 0.45, 1, 2)]),
-        _mob("ironback_boar", "Ironback Boar", "Refinement beast",
-             "Charges first, thinks never. Its back can turn a blade.",
-             "🐗", 260, 16, 8, 1.7, 14,
-             [_loot("Iron Tusk", 0.5, 1, 2), _loot("Boar Hide", 0.4, 1, 2)]),
-        _mob("mist_gibbon", "Mist Gibbon", "Refinement beast",
-             "Swings laughing through the fog. Drops fruit, and fists.",
-             "🐒", 180, 14, 4, 1.0, 12,
-             [_loot("Spirit Fruit", 0.4, 1, 2), _loot("Misty Pelt", 0.4, 1, 1)]),
-        _mob("thorn_panther", "Thorn Panther", "Refinement beast",
-             "A shadow with thorns for whiskers. You will not see it first.",
-             "🐆", 240, 18, 6, 1.2, 16,
-             [_loot("Panther Claw", 0.5, 1, 2), _loot("Thorn Vine", 0.35, 1, 2)]),
-        _mob("bamboo_wraith", "Bamboo Wraith", "Refinement spirit",
-             "The grudge of a felled grove, rattling like dry leaves.",
-             "👻", 200, 15, 3, 1.4, 18,
-             [_loot("Wraith Wisp", 0.4, 1, 1), _loot("Spirit Sliver", 0.3, 1, 1)]),
-     ]},
-    {"id": "ember_caverns", "name": "Ember Caverns", "req_idx": 6,
-     "req": "Qi Refinement Realm VI", "difficulty": "Hard",
-     "desc": "The stone breathes heat. Everything down here is angry.",
-     "mobs": [
-        _mob("flame_imp", "Flame Imp", "Refinement fiend",
-             "Small, rude, flammable-adjacent. Throws cinders at guests.",
-             "😈", 420, 25, 10, 1.1, 30,
-             [_loot("Imp Horn", 0.5, 1, 1), _loot("Ember", 0.6, 1, 3)]),
-        _mob("magma_lizard", "Magma Lizard", "Refinement beast",
-             "Basks in lava flows. Its scales still glow at midnight.",
-             "🦎", 550, 28, 14, 1.6, 38,
-             [_loot("Magma Scale", 0.5, 1, 2), _loot("Fire Gland", 0.35, 1, 1)]),
-        _mob("cinder_golem", "Cinder Golem", "Refinement construct",
-             "A furnace given fists. Slow, inevitable, extremely hot.",
-             "🗿", 700, 32, 16, 2.0, 48,
-             [_loot("Cinder Core", 0.4, 1, 1), _loot("Obsidian Shard", 0.45, 1, 2)]),
-        _mob("ash_wraith", "Ash Wraith", "Refinement spirit",
-             "What the volcano buried, the volcano remembers.",
-             "🌫️", 480, 30, 8, 1.3, 42,
-             [_loot("Ashen Veil", 0.35, 1, 1), _loot("Grudge Ember", 0.4, 1, 1)]),
-        _mob("inferno_bat", "Inferno Bat", "Refinement beast",
-             "A screech with wings, trailing sparks through black tunnels.",
-             "🦇", 400, 26, 6, 0.9, 34,
-             [_loot("Bat Wing", 0.5, 1, 2), _loot("Searing Blood", 0.3, 1, 2)]),
-     ]},
-    {"id": "frostbite_peaks", "name": "Frostbite Peaks", "req_idx": 8,
-     "req": "Qi Refinement Realm VIII", "difficulty": "Brutal",
-     "desc": "White silence that kills the unprepared. Only apex predators.",
-     "mobs": [
-        _mob("frost_alpha", "Frost Wolf Alpha", "Refinement alpha",
-             "Leads the blizzard pack. Its howl freezes marrow.",
-             "🐺", 950, 42, 18, 1.3, 70,
-             [_loot("Alpha Fang", 0.5, 1, 2), _loot("Frost Pelt", 0.45, 1, 2)]),
-        _mob("ice_revenant", "Ice Revenant", "Refinement spirit",
-             "A frozen cultivator that never stopped climbing.",
-             "🧊", 1100, 46, 22, 1.7, 85,
-             [_loot("Revenant Shard", 0.4, 1, 1), _loot("Glacial Core", 0.3, 1, 1)]),
-        _mob("snow_yak", "Snow Yak Demon", "Refinement beast",
-             "A mountain that moos. Gore first, questions later.",
-             "🐂", 1400, 50, 26, 2.0, 100,
-             [_loot("Yak Horn", 0.45, 1, 2), _loot("Snow Lotus", 0.25, 1, 1)]),
-        _mob("blizzard_roc", "Blizzard Roc", "Refinement beast",
-             "Its wings are the storm. Its shadow is the last thing many see.",
-             "🦅", 1000, 48, 16, 1.0, 90,
-             [_loot("Roc Feather", 0.5, 1, 3), _loot("Storm Eye", 0.2, 1, 1)]),
-        _mob("frozen_jiao", "Frozen Jiao", "Refinement dragon-kin",
-             "A river dragon flash-frozen mid-ascent. Proud, ancient, furious.",
-             "🐉", 1500, 55, 24, 1.5, 140,
-             [_loot("Jiao Scale", 0.4, 1, 2), _loot("Dragon Dew", 0.2, 1, 1)]),
+        _mob("wild_rat", "Wild Rat", "Mortal", "Very Easy",
+             "Scratching under the granary boards. Bold in numbers, harmless alone.",
+             "🐀", 40, 6, 0, 1.4, 3,
+             _drops(("Rat Fur", "Common", 85, 1, 3),
+                    ("Raw Meat", "Common", 75, 2, 4),
+                    ("Broken Claw", "Common", 60, 1, 1),
+                    ("Rat Tail", "Uncommon", 40, 1, 2),
+                    ("Small Beast Bone", "Uncommon", 25, 1, 1),
+                    ("Weak Beast Blood", "Rare", 10, 1, 1))),
+        _mob("giant_field_rat", "Giant Field Rat", "Mortal", "Very Easy",
+             "A bloated sack of fur and teeth that eats whole rows of millet.",
+             "🐁", 90, 9, 2, 1.2, 5,
+             _drops(("Rat Fur", "Common", 85, 3, 5),
+                    ("Raw Meat", "Common", 80, 3, 6),
+                    ("Broken Claw", "Common", 70, 2, 2),
+                    ("Rat Tail", "Uncommon", 50, 2, 3),
+                    ("Small Beast Bone", "Uncommon", 40, 1, 2),
+                    ("Beast Core Fragment", "Rare", 8, 1, 1))),
+        _mob("forest_wolf", "Forest Wolf", "Mortal", "Easy",
+             "Works the tree line at dusk. Hunts alone, and prefers it that way.",
+             "🐺", 130, 13, 4, 1.2, 8,
+             _drops(("Wolf Pelt", "Common", 85, 2, 4),
+                    ("Raw Meat", "Common", 80, 4, 6),
+                    ("Broken Claw", "Common", 65, 5, 5),
+                    ("Wolf Fang", "Uncommon", 60, 2, 3),
+                    ("Beast Bone", "Uncommon", 45, 2, 4),
+                    ("Weak Beast Core", "Rare", 10, 1, 1))),
+        _mob("gray_wolf", "Gray Wolf", "Mortal", "Easy",
+             "Paler, older, and far less inclined to run from a cultivator.",
+             "🐕", 175, 15, 6, 1.1, 11,
+             _drops(("Gray Wolf Pelt", "Common", 85, 2, 5),
+                    ("Raw Meat", "Common", 80, 4, 7),
+                    ("Broken Claw", "Common", 70, 6, 6),
+                    ("Wolf Fang", "Uncommon", 65, 3, 4),
+                    ("Beast Bone", "Uncommon", 55, 3, 5),
+                    ("Gray Wolf Essence", "Rare", 12, 1, 1))),
+        _mob("wild_boar", "Wild Boar", "Mortal", "Easy",
+             "Roots up the eastern field. Slow, armoured, and extremely bad-tempered.",
+             "🐗", 190, 16, 8, 1.05, 14,
+             _drops(("Boar Hide", "Common", 85, 2, 4),
+                    ("Raw Meat", "Common", 90, 5, 8),
+                    ("Broken Claw", "Common", 50, 3, 3),
+                    ("Boar Tusk", "Uncommon", 65, 2, 3),
+                    ("Beast Bone", "Uncommon", 50, 3, 5),
+                    ("Boar Fat", "Uncommon", 45, 2, 4))),
+        _mob("rabid_boar", "Rabid Boar", "Mortal", "Easy",
+             "Fevered and frothing at the village edge. The worst thing in the fields.",
+             "🐃", 260, 18, 10, 1.05, 18,
+             _drops(("Tough Boar Hide", "Uncommon", 80, 2, 5),
+                    ("Raw Meat", "Common", 85, 5, 9),
+                    ("Broken Claw", "Common", 60, 4, 4),
+                    ("Bloodied Tusk", "Rare", 65, 2, 4),
+                    ("Beast Blood", "Uncommon", 45, 2, 4),
+                    ("Corrupted Beast Core", "Epic", 12, 1, 1))),
      ]},
 ]
+
 
 # ----------------------------------------------------------------------------
 # Item database (single source of truth; served via GET /api/items)
 # kind: gear (equippable) / consumable (usable) / material (future crafting)
+#
+# Item rarity ladder. Separate from the Spiritual Root ladder above
+# (Mortal -> Primordial), which only ever describes a root.
+# Rarity and drop chance are independent: a Rare item can drop often if it is
+# meant to be a routine progression material.
 # ----------------------------------------------------------------------------
+ITEM_RARITY_ORDER = ["Common", "Uncommon", "Rare", "Epic", "Legendary", "Mythic"]
+ITEM_RARITY_COLORS = {
+    "Common": "#9aa0a6",     # gray
+    "Uncommon": "#7cb342",   # green
+    "Rare": "#42a5f5",       # blue
+    "Epic": "#ab47bc",       # purple
+    "Legendary": "#ffb300",  # gold
+    "Mythic": "#ff3d00",     # crimson
+}
+# Typical drop-chance band per rarity, used only to sanity-check a drop table.
+ITEM_RARITY_BANDS = {
+    "Common": (60, 90), "Uncommon": (30, 59), "Rare": (10, 29),
+    "Epic": (3, 15), "Legendary": (0.5, 3), "Mythic": (0.1, 0.5),
+}
+
 def _gear(id, name, slot, glyph, desc, stats=None):
     base = {"atk": 0, "def": 0, "hp": 0, "crit": 0, "critDmg": 0}
     if stats:
@@ -280,92 +264,56 @@ def _con(id, name, glyph, desc, heal_pct=0, qi_pct=0):
             "stats": {"atk": 0, "def": 0, "hp": 0, "crit": 0, "critDmg": 0},
             "use": {"heal_pct": heal_pct, "qi_pct": qi_pct}}
 
+# Items are added back one at a time. Copy the template below and give the
+# new item a unique id, the slot it equips into, and its stat block.
+#
+#   _gear("item_id", "Item Name", "main_weapon", "⚔️", "Flavour text.",
+#         {"atk": 6, "def": 0, "hp": 0, "crit": 0, "critDmg": 0}),
+#
+# Remember to add a drop source for it in _GEAR_DROPS below.
 GEAR = [
-    # tier 1 — mortal valley finds
-    _gear("worn_iron_sword", "Worn Iron Sword", "main_weapon", "⚔️", "Notched but honest.", {"atk": 6}),
-    _gear("wolf_fang_blade", "Wolf Fang Blade", "main_weapon", "🗡️", "Hilt wrapped in dust-wolf hide.", {"atk": 9}),
-    _gear("wooden_shield", "Wooden Shield", "sec_weapon", "🛡️", "Stops rats. Mostly.", {"def": 5}),
-    _gear("hide_guard", "Hide Guard", "sec_weapon", "🦺", "Boiled wolf hide on oak.", {"def": 8}),
-    _gear("cloth_hood", "Cloth Hood", "head", "🧣", "Smells of rain.", {"def": 3, "hp": 20}),
-    _gear("linen_robe", "Linen Robe", "chest", "🥋", "Standard outer-sect issue.", {"def": 4, "hp": 30}),
-    _gear("clay_core", "Clay Core", "core", "🟤", "A pebble that hums faintly.", {"hp": 40}),
-    _gear("cloth_wraps", "Cloth Wraps", "arm", "🩹", "Bound knuckles hit harder.", {"atk": 2, "def": 2}),
-    _gear("straw_cloak", "Straw Cloak", "back", "🌾", "Sheds water and weak insults.", {"def": 2}),
-    _gear("straw_sandals", "Straw Sandals", "boots", "🩴", "Worn by every beginner ever.", {"def": 1}),
-    _gear("linen_pants", "Linen Pants", "legs", "👖", "Unremarkable. Durable.", {"def": 3, "hp": 20}),
-    _gear("copper_ring", "Copper Ring", "ring", "⭕", "Green with age, lucky anyway.", {"crit": 2}),
-    _gear("twig_pin", "Twig Hairpin", "headpiece", "📌", "Holds hair and minor resolve.", {"crit": 1}),
-    _gear("wood_beads", "Wood Bead Necklace", "necklace", "📿", "Warm from a hundred hands.", {"hp": 60}),
-    # tier 2 — bamboo forest spoils
-    _gear("bamboo_cutter", "Bamboo Cutter", "main_weapon", "🎋", "Sings when swung.", {"atk": 14}),
-    _gear("claw_dagger", "Panther Claw Dagger", "main_weapon", "🐾", "Still sharp. Still angry.", {"atk": 18}),
-    _gear("bamboo_hat", "Bamboo Hat", "head", "🎩", "Shade with attitude.", {"def": 7, "hp": 60}),
-    _gear("boarhide_vest", "Boarhide Vest", "chest", "🦺", "Smells like victory.", {"def": 9, "hp": 90}),
-    _gear("jade_core", "Jade Core", "core", "💚", "Cool to the touch, warm to qi.", {"hp": 160}),
-    _gear("iron_vambraces", "Iron Vambraces", "arm", "⛓️", "Clank with confidence.", {"atk": 5, "def": 6}),
-    _gear("panther_cloak", "Panther Pelt Cloak", "back", "🐆", "It still dreams of running.", {"def": 7, "hp": 50}),
-    _gear("hide_boots", "Hide Boots", "boots", "🥾", "Quiet on moss.", {"def": 5}),
-    _gear("bamboo_greaves", "Bamboo Greaves", "legs", "🎋", "Light, springy, green.", {"def": 8, "hp": 70}),
-    _gear("jade_ring", "Jade Ring", "ring", "💍", "A juren's gift, or a bribe.", {"crit": 5, "critDmg": 20}),
-    _gear("bronze_circlet", "Bronze Circlet", "headpiece", "⭕", "Squeezes focus out.", {"def": 4, "crit": 3}),
-    _gear("fang_necklace", "Fang Necklace", "necklace", "🦷", "One fang per victory.", {"atk": 6, "crit": 2}),
-    # tier 3 — ember cavern relics
-    _gear("ember_brand", "Ember Brand", "main_weapon", "🔥", "Leaves glowing footnotes.", {"atk": 28}),
-    _gear("ember_ward", "Ember Ward", "sec_weapon", "🔥", "A shield that bites back.", {"def": 16}),
-    _gear("horned_helm", "Horned Helm", "head", "🪖", "The horns are decorative. Probably.", {"def": 14, "hp": 150}),
-    _gear("magma_plate", "Magma Plate", "chest", "🛡️", "Warm. Always warm.", {"def": 18, "hp": 220}),
-    _gear("ember_core", "Ember Core", "core", "🔥", "A captured furnace-heart.", {"hp": 300, "atk": 6}),
-    _gear("magma_gauntlets", "Magma Gauntlets", "arm", "🧤", "Handle with everything.", {"atk": 10, "def": 10}),
-    _gear("ashen_mantle", "Ashen Mantle", "back", "🌫️", "Smells of old fires.", {"def": 12, "hp": 140}),
-    _gear("ember_treads", "Ember Treads", "boots", "🥾", "Footprints smolder.", {"def": 10, "hp": 80}),
-    _gear("magma_legguards", "Magma Legguards", "legs", "🦵", "Heavy. Worth it.", {"def": 15, "hp": 180}),
-    _gear("ember_crown", "Ember Crown", "headpiece", "👑", "A coronation of cinders.", {"atk": 8, "crit": 5}),
-    _gear("ember_pendant", "Ember Pendant", "necklace", "📿", "Pulses like a second heart.", {"atk": 12, "crit": 4}),
-    # tier 4 — frostbite peak treasures
-    _gear("frostbite_edge", "Frostbite Edge", "main_weapon", "❄️", "Cold enough to cut ghosts.", {"atk": 40}),
-    _gear("ice_mirror", "Ice Mirror", "sec_weapon", "🪞", "Shows enemies their doom.", {"def": 24}),
-    _gear("frost_crown", "Frost Crown", "head", "👑", "Winter kneels to no one.", {"def": 22, "hp": 300}),
-    _gear("glacial_robe", "Glacial Robe", "chest", "🧊", "Woven from avalanche silk.", {"def": 26, "hp": 400}),
-    _gear("frost_core", "Frost Core", "core", "🧊", "A star frozen mid-thought.", {"hp": 450, "atk": 10}),
-    _gear("frost_bracers", "Frost Bracers", "arm", "❄️", "Fists like hailstones.", {"atk": 16, "def": 14}),
-    _gear("roc_cloak", "Roc Feather Cloak", "back", "🪶", "Light as a storm's rumor.", {"def": 18, "hp": 260, "crit": 2}),
-    _gear("snowwalkers", "Snowwalkers", "boots", "🥾", "Never sink, never slip.", {"def": 15, "hp": 180}),
-    _gear("frost_leggings", "Frost Leggings", "legs", "🦵", "Creak pleasantly.", {"def": 22, "hp": 320}),
-    _gear("frost_diadem", "Frost Diadem", "headpiece", "💎", "A glacier's vanity.", {"atk": 14, "crit": 8, "critDmg": 40}),
-    _gear("frozen_tear", "Frozen Tear", "necklace", "💧", "Someone's last winter, kept.", {"atk": 18, "crit": 6, "critDmg": 30}),
 ]
 
 # Gear rarity follows root-rarity colors (valley Mortal -> peaks Immortal).
-_GEAR_RARITY = {**{i: "Earth" for i in (
-    "bamboo_cutter", "claw_dagger", "bamboo_hat", "boarhide_vest", "jade_core",
-    "iron_vambraces", "panther_cloak", "hide_boots", "bamboo_greaves",
-    "jade_ring", "bronze_circlet", "fang_necklace")},
-    **{i: "Heaven" for i in (
-    "ember_brand", "ember_ward", "horned_helm", "magma_plate", "ember_core",
-    "magma_gauntlets", "ashen_mantle", "ember_treads", "magma_legguards",
-    "ember_crown", "ember_pendant")},
-    **{i: "Immortal" for i in (
-    "frostbite_edge", "ice_mirror", "frost_crown", "glacial_robe", "frost_core",
-    "frost_bracers", "roc_cloak", "snowwalkers", "frost_leggings",
-    "frost_diadem", "frozen_tear")}}
+# Add an id here to override its rarity; anything unlisted stays "Common".
+_GEAR_RARITY = {}
 for _g in GEAR:
-    _g["rarity"] = _GEAR_RARITY.get(_g["id"], "Mortal")
+    _g["rarity"] = _GEAR_RARITY.get(_g["id"], "Common")
 
+# Consumables are the seed items. Add new ones here with
+# _con(id, name, glyph, desc, heal_pct=, qi_pct=). A pill's `use` stats decide
+# which elixir slot it can occupy: heal only / qi only / both.
 CONSUMABLES = [
-    _con("healing_pill", "Healing Pill", "💊", "Crude but effective. Restores 40% HP.", heal_pct=40),
     _con("qi_pill", "Qi Pill", "🔮", "Condensed morning mist. Grants 15% of a stage in Qi.", qi_pct=15),
     _con("spirit_meal", "Spirit Meal", "🍱", "A hot otherworldly lunch. Restores 15% HP and a little Qi.", heal_pct=15, qi_pct=5),
 ]
 for _c in CONSUMABLES:
-    _c["rarity"] = "Earth"
+    _c["rarity"] = "Common"
 
 def _slug(name):
     return re.sub(r"[^a-z0-9]+", "_", name.lower()).strip("_")
 
 _ZERO = {"atk": 0, "def": 0, "hp": 0, "crit": 0, "critDmg": 0}
+
+def _material_rarities():
+    """Highest rarity any beast drops each material under."""
+    out = {}
+    for a in AREAS:
+        for m in a["mobs"]:
+            for l in m["loot"]:
+                r = l.get("rarity") or "Common"
+                if ITEM_RARITY_ORDER.index(r) > ITEM_RARITY_ORDER.index(out.get(l["item"], "Common")):
+                    out[l["item"]] = r
+    return out
+
+_MATERIAL_RARITY = _material_rarities()
+
 # Every battle material becomes an inventory item (crafting coming soon).
+# Derived from the mob loot tables, so it refills itself — and takes its
+# rarity — as loot comes back.
 MATERIALS = [{"id": _slug(name), "name": name, "kind": "material", "slot": None,
-              "glyph": "✦", "rarity": "Mortal",
+              "glyph": "✦", "rarity": _MATERIAL_RARITY.get(name, "Common"),
+              "color": ITEM_RARITY_COLORS[_MATERIAL_RARITY.get(name, "Common")],
               "desc": "Battle loot. Crafting is deferred — no recipe system yet.",
               "stats": dict(_ZERO)}
              for name in sorted({l["item"] for a in AREAS for m in a["mobs"] for l in m["loot"]})]
@@ -375,48 +323,53 @@ ITEM_BY_ID = {it["id"]: it for it in ITEMS}
 EQUIP_SLOTS = ("head", "sec_weapon", "chest", "main_weapon", "core", "arm",
                "back", "boots", "legs", "ring1", "ring2", "necklace", "headpiece")
 
+# ----------------------------------------------------------------------------
+# Art assets. A mob or item draws its picture from a file named after its id
+# (public/assets/enemies/wild_rat.png, public/assets/items/rat_fur.png). Any id
+# with no matching file simply has no "img" key and the client falls back to
+# the item's emoji glyph, so art is added one file at a time.
+#
+# Resolved per request, not at import: dropping a new PNG into the folder must
+# show up on refresh without restarting the server.
+# ----------------------------------------------------------------------------
+_ASSET_DIRS = ("enemies", "items")
+
+def _asset_cache():
+    """id-keyed map of every art file currently on disk, keyed "kind/name"."""
+    out = {}
+    for kind in _ASSET_DIRS:
+        d = os.path.join(PUBLIC_DIR, "assets", kind)
+        try:
+            names = os.listdir(d)
+        except OSError:
+            continue
+        for fn in names:
+            if fn.lower().endswith(".png"):
+                out["%s/%s" % (kind, fn[:-4])] = "/assets/%s/%s" % (kind, fn)
+    return out
+
+def _apply_art(art):
+    """Give every mob and item an `img` key when a matching file exists."""
+    for a in AREAS:
+        for m in a["mobs"]:
+            p = art.get("enemies/" + m["id"])
+            if p:
+                m["img"] = p
+            else:
+                m.pop("img", None)
+    for it in ITEMS:
+        p = art.get("items/" + it["id"])
+        if p:
+            it["img"] = p
+        else:
+            it.pop("img", None)
+
 # Bonus gear/consumable drops merged into /api/areas (mob_id -> drops).
-# Every gear piece has a source: its tier's area (see GEAR tier comments).
+# Every gear piece needs a source: map a mob id to its item id.
+#   "wild_rat": [("worn_iron_sword", 0.08, 1, 1)],
 _GEAR_DROPS = {
-    # tier 1 — mortal valley finds
-    "stone_puppet": [("worn_iron_sword", 0.08, 1, 1), ("healing_pill", 0.10, 1, 1),
-                     ("straw_cloak", 0.06, 1, 1), ("linen_pants", 0.07, 1, 1)],
-    "ash_rat": [("twig_pin", 0.06, 1, 1), ("cloth_wraps", 0.07, 1, 1)],
-    "mud_crab": [("wooden_shield", 0.07, 1, 1), ("clay_core", 0.06, 1, 1),
-                 ("straw_sandals", 0.05, 1, 1)],
-    "dust_wolf": [("wolf_fang_blade", 0.07, 1, 1), ("copper_ring", 0.06, 1, 1),
-                  ("hide_guard", 0.07, 1, 1)],
-    "sprout_treant": [("cloth_hood", 0.07, 1, 1), ("healing_pill", 0.08, 1, 1),
-                      ("linen_robe", 0.07, 1, 1)],
-    # tier 2 — bamboo forest spoils
-    "bamboo_viper": [("bamboo_hat", 0.06, 1, 1), ("hide_boots", 0.06, 1, 1),
-                     ("bronze_circlet", 0.05, 1, 1)],
-    "ironback_boar": [("bamboo_cutter", 0.06, 1, 1), ("boarhide_vest", 0.06, 1, 1),
-                      ("iron_vambraces", 0.06, 1, 1), ("bamboo_greaves", 0.05, 1, 1)],
-    "mist_gibbon": [("spirit_meal", 0.12, 1, 1), ("wood_beads", 0.06, 1, 1),
-                    ("jade_core", 0.06, 1, 1)],
-    "thorn_panther": [("claw_dagger", 0.06, 1, 1), ("panther_cloak", 0.05, 1, 1)],
-    "bamboo_wraith": [("qi_pill", 0.08, 1, 1), ("jade_ring", 0.05, 1, 1)],
-    # tier 3 — ember cavern relics
-    "flame_imp": [("ember_brand", 0.05, 1, 1), ("healing_pill", 0.08, 1, 1),
-                  ("horned_helm", 0.05, 1, 1)],
-    "magma_lizard": [("magma_plate", 0.05, 1, 1), ("magma_gauntlets", 0.05, 1, 1)],
-    "cinder_golem": [("ember_ward", 0.05, 1, 1), ("ember_core", 0.05, 1, 1),
-                     ("magma_legguards", 0.04, 1, 1)],
-    "ash_wraith": [("ashen_mantle", 0.05, 1, 1), ("qi_pill", 0.08, 1, 1),
-                   ("ember_pendant", 0.05, 1, 1)],
-    "inferno_bat": [("ember_crown", 0.04, 1, 1), ("ember_treads", 0.05, 1, 1)],
-    # tier 4 — frostbite peak treasures
-    "frost_alpha": [("frostbite_edge", 0.04, 1, 1), ("fang_necklace", 0.05, 1, 1),
-                    ("frost_crown", 0.04, 1, 1)],
-    "ice_revenant": [("glacial_robe", 0.04, 1, 1), ("qi_pill", 0.08, 1, 1),
-                     ("ice_mirror", 0.04, 1, 1)],
-    "snow_yak": [("snowwalkers", 0.04, 1, 1), ("spirit_meal", 0.10, 1, 1),
-                 ("frost_bracers", 0.04, 1, 1)],
-    "blizzard_roc": [("roc_cloak", 0.04, 1, 1), ("frost_leggings", 0.04, 1, 1)],
-    "frozen_jiao": [("frozen_tear", 0.04, 1, 1), ("frost_diadem", 0.03, 1, 1),
-                    ("frost_core", 0.04, 1, 1)],
 }
+
 
 def areas_with_drops():
     out = []
@@ -586,7 +539,7 @@ def build_player(username, picks):
         "dao_insight": 0,
         "seclusion": False,
         "equipment": {s: None for s in EQUIP_SLOTS},
-        "inventory": {"healing_pill": 3},
+        "inventory": {},
         "elixirs": [None, None, None],
         "hp": None,  # client-tracked; full on first load
         "last_seen": time.time(),
@@ -596,7 +549,7 @@ def build_player(username, picks):
 
 
 class Handler(BaseHTTPRequestHandler):
-    server_version = "AshenFantasy/0.7.19"
+    server_version = "AshenFantasy/0.8.0"
 
     def log_message(self, fmt, *args):
         pass  # quiet
@@ -642,10 +595,14 @@ class Handler(BaseHTTPRequestHandler):
             return self._send_json({"roots": roots_sorted}, cache="max-age=3600")
 
         if path == "/api/areas":
-            return self._send_json({"areas": areas_with_drops()}, cache="max-age=3600")
+            # Not cached: areas/mobs/drops/art are edited while building them
+            # out, and a stale hour-old copy hides the change you just made.
+            _apply_art(_asset_cache())
+            return self._send_json({"areas": areas_with_drops()}, cache="no-store")
 
         if path == "/api/items":
-            return self._send_json({"items": ITEMS}, cache="max-age=3600")
+            _apply_art(_asset_cache())
+            return self._send_json({"items": ITEMS}, cache="no-store")
 
         if path == "/api/health":
             return self._send_json({"ok": True, "roots": len(ROOTS_WITH_CHANCE),

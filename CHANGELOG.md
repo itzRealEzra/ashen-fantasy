@@ -11,6 +11,98 @@ and push to `main` on https://github.com/itzRealEzra/ashen-fantasy.
 
 ## [Unreleased]
 
+## [0.8.0] - 2026-10-16
+### Added
+- **Item rarity ladder: Common → Uncommon → Rare → Epic → Legendary → Mythic**,
+  colored gray / green / blue / purple / gold / crimson. It replaces the old
+  Mortal → Primordial names, which now belong to Spiritual Roots only — the two
+  ladders share no names, so a root's rarity can never be mistaken for an
+  item's.
+- Every drop row carries a rarity, and a material's rarity is derived from the
+  best rarity any beast drops it under, so loot tables stay the single source
+  of truth. Current spread: 8 Common, 8 Uncommon, 5 Rare, 1 Epic
+  (Corrupted Beast Core), with Legendary and Mythic reserved for later areas.
+- Enemy loot lists now show each drop's rarity, quantity, and chance, colored by
+  rarity, and item tooltips show the same for every beast in "Drops from".
+- `ITEM_RARITY_BANDS` records the suggested drop-chance window per rarity. It is
+  documentation only — 8 drops deliberately sit outside their band (Bloodied
+  Tusk is Rare at 65%, Tough Boar Hide Uncommon at 80%), because rarity and
+  drop chance are independent by design.
+- Art assets are picked up automatically by name. Drop a PNG at
+  `public/assets/enemies/<mob_id>.png` or `public/assets/items/<item_id>.png`
+  and that mob or item draws it everywhere it appears — enemy card, combat
+  view, bag grid, equipment doll, elixir slot, and tooltip. Ids without a
+  matching file keep their emoji glyph, so art can be added one file at a
+  time. Wired up: all 6 Origin Village enemies and 7 materials (Rat Fur, Raw
+  Meat, Broken Claw, Rat Tail, Small Beast Bone, Weak Beast Blood, Beast Core
+  Fragment).
+- All 20 Origin Village materials now have art (12 new PNGs: Beast Blood,
+  Beast Bone, Bloodied Tusk, Boar Fat, Boar Hide, Boar Tusk, Corrupted Beast
+  Core, Gray Wolf Essence, Gray Wolf Pelt, Tough Boar Hide, Weak Beast Core,
+  Wolf Fang, Wolf Pelt). Only Qi Pill and Spirit Meal still use an emoji.
+- Tooltips now exist for **every** item. Materials previously fell back to the
+  browser's slow native `title` attribute while gear and consumables got the
+  real one; all of them now get the same panel — art or emoji, name, rarity,
+  type, description, and stats.
+- Item tooltips gained a **Drops from** section: every beast that drops the
+  item, sorted by best drop chance, showing the percentage (top 4, then
+  "+N more"). This answers the one question a material tooltip really has.
+- Material tooltips also show **Held: N**, since the bag grid's count badge is
+  too small to read mid-hover.
+
+### Fixed
+- New art files are picked up **without restarting the server**. Art was
+  resolved once at import, so a PNG added while `server.py` was running stayed
+  invisible until a manual restart — and a stale server process would keep
+  serving the old set. `/api/areas` and `/api/items` now rescan
+  `public/assets/{enemies,items}` per request, and an id whose file disappears
+  correctly falls back to its emoji again.
+- Two flaky client tests, both unrelated to any feature:
+  - "combat damage mirrored into the save every strike" failed roughly 1 run in
+    7, because a critical hit one-shot the 35 HP test rat before it could
+    attack, so no damage was ever dealt. The test now lets the beast strike
+    first.
+  - The source-level assertions hardcoded `\n`, so they broke whenever git
+    checked `app.js` out with CRLF endings. The file is now normalised on read,
+    making the suite immune to line-ending style.
+- Edits to areas, mobs, drops, and items no longer appear "not applied" for up
+  to an hour: `/api/areas` and `/api/items` were served with `max-age=3600`, so
+  the browser replayed its cached copy and kept showing retired areas and
+  enemies. Both are now `no-store`, and the client fetches them with
+  `cache: "no-store"`. `/api/roots` and `/api/realms` stay cached — they are
+  static.
+- Item tooltips no longer label every piece of gear as "armor": the type line
+  now comes from the item's equip slot, so a sword reads "Main Weapon", a robe
+  "Body Armor", a ring "Accessory", and so on. Empty doll slots draw from the
+  same slot-to-label table, so a slot and the item worn in it never disagree.
+
+### Changed
+- Hunting grounds replaced with a single **Origin Village** (Mortal, Beginner):
+  Wild Rat and Giant Field Rat (Very Easy), plus Forest Wolf, Gray Wolf,
+  Wild Boar, and Rabid Boar (Easy), each with its own drop table. Mobs now
+  carry a per-enemy difficulty label shown on the enemy card. The four old
+  areas (Misty Mortal Valley, Whispering Bamboo Forest, Ember Caverns,
+  Frostbite Peaks) and all 20 of their beasts are removed.
+- The 36 loot entries across those six beasts register 20 materials
+  automatically (Rat Fur, Wolf Pelt, Boar Hide, Corrupted Beast Core, and so
+  on), so the bag is no longer empty after a hunt.
+- Bag tabs regrouped from kind (All/Gear/Consumable/Materials) to what an item
+  is worn for: All, Materials, Consumable, Armor, Weapon, Artifact, Accessory.
+  Gear is bucketed by its equip slot, so shields sit under Weapon with other
+  hand-held pieces and cores/crowns under Artifact.
+- Removed the "Empty. Hunt beasts for loot." placeholder; the bag grid simply
+  renders its empty cells.
+- The item database is cleared and will be rebuilt one item at a time: all 48
+  gear pieces are removed. Only the Qi Pill and Spirit Meal remain as gear-free
+  seed consumables; `GEAR` and `_GEAR_DROPS` are empty but kept in place, each
+  with a template comment, so items can be added back individually.
+- Healing Pill removed. New cultivators now start with an empty bag.
+- Elixir slots are now derived from the pills that actually exist, keyed by
+  what a pill does (heals / grants qi / both) instead of hardcoded names. A
+  slot with no matching pill shows a neutral "Elixir I/II/III" label rather
+  than advertising a pill that cannot be found, and picks the name back up
+  automatically when one is added.
+
 ## [0.7.19] - 2026-10-16
 ### Added
 - `README.md` setup guide: requirements (Python stdlib, Node for tests),

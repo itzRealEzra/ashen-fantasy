@@ -127,10 +127,16 @@ input { background: #0e0e14; border: 1px solid var(--line); color: var(--ink); p
 .enemy-card:hover { border-color: var(--gold); }
 .enemy-card b { font-size: 15px; }
 .enemy-card .realm-tag { font-size: 12px; color: var(--gold2); }
+.enemy-card .difficulty-tag { font-size: 12px; color: var(--muted); }
 .enemy-card .desc { font-size: 12px; color: var(--muted); line-height: 1.5; }
-.enemy-glyph { font-size: 44px; text-align: center; padding: 10px 0; background: #0e0e15; border: 1px solid var(--line); }
+.enemy-glyph { font-size: 44px; text-align: center; padding: 10px 0; background: #0e0e15; border: 1px solid var(--line); line-height: 0; }
+.enemy-glyph .art-enemy { width: 100%; height: 96px; object-fit: contain; }
 .enemy-loot { font-size: 12px; color: var(--muted); border-top: 1px dotted var(--line); padding-top: 6px; }
 .enemy-loot div { display: flex; justify-content: space-between; }
+.loot-row { display: grid !important; grid-template-columns: 1fr auto auto auto; gap: 6px; align-items: baseline; justify-content: initial; }
+.loot-row .loot-name { font-weight: 600; }
+.loot-row .loot-rar { font-size: 10px; color: var(--muted); }
+.loot-row .loot-qty, .loot-row .loot-pct { font-size: 11px; color: var(--gold2); white-space: nowrap; }
 /* battle: combat (mockup 3) */
 .combat-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 8px; }
 .combat-head h2 { margin: 0; font-size: 18px; }
@@ -138,6 +144,7 @@ input { background: #0e0e14; border: 1px solid var(--line); color: var(--ink); p
 .combat-side { border: 1px solid var(--line); background: #0e0e15; min-height: 220px; display: flex; align-items: center; justify-content: center; overflow: hidden; }
 .combat-side img { max-height: 220px; max-width: 100%; object-fit: contain; }
 .combat-side .big-glyph { font-size: 96px; }
+.combat-side .art-big { max-height: 220px; max-width: 100%; object-fit: contain; }
 .combat-side.hit { animation: combat-hit .3s ease; }
 @keyframes combat-hit { 0% { filter: brightness(2); transform: translateX(0); } 30% { transform: translateX(6px); } 100% { filter: none; transform: none; } }
 .vs-badge { align-self: center; color: var(--gold2); font-size: 18px; letter-spacing: 2px; }
@@ -167,6 +174,7 @@ input { background: #0e0e14; border: 1px solid var(--line); color: var(--ink); p
 .slot { width: 72px; height: 72px; border: 1px solid var(--line); border-radius: 6px; background: #0e0e15; display: flex; flex-direction: column; align-items: center; justify-content: center; cursor: pointer; position: relative; }
 .slot:hover { border-color: var(--gold); }
 .slot .glyph { font-size: 28px; line-height: 1; }
+.slot .art-slot { width: 40px; height: 40px; object-fit: contain; }
 .slot .slot-name { font-size: 10px; color: var(--muted); margin-top: 2px; text-align: center; }
 .slot.filled { border-color: var(--gold); background: var(--panel2); }
 .slot .count { position: absolute; right: 3px; bottom: 3px; font-size: 10px; line-height: 1.4; color: var(--gold2); background: rgba(8, 8, 12, .85); border: 1px solid var(--line); border-radius: 3px; padding: 0 4px; }
@@ -178,11 +186,11 @@ input { background: #0e0e14; border: 1px solid var(--line); color: var(--ink); p
 .inv-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(56px, 1fr)); gap: 6px; flex: 1; min-height: 120px; overflow-y: auto; align-content: start; }
 .inv-grid .slot { width: auto; height: auto; aspect-ratio: 1; }
 .inv-grid .slot .glyph { font-size: 22px; }
+.inv-grid .slot .art-slot { width: 26px; height: 26px; }
 .inv-grid .inv-slot { border-color: var(--rc, var(--line)); }
 .inv-grid .inv-slot:hover { border-color: var(--gold); box-shadow: 0 0 6px rgba(240, 212, 154, .3); }
 .inv-grid .inv-empty { border-style: dashed; border-color: #2b251c; background: #0a0a10; cursor: default; pointer-events: none; }
 .inv-stats { color: var(--gold2); font-size: 13px; }
-.empty-msg { margin: 0 0 8px; }
 /* stats notification — bottom-right corner of the screen, ~3s then fade */
 #stat-notice { position: fixed; right: 16px; bottom: 24px; transform: translateY(10px); z-index: 400;
   display: flex; flex-direction: column; gap: 2px; align-items: flex-end; background: rgba(14, 14, 21, .96);
@@ -202,6 +210,12 @@ input { background: #0e0e14; border: 1px solid var(--line); color: var(--ink); p
 #item-tip .up { color: #9ccc65; }
 #item-tip .down { color: #ff8a80; }
 .tip-title { display: flex; justify-content: space-between; gap: 12px; align-items: baseline; }
+.tip-title .art-tip { width: 18px; height: 18px; object-fit: contain; vertical-align: -3px; margin-right: 3px; }
+.tip-src { margin-top: 5px; border-top: 1px dotted var(--line); padding-top: 5px; }
+.tip-src-head { font-size: 11px; color: var(--gold2); letter-spacing: 1px; margin-bottom: 2px; }
+.tip-src div { display: flex; justify-content: space-between; gap: 10px; font-size: 12px; color: var(--muted); align-items: baseline; }
+.tip-src div .loot-rar { margin-left: auto; }
+.tip-src .tip-more { justify-content: flex-start; font-style: italic; opacity: .7; }
 .tip-actions { margin-top: 6px; display: flex; gap: 6px; }
 .tip-actions button { background: var(--panel2); color: var(--gold2); border: 1px solid var(--gold); padding: 4px 14px; border-radius: 2px; cursor: pointer; font-size: 13px; }
 .tip-actions button:hover { background: rgba(201,168,106,.15); }

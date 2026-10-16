@@ -1,6 +1,6 @@
 /* Ashen Fantasy — vanilla JS state machine: username -> roots -> main */
 const $ = (id) => document.getElementById(id);
-const CLIENT_VERSION = "0.7.19"; // must match server.py server_version + footer
+const CLIENT_VERSION = "0.8.0"; // must match server.py server_version + footer
 const state = {
   username: localStorage.getItem("af_user") || "",
   rollId: null,
@@ -680,21 +680,105 @@ $("hamburger").onclick = () => {
 // ---------- inventory + equipment (v0.7.0) ----------
 let invTab = "all";
 let tipItem = null, tipHideTimer = null;
-const ITEM_RARITY_COLORS = { Mortal: "#9aa0a6", Earth: "#7cb342", Heaven: "#42a5f5",
-  Immortal: "#ab47bc", Divine: "#ffb300", Primordial: "#ff3d00" };
+// Item rarity ladder (Common -> Mythic), mirroring ITEM_RARITY_COLORS in
+// server.py. Roots keep their own Mortal -> Primordial ladder; this one is
+// only for items.
+const ITEM_RARITY_COLORS = { Common: "#9aa0a6", Uncommon: "#7cb342", Rare: "#42a5f5",
+  Epic: "#ab47bc", Legendary: "#ffb300", Mythic: "#ff3d00" };
+// Default item rarity when the server sends none.
+const ITEM_DEFAULT_RARITY = "Common";
+// Single source of truth for what an item/slot *is*. An item's type comes from
+// its slot, so a sword reads "Main Weapon" and never "armor".
+const SLOT_TYPE_LABELS = {
+  main_weapon: "Main Weapon", sec_weapon: "Secondary Weapon",
+  head: "Helmet / Circlet", chest: "Body Armor", core: "Cultivation Artifact",
+  arm: "Arm Armor", back: "Cloak / Cape", boots: "Foot Armor", legs: "Leg Armor",
+  ring: "Accessory", necklace: "Accessory", headpiece: "Artifact",
+};
+// Doll slots reuse the item labels (ring1/ring2 both mean "Accessory").
+function slotTypeLabel(s) {
+  return SLOT_TYPE_LABELS[s === "ring1" || s === "ring2" ? "ring" : s] || "";
+}
 const DOLL_ROWS = [
-  [{ s: "sec_weapon", label: "Off-Hand", type: "Secondary Weapon" }, { s: "head", label: "Headgear", type: "Helmet / Circlet" }, { s: "chest", label: "Cuirass", type: "Body Armor" }],
-  [{ s: "main_weapon", label: "Armament", type: "Primary Weapon" }, { s: "core", label: "Spirit Core", type: "Cultivation Artifact" }, { s: "arm", label: "Bracers", type: "Arm Armor" }],
-  [{ s: "back", label: "Mantle", type: "Cloak / Cape" }, { s: "boots", label: "Warboots", type: "Foot Armor" }, { s: "legs", label: "Legguards", type: "Leg Armor" }],
-  [{ s: "ring1", label: "Spirit Ring I", type: "Accessory" }, { s: "ring2", label: "Spirit Ring II", type: "Accessory" }, { s: "necklace", label: "Jade Pendant", type: "Accessory" }, { s: "headpiece", label: "Immortal Crown", type: "Artifact" }],
+  [{ s: "sec_weapon", label: "Off-Hand" }, { s: "head", label: "Headgear" }, { s: "chest", label: "Cuirass" }],
+  [{ s: "main_weapon", label: "Armament" }, { s: "core", label: "Spirit Core" }, { s: "arm", label: "Bracers" }],
+  [{ s: "back", label: "Mantle" }, { s: "boots", label: "Warboots" }, { s: "legs", label: "Legguards" }],
+  [{ s: "ring1", label: "Spirit Ring I" }, { s: "ring2", label: "Spirit Ring II" }, { s: "necklace", label: "Jade Pendant" }, { s: "headpiece", label: "Immortal Crown" }],
 ];
-// Elixir row: one named slot per pill type that actually exists
-// (three consumables are defined — no labels a pill can never fill).
-const ELIXIR_SLOTS = [
-  { name: "Healing Pill", type: "Recovery Consumable" },
-  { name: "Qi Pill", type: "Cultivation Consumable" },
-  { name: "Spirit Meal", type: "Restorative Consumable" },
+// Bag tabs. Gear is grouped by what it is worn for, not by its equip slot, so
+// everything protective lives under Armor and every hand-held piece under
+// Weapon.
+const BAG_TABS = [
+  ["all", "All"], ["material", "Materials"], ["consumable", "Consumable"],
+  ["armor", "Armor"], ["weapon", "Weapon"], ["artifact", "Artifact"],
+  ["accessory", "Accessory"],
 ];
+// Which bag tab an item belongs to. Gear is bucketed by slot; everything else
+// is its own tab.
+const SLOT_BAG_TAB = {
+  main_weapon: "weapon", sec_weapon: "weapon",
+  head: "armor", chest: "armor", arm: "armor", back: "armor",
+  boots: "armor", legs: "armor",
+  core: "artifact", headpiece: "artifact",
+  ring: "accessory", necklace: "accessory",
+};
+function bagTabOf(it) {
+  if (!it) return "";
+  if (it.kind === "gear") return SLOT_BAG_TAB[it.slot] || "artifact";
+  return it.kind === "material" ? "material" : "consumable";
+}
+// Elixir slots are positional and keyed by what a pill does, not by name:
+// 0 = heals only, 1 = grants qi only, 2 = heals and grants qi. A slot only
+// wears a pill name once such a pill exists in the item database; until then
+// it shows a neutral label, so nothing advertises a pill that cannot be found.
+const ELIXIR_SHAPES = [
+  { key: "heal", fallback: "Elixir I", type: "Recovery Consumable" },
+  { key: "qi", fallback: "Elixir II", type: "Cultivation Consumable" },
+  { key: "both", fallback: "Elixir III", type: "Restorative Consumable" },
+];
+
+// Which elixir slot a consumable belongs to, by what it does. Returns -1 when
+// it fits no named slot.
+function elixirPreferredSlot(it) {
+  const i = ELIXIR_SHAPES.findIndex(s => s.key === pillShape((it && it.use) || {}));
+  return i >= 0 ? i : -1;
+}
+
+function pillShape(u) {
+  if (u.heal_pct && u.qi_pct) return "both";
+  if (u.heal_pct) return "heal";
+  if (u.qi_pct) return "qi";
+  return "";
+}
+
+// The three slot labels, resolved against the live item database.
+function elixirSlots() {
+  const cons = Object.keys(ITEM_BY_ID).map(k => ITEM_BY_ID[k])
+    .filter(it => it.kind === "consumable");
+  return ELIXIR_SHAPES.map(s => {
+    const it = cons.find(x => pillShape(x.use || {}) === s.key);
+    return it ? { name: it.name, type: s.type } : { name: s.fallback, type: s.type };
+  });
+}
+
+// Tooltip type line. Gear is typed by its equip slot; consumables borrow the
+// named elixir slot they occupy; everything else falls back to its kind.
+function itemTypeLabel(it) {
+  if (!it) return "";
+  if (it.kind === "gear") return SLOT_TYPE_LABELS[it.slot] || "Gear";
+  if (it.kind === "consumable") {
+    const e = elixirSlots().find(x => x.name === it.name);
+    return e ? e.type : "Consumable";
+  }
+  return it.kind === "material" ? "Material" : "Item";
+}
+
+// Art for an item or enemy: the server sends `img` when a file matches the
+// entity's id in public/assets, otherwise the emoji glyph stands in.
+function iconHtml(img, glyph, artCls) {
+  return img ? `<img class="art ${artCls}" src="${esc(img)}" alt="" />`
+             : `<span class="glyph">${esc(glyph || "")}</span>`;
+}
 
 // What should bag gear do: equip another, or unequip what's worn?
 // Unequip wins when there is nothing left to equip.
@@ -709,22 +793,51 @@ function bagGearAction(itemId) {
   return { act: "equip", slot: null };
 }
 
-// Hover tooltip. Layout: name + rarity / desc / stats / actions.
+// Which beasts drop an item, the best chance any of them offers, and the
+// quantity. Answers the only question a material tooltip really has: where
+// does this come from?
+function dropsFor(itemName) {
+  const out = [];
+  for (const a of battle.areas || []) {
+    for (const m of a.mobs || []) {
+      let best = null;
+      for (const l of m.loot || []) {
+        if (l.item !== itemName) continue;
+        if (!best || l.chance > best.chance) best = l;
+      }
+      if (best) out.push({ mob: m.name, area: a.name, chance: best.chance,
+                           rarity: best.rarity, min: best.min, max: best.max });
+    }
+  }
+  return out.sort((x, y) => y.chance - x.chance);
+}
 
-// Hover tooltip. Layout: name + rarity / type / info / actions.
-// ctx: { unequip: slot } on equipped doll slots, { unload: idx } on elixir
-// slots, {} in the bag (consumables self-detect a loaded slot and offer
-// Use + Unequip). Tooltips only exist where actions exist.
+// Hover tooltip. Layout: name + rarity / type / desc / stats / source /
+// actions. Every item gets one; only the action buttons are conditional.
 function itemTipHtml(itemId, ctx) {
   const it = ITEM_BY_ID[itemId];
   if (!it) return "";
   ctx = ctx || {};
-  const col = ITEM_RARITY_COLORS[it.rarity] || "#e8e0cf";
-  let h = `<div class="tip-title"><b>${esc(it.glyph)} ${esc(it.name)}</b><span style="color:${col}">${esc(it.rarity || "")}</span></div>` +
-    `<div><small class="muted">${it.kind === "gear" ? "armor" : it.kind === "consumable" ? "consumable" : "material"}</small></div>` +
+  const col = ITEM_RARITY_COLORS[it.rarity] || ITEM_RARITY_COLORS[ITEM_DEFAULT_RARITY];
+  let h = `<div class="tip-title"><b>${iconHtml(it.img, it.glyph, "art-tip")} ${esc(it.name)}</b><span style="color:${col}">${esc(it.rarity || ITEM_DEFAULT_RARITY)}</span></div>` +
+    `<div><small class="muted">${esc(itemTypeLabel(it))}</small></div>` +
     `<div class="muted">${esc(it.desc)}</div>`;
   const st = Object.entries(it.stats || {}).filter(([, v]) => v).map(([k, v]) => `${k}+${v}`).join(" · ");
   if (st) h += `<div><span class="inv-stats">${esc(st)}</span></div>`;
+  // Drop source: essential for materials, useful everywhere else.
+  const src = dropsFor(it.name);
+  if (src.length) {
+    const shown = src.slice(0, 4).map(d => {
+      const c = ITEM_RARITY_COLORS[d.rarity] || "";
+      const qty = d.min === d.max ? `${d.min}x` : `${d.min}-${d.max}x`;
+      return `<div><span style="color:${c}">${esc(d.mob)}</span>` +
+             `<span class="loot-rar">${esc(d.rarity || "")}</span>` +
+             `<span class="loot-qty">${esc(qty)}</span>` +
+             `<span class="loot-pct">${Math.round(d.chance * 100)}%</span></div>`;
+    }).join("");
+    const more = src.length > 4 ? `<div class="tip-more">+${src.length - 4} more</div>` : "";
+    h += `<div class="tip-src"><div class="tip-src-head">Drops from</div>${shown}${more}</div>`;
+  }
   if (it.kind === "gear" && !ctx.unequip) {
     const p = state.player;
     const targets = it.slot === "ring" ? ["ring1", "ring2"] : [it.slot];
@@ -742,6 +855,9 @@ function itemTipHtml(itemId, ctx) {
   }
   const p = state.player;
   const owned = p && p.inventory ? (p.inventory[itemId] || 0) : 0;
+  // Held count: for materials this is the only number that matters, and the
+  // bag grid's "3x" badge is too small to read mid-hover.
+  if (it.kind === "material") h += `<div><small class="muted">Held: ${owned}</small></div>`;
   let acts = "";
   if (ctx.unequip) acts += `<button data-act="unequip" data-slot="${esc(ctx.unequip)}">Unequip</button>`;
   else if (ctx.unload != null) acts += `<button data-act="use">Use</button><button data-act="unload" data-slot="${ctx.unload}">Unequip</button>`;
@@ -823,24 +939,25 @@ function renderInventory() {
   hideTip();
   const root = $("inventory-root");
   if (!root) return;
-  const doll = DOLL_ROWS.map(row => `<div class="doll-row">` + row.map(({ s, label, type }) => {
+  const doll = DOLL_ROWS.map(row => `<div class="doll-row">` + row.map(({ s, label }) => {
     const iid = p.equipment && p.equipment[s];
     const it = iid && ITEM_BY_ID[iid];
-    return `<div class="slot${it ? " filled" : ""}" data-slot="${s}"${it ? ` data-tip="${iid}"` : ` data-slot-name="${esc(label)}" data-slot-type="${esc(type)}"`}>` +
-      (it ? `<span class="glyph">${esc(it.glyph)}</span>` : "") +
+    return `<div class="slot${it ? " filled" : ""}" data-slot="${s}"${it ? ` data-tip="${iid}"` : ` data-slot-name="${esc(label)}" data-slot-type="${esc(slotTypeLabel(s))}"`}>` +
+      (it ? iconHtml(it.img, it.glyph, "art-slot") : "") +
       `<span class="slot-name">${it ? esc(it.name) : esc(label)}</span></div>`;
   }).join("") + `</div>`).join("");
+  const slots = elixirSlots();
   const elix = `<div class="doll-row">` + [0, 1, 2].map(i => {
     const iid = p.elixirs && p.elixirs[i];
     const it = iid && ITEM_BY_ID[iid];
     const n = iid ? (p.inventory[iid] || 0) : 0;
-    const slot = ELIXIR_SLOTS[i];
+    const slot = slots[i];
     return `<div class="slot elixir${it ? " filled" : ""}" data-elixir="${i}"${it ? ` data-tip="${iid}"` : ` data-slot-name="${esc(slot.name)}" data-slot-type="${esc(slot.type)}"`}>` +
-      (it ? `<span class="glyph">${esc(it.glyph)}</span>` : "") +
+      (it ? iconHtml(it.img, it.glyph, "art-slot") : "") +
       `<span class="slot-name">${it ? esc(it.name) : esc(slot.name)}</span>` +
       (it ? `<span class="count">${n}x</span>` : "") + `</div>`;
   }).join("") + `</div>`;
-  const tabs = [["all", "All"], ["gear", "Gear"], ["consumable", "Consumable"], ["material", "Materials"]]
+  const tabs = BAG_TABS
     .map(([v, l]) => `<button class="inv-tab${invTab === v ? " active" : ""}" data-tab="${v}">${l}</button>`).join("");
   // Hidden in bag while equipped: any consumable loaded into an elixir
   // slot, and worn gear with no free slot left (a spare ring still shows
@@ -856,22 +973,22 @@ function renderInventory() {
   });
   const entries = Object.keys(p.inventory || {}).filter(id => {
     const it = ITEM_BY_ID[id];
-    return it && (p.inventory[id] > 0) && !hidden.has(id) && (invTab === "all" || it.kind === invTab);
+    return it && (p.inventory[id] > 0) && !hidden.has(id)
+      && (invTab === "all" || bagTabOf(it) === invTab);
   }).sort();
   const grid = entries.map(id => {
     const it = ITEM_BY_ID[id];
-    const rc = ITEM_RARITY_COLORS[it.rarity] || "";
-    // Tooltips only where actions exist: gear + consumables, never materials.
-    return `<div class="slot inv-slot" data-item="${id}"${it.kind === "material" ? ` title="${esc(it.name)}"` : ` data-tip="${id}"`}${rc ? ` style="--rc:${rc}"` : ""}>` +
-      `<span class="glyph">${esc(it.glyph)}</span><span class="count">${p.inventory[id]}x</span></div>`;
+    const rc = ITEM_RARITY_COLORS[it.rarity] || ITEM_RARITY_COLORS[ITEM_DEFAULT_RARITY];
+    // Every item gets the real tooltip; no native title (it would double up).
+    return `<div class="slot inv-slot" data-item="${id}" data-tip="${id}"${rc ? ` style="--rc:${rc}"` : ""}>` +
+      `${iconHtml(it.img, it.glyph, "art-slot")}<span class="count">${p.inventory[id]}x</span></div>`;
   }).join("");
   // Empty cells so the bag always reads as a real 48-slot RPG grid.
   const emptyCells = entries.length < 48
     ? Array.from({ length: 48 - entries.length }, () => `<div class="slot inv-empty" aria-hidden="true"></div>`).join("")
     : "";
-  const emptyMsg = entries.length ? "" : `<p class="muted empty-msg">Empty. Hunt beasts for loot.</p>`;
   root.innerHTML = `<div class="inv-layout"><div class="inv-doll"><h2>Equipment</h2>${doll}${elix}</div>` +
-    `<div class="inv-bag"><h2>Bag</h2><div class="inv-tabs">${tabs}</div>${emptyMsg}` +
+    `<div class="inv-bag"><h2>Bag</h2><div class="inv-tabs">${tabs}</div>` +
     `<div class="inv-grid">${grid}${emptyCells}</div></div></div>`;
   root.querySelectorAll(".slot[data-slot]").forEach(el => {
     el.onclick = () => unequipSlot(el.dataset.slot);
@@ -896,7 +1013,7 @@ function renderInventory() {
     // buttons only. Clicking a consumable still uses it.
     if (it && it.kind === "consumable") useConsumable(el.dataset.item);
   });
-  root.querySelectorAll("[data-tip].inv-slot").forEach(el => {
+  root.querySelectorAll(".inv-slot").forEach(el => {
     el.onmousemove = e => showTip(el.dataset.tip, e.clientX, e.clientY);
     el.onmouseleave = scheduleHideTip;
   });
@@ -999,16 +1116,6 @@ function useConsumable(itemId) {
   syncPlayer(false);
 }
 
-// Which named slot a pill belongs to: Healing(0) / Qi(1) / Spirit Meal(2).
-// heal+qi (Spirit Meal) is matched first so every pill type has one home.
-function elixirPreferredSlot(it) {
-  const u = (it && it.use) || {};
-  if (u.heal_pct && u.qi_pct) return 2;
-  if (u.heal_pct) return 0;
-  if (u.qi_pct) return 1;
-  return -1;
-}
-
 function loadElixirSlot(itemId) {
   const p = state.player, it = ITEM_BY_ID[itemId];
   if (!it || it.kind !== "consumable" || (p.inventory[itemId] || 0) <= 0) return;
@@ -1061,7 +1168,7 @@ function clearLootLog() {
 
 async function fetchAreas() {
   try {
-    const r = await fetch("/api/areas");
+    const r = await fetch("/api/areas", { cache: "no-store" });
     const j = await r.json();
     if (j.areas && j.areas.length) return j.areas;
   } catch {}
@@ -1075,7 +1182,7 @@ const EQUIP_SLOT_LIST = ["head", "sec_weapon", "chest", "main_weapon", "core",
 
 async function fetchItems() {
   try {
-    const r = await fetch("/api/items");
+    const r = await fetch("/api/items", { cache: "no-store" });
     const j = await r.json();
     if (j.items && j.items.length) {
       ITEM_BY_ID = {};
@@ -1149,10 +1256,19 @@ function showBattleEnemies(notice) {
       `<div class="enemy-card" data-mob="${m.id}">
         <b>${esc(m.name)}</b>
         <div class="realm-tag">${esc(m.realm)}</div>
+        ${m.difficulty ? `<div class="difficulty-tag">${esc(m.difficulty)}</div>` : ""}
         <div class="desc">${esc(m.desc)}</div>
-        <div class="enemy-glyph">${esc(m.glyph)}</div>
-        <div class="enemy-loot">Loot list${m.loot.map(l =>
-          `<div><span>${esc(l.item)}</span><span>${Math.round(l.chance * 100)}%</span></div>`).join("")}</div>
+        <div class="enemy-glyph">${iconHtml(m.img, m.glyph, "art-enemy")}</div>
+        <div class="enemy-loot">Loot list${m.loot.map(l => {
+          const c = ITEM_RARITY_COLORS[l.rarity] || "";
+          const qty = l.min === l.max ? `${l.min}x` : `${l.min}-${l.max}x`;
+          return `<div class="loot-row">
+            <span class="loot-name" style="color:${c}">${esc(l.item)}</span>
+            <span class="loot-rar">${esc(l.rarity || "")}</span>
+            <span class="loot-qty">${esc(qty)}</span>
+            <span class="loot-pct">${Math.round(l.chance * 100)}%</span>
+          </div>`;
+        }).join("")}</div>
       </div>`).join("") + `</div>`;
   $("enemy-back").onclick = showBattleAreas;
   root.querySelectorAll(".enemy-card").forEach(el => el.onclick = () => {
@@ -1191,7 +1307,7 @@ function renderCombat() {
     `<div class="combat-grid">
       <div class="combat-side" id="side-player"><img src="/assets/character/character_0_meditating.png" alt="You" /></div>
       <div class="vs-badge">VS</div>
-      <div class="combat-side" id="side-enemy"><span class="big-glyph">${esc(m.glyph)}</span></div>
+      <div class="combat-side" id="side-enemy">${iconHtml(m.img, m.glyph, "art-big")}</div>
     </div>` +
     `<div class="hp-row">
       <div><div class="hp-label"><span>You · HP</span><span id="php-num"></span></div>
