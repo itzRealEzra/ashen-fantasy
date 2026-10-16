@@ -11,6 +11,11 @@ and push to `main` on https://github.com/itzRealEzra/ashen-fantasy.
 
 ## [Unreleased]
 
+## [0.7.19] - 2026-10-16
+### Added
+- `README.md` setup guide: requirements (Python stdlib, Node for tests),
+  launching `server.py`, opening the game, and running both test suites.
+
 ## [0.7.18] - 2026-10-16
 ### Fixed
 - Breakthrough Qi no longer vanishes: the server deducted the stage cost a
