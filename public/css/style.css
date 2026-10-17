@@ -11,6 +11,11 @@
   --line: #3a3226;
 }
 * { box-sizing: border-box; }
+/* Hide scrollbars everywhere while keeping scroll, wheel, touch, keyboard
+   (Tab / arrow keys / Page Up-Down / Home-End) working. Covers all three
+   engines: WebKit/Blink, Firefox (scrollbar-width), legacy Edge (ms). */
+* { scrollbar-width: none; -ms-overflow-style: none; }
+*::-webkit-scrollbar { display: none; width: 0; height: 0; }
 html, body { height: 100%; }
 body {
   margin: 0; background: var(--bg); color: var(--ink);
@@ -68,7 +73,7 @@ input { background: #0e0e14; border: 1px solid var(--line); color: var(--ink); p
 .roll-anim.rolling { animation: flicker .12s infinite; color: var(--gold2); }
 @keyframes flicker { 0% {opacity:.4; transform:translateY(-1px);} 50% {opacity:1;} 100% {opacity:.6; transform:translateY(1px);} }
 .roll-anim .big-root { font-size: 26px; display: block; margin-bottom: 6px; }
-.roll-list { display: flex; flex-direction: column; gap: 6px; flex: 1; min-height: 0; overflow-y: auto; padding-right: 2px; }
+.roll-list { display: flex; flex-direction: column; gap: 6px; flex: 1; min-height: 0; overflow-y: auto; }
 .roll-row { display: flex; justify-content: space-between; align-items: center; border: 1px solid var(--line); padding: 8px 10px; cursor: pointer; background: var(--panel2); border-left-width: 5px; }
 .roll-row:hover { border-color: var(--gold); }
 .roll-row.selected { outline: 1px solid var(--gold); background: #26200f; }

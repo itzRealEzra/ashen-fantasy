@@ -478,6 +478,16 @@ state.player = basePlayer();
   ok(/it\.kind === "material" \? ` title=/.test(SRC) === false, "no native title tooltip left in the bag");
   ok(/data-item="\$\{id\}" data-tip="\$\{id\}"/.test(SRC), "every bag slot carries data-tip");
 
+  // ============ 14. scrollbars hidden, scrolling kept ============
+  const CSS = fs.readFileSync(path.join(__dirname, "..", "public", "css", "style.css"), "utf8").replace(/\r\n/g, "\n");
+  ok(/\*\s*::-webkit-scrollbar\s*\{[^}]*display:\s*none/.test(CSS), "scrollbar hidden for WebKit/Blink");
+  ok(/scrollbar-width:\s*none/.test(CSS), "scrollbar hidden for Firefox");
+  ok(/-ms-overflow-style:\s*none/.test(CSS), "scrollbar hidden for legacy Edge");
+  // Hiding the chrome must not disable scrolling itself.
+  const scrollers = CSS.split("\n").filter(l => /overflow-y:\s*auto|overflow:\s*auto/.test(l));
+  ok(scrollers.length >= 8, "scroll containers still declare overflow-y: auto (" + scrollers.length + " found)");
+  ok(!/padding-right:\s*2px/.test(CSS), "scrollbar-compensating padding removed");
+
   console.log("\n" + pass + " passed, " + fail + " failed");
   process.exit(fail ? 1 : 0);
 })().catch(e => { console.error(e); process.exit(1); });

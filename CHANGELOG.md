@@ -11,6 +11,16 @@ and push to `main` on https://github.com/itzRealEzra/ashen-fantasy.
 
 ## [Unreleased]
 
+## [0.8.1] - 2026-10-16
+### Changed
+- Scrollbars are hidden across the whole app (all 10 scroll containers: the
+  main content pane, root roll list, root detail and index, event log, loot
+  log, equipment doll, bag panel, bag grid, and the username screen). Covered
+  for all three engines — WebKit/Blink, Firefox, and legacy Edge — while
+  scrolling itself still works via wheel, touch, drag, and keyboard
+  (Tab / arrows / Page Up-Down / Home-End). The 2px scrollbar-compensating
+  padding on the roll list is gone now that no bar is drawn.
+
 ## [0.8.0] - 2026-10-16
 ### Added
 - **Item rarity ladder: Common → Uncommon → Rare → Epic → Legendary → Mythic**,
