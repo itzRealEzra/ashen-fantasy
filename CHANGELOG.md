@@ -11,6 +11,44 @@ and push to `main` on https://github.com/itzRealEzra/ashen-fantasy.
 
 ## [Unreleased]
 
+## [0.8.4] - 2026-10-18
+### Added
+- UI icon art from `public/assets/icons`, all 20 files wired up:
+  - **Sidebar tabs** — Character, Cultivate, Battle, Inventory and Mail each
+    draw a 22px icon beside their label, brightening on hover and when the
+    tab is active.
+  - **Equipment doll** — all 13 equip slots have an art file: helmet, body
+    armor, arm armor, leg armor, foot armor, cloak/cape, main weapon,
+    secondary weapon, spirit core, spirit ring (both fingers), jade pendant,
+    immortal crown, and the elixir slots. The icon shows only while a slot is
+    **empty**; a filled slot keeps showing the equipped item, so the two never
+    compete.
+  - **Qi Pill and Spirit Meal** now draw from `assets/icons/` instead of
+    having no art at all.
+- `GET /api/icons` returns the icon map, resolved per request like item and
+  enemy art, so a new PNG appears on refresh without restarting the server.
+  A tab or slot whose file is missing simply renders no image and keeps its
+  text label — icons can be added one file at a time without breaking layout.
+
+### Changed
+- `icons` joined `enemies` and `items` as a scanned asset directory, and
+  `_ITEM_ICON_FILES` declares the handful of items whose art lives there.
+  An item's picture still resolves from `assets/items/<id>.png` by default.
+- Sidebar buttons became flex rows with a left-aligned icon, and their
+  vertical padding dropped from 22px to 15px. A 20px icon inside 22px of
+  padding made every tab ~63px tall, and the new Mail tab pushed the sidebar
+  past the fold on shorter screens.
+
+### Note
+- These icons are 1254x1254 PNGs totalling **10.2 MB**, matching the scale of
+  the existing enemy and item art, but they render at 22px (tabs) and 34px
+  (slots). Opening the Inventory panel pulls roughly 8 MB of art to fill slots
+  a third of that size. They are committed as supplied; rescaling them to
+  ~256px would cut the payload by an order of magnitude with no visible
+  difference, if you want that as a follow-up.
+
+278 tests passing (133 API + 145 client).
+
 ## [0.8.3] - 2026-10-18
 ### Added
 - Mail. The sidebar gains a Mail tab with an unread badge, covering patch

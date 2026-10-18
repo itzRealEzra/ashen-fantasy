@@ -128,8 +128,15 @@ try:
     st, j = req("/api/items")
     with_art = [i for i in j["items"] if i.get("img")]
     ok(len(with_art) > 0, "items resolve art files")
-    ok(all(i["img"] == "/assets/items/%s.png" % i["id"] for i in with_art),
-       "item art path is derived from the item id")
+    # Art comes from assets/items/<id>.png, or from a declared icons/ override
+    # for the handful of items whose picture lives with the UI icons.
+    def art_ok(i):
+        if i["img"] == "/assets/items/%s.png" % i["id"]:
+            return True
+        over = server._ITEM_ICON_FILES.get(i["id"])
+        return bool(over) and i["img"] == "/assets/icons/%s.png" % over
+    ok(all(art_ok(i) for i in with_art),
+       "item art path comes from the item id or a declared icons/ override")
     ok(all(i["img"].startswith("/assets/") and ".." not in i["img"] for i in with_art),
        "art paths stay inside the assets folder")
     no_art = [i for i in j["items"] if not i.get("img")]
@@ -537,6 +544,41 @@ try:
     sync("mailer", mail=[{"id": "fake", "items": {"wooden_sword": 99}, "claimed": False}])
     ok(len(server.PLAYERS["mailer"]["mail"]) == before, "/api/sync cannot inject or rewrite mail")
     ok(server.PLAYERS["mailer"]["mail"][0]["id"] != "fake", "a forged mail id is not stored")
+
+    # ============ 16. UI icon art ============
+    st, j = req("/api/icons")
+    ok(st == 200 and j.get("ok") is True, "GET /api/icons serves the icon map")
+    icons = j.get("icons") or {}
+    ok(len(icons) > 0, "icons discovered on disk (%d)" % len(icons))
+    ok(all(v.startswith("/assets/icons/") and v.endswith(".png")
+           for v in icons.values()), "every icon maps to an icons/ png path")
+    ok(all("/" not in k for k in icons), "icon keys are bare file names, not paths")
+
+    # every slot the client draws an icon for must actually have a file
+    want_slots = {"head": "helmet_icon", "sec_weapon": "secondary_weapon_icon",
+                  "chest": "body_armor_icon", "main_weapon": "main_weapon_icon",
+                  "core": "crown_artifact_icon", "arm": "arm_armor_icon",
+                  "back": "cloak_cape_icon", "boots": "foot_armor_icon",
+                  "legs": "leg_armor_icon", "ring1": "spirit_ring_icon",
+                  "ring2": "spirit_ring_icon", "necklace": "jade_pendant_icon",
+                  "headpiece": "cultivation_artifact_icon"}
+    ok(set(want_slots) == set(server.EQUIP_SLOTS),
+       "a slot icon is mapped for every equip slot (%d)" % len(server.EQUIP_SLOTS))
+    missing_slots = {s: n for s, n in want_slots.items() if n not in icons}
+    ok(not missing_slots, "every equip-slot icon file exists (%s)" % (missing_slots or "none missing"))
+    want_tabs = ["character_icon", "cultivate_icon", "battle_icon",
+                 "inventory_icon", "mail_icon", "elixir_icon"]
+    ok(all(t in icons for t in want_tabs),
+       "tab and elixir icon files exist (%s)" % [t for t in want_tabs if t not in icons])
+
+    # items declared to draw from icons/ actually resolve there
+    st, j = req("/api/items")
+    by_id = {i["id"]: i for i in j["items"]}
+    for iid, icon in server._ITEM_ICON_FILES.items():
+        ok(iid in by_id and by_id[iid].get("img") == "/assets/icons/%s.png" % icon,
+           "%s draws its art from icons/%s" % (iid, icon))
+    ok("img" not in by_id["wooden_sword"],
+       "gear with no art file still falls back to its glyph")
 finally:
     srv.shutdown()
     srv.server_close()

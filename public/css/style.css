@@ -230,6 +230,19 @@ input { background: #0e0e14; border: 1px solid var(--line); color: var(--ink); p
 .mail-item .count { color: var(--gold2); font-size: 11px; }
 .mail-item-note { font-size: 11px; color: var(--muted); margin: 6px 0 0; }
 .mail-claim { margin-top: 10px; padding: 7px 16px; font-size: 13px; }
+/* ---------- ui icon art ---------- */
+/* Icon sits beside the label, so the button becomes a flex row and the
+   vertical padding comes down: a 20px icon inside 22px of padding made each
+   tab ~63px tall, and the Mail tab pushed the sidebar past the fold. */
+.side-btn { display: flex; align-items: center; justify-content: flex-start;
+  gap: 10px; padding: 15px 18px; text-align: left; }
+.tab-icon { width: 22px; height: 22px; object-fit: contain; flex: none;
+  opacity: .68; filter: grayscale(.35); transition: opacity .18s ease, filter .18s ease; }
+.side-btn:hover .tab-icon { opacity: 1; filter: none; }
+.side-btn.active .tab-icon { opacity: 1; filter: none; }
+.slot .slot-icon { width: 34px; height: 34px; object-fit: contain; opacity: .3;
+  filter: grayscale(.6); transition: opacity .18s ease, filter .18s ease; }
+.slot:hover .slot-icon { opacity: .62; filter: grayscale(.2); }
 /* stats notification — bottom-right corner of the screen, ~3s then fade */
 #stat-notice { position: fixed; right: 16px; bottom: 24px; transform: translateY(10px); z-index: 400;
   display: flex; flex-direction: column; gap: 2px; align-items: flex-end; background: rgba(14, 14, 21, .96);

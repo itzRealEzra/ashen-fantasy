@@ -517,6 +517,39 @@ state.player = basePlayer();
   // The starter pack and its gear are wired to the real item ids.
   ok(/starter/.test(SRC) === false || true, "starter pack is server-side (client does not hardcode it)");
 
+  // ============ 16. ui icon art ============
+  ok(/let ICON = \{\}/.test(SRC), "icon map starts empty and is filled from the server");
+  ok(/async function fetchIcons\(\)/.test(SRC), "fetchIcons exists");
+  ok(/await fetchIcons\(\);/.test(SRC), "icons are loaded when entering the game");
+  ok(/fetch\("\/api\/icons", \{ cache: "no-store" \}\)/.test(SRC), "icons are fetched no-store like item art");
+  ok(/function paintTabIcons\(\)/.test(SRC) && /paintTabIcons\(\);/.test(SRC), "tab icons are painted after load");
+  // Missing art must degrade to the text label, never a broken image.
+  ok(/function iconUrl\(name\) \{\s*return ICON\[name\] \|\| "";/.test(SRC), "missing icon resolves to empty");
+  ok(/return src \? `<img class="\$\{cls\}" src="\$\{esc\(src\)\}" alt="" \/>` : "";/.test(SRC),
+     "no <img> is emitted when the file is absent");
+  ok(/if \(!name \|\| b\.querySelector\(".tab-icon"\)\) return;/.test(SRC),
+     "tab icons are not double-inserted");
+  // Slot art only ever shows on an EMPTY slot; a filled slot keeps the item.
+  ok(/\(it \? iconHtml\(it\.img, it\.glyph, "art-slot"\) : slotIconHtml\(s\)\)/.test(SRC),
+     "doll slots show the slot icon only when empty");
+  ok(/iconImg\(ELIXIR_ICON, "slot-icon"\)/.test(SRC), "empty elixir slots use the elixir icon");
+  // All five tabs and all thirteen slots must be mapped.
+  for (const t of ["character", "cultivate", "battle", "inventory", "mail"]) {
+    ok(new RegExp(`${t}: "${t}_icon"`).test(SRC), `${t} tab has an icon mapping`);
+  }
+  for (const [slot, icon] of Object.entries({
+    head: "helmet_icon", sec_weapon: "secondary_weapon_icon", chest: "body_armor_icon",
+    main_weapon: "main_weapon_icon", core: "crown_artifact_icon", arm: "arm_armor_icon",
+    back: "cloak_cape_icon", boots: "foot_armor_icon", legs: "leg_armor_icon",
+    ring1: "spirit_ring_icon", ring2: "spirit_ring_icon", necklace: "jade_pendant_icon",
+    headpiece: "cultivation_artifact_icon",
+  })) {
+    ok(new RegExp(`${slot}: "${icon}"`).test(SRC), `${slot} slot -> ${icon}`);
+  }
+  ok(/\.tab-icon \{ width: 22px/.test(CSS), "tab icons are sized for the sidebar");
+  ok(/\.slot \.slot-icon \{ width: 34px/.test(CSS), "slot icons are sized for the doll");
+  ok(/\.side-btn \{ display: flex/.test(CSS), "sidebar buttons become a flex row to hold an icon");
+
   console.log("\n" + pass + " passed, " + fail + " failed");
   process.exit(fail ? 1 : 0);
 })().catch(e => { console.error(e); process.exit(1); });

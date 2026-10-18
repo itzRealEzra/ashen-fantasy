@@ -16,7 +16,7 @@ import mimetypes
 # Single source of truth for the build number. Must match CLIENT_VERSION in
 # public/js/app.js and the footer in public/index.html. A player whose saved
 # patch_version differs gets one patch-note mail when they next check mail.
-SERVER_VERSION = "0.8.3"
+SERVER_VERSION = "0.8.4"
 from http.server import ThreadingHTTPServer, BaseHTTPRequestHandler
 from urllib.parse import urlparse, parse_qs
 
@@ -361,7 +361,15 @@ EQUIP_SLOTS = ("head", "sec_weapon", "chest", "main_weapon", "core", "arm",
 # Resolved per request, not at import: dropping a new PNG into the folder must
 # show up on refresh without restarting the server.
 # ----------------------------------------------------------------------------
-_ASSET_DIRS = ("enemies", "items")
+_ASSET_DIRS = ("enemies", "items", "icons")
+
+# Items whose art lives in public/assets/icons rather than assets/items.
+# An item with no entry here is looked up in assets/items by its own id.
+_ITEM_ICON_FILES = {
+    "qi_pill": "qi_pill_icon",
+    "spirit_meal": "spirit_meal_icon",
+}
+
 
 def _asset_cache():
     """id-keyed map of every art file currently on disk, keyed "kind/name"."""
@@ -387,11 +395,20 @@ def _apply_art(art):
             else:
                 m.pop("img", None)
     for it in ITEMS:
-        p = art.get("items/" + it["id"])
+        # assets/items/<id> first, then the icons/ override if this item has one.
+        p = (art.get("items/" + it["id"])
+             or art.get("icons/" + _ITEM_ICON_FILES.get(it["id"], "")))
         if p:
             it["img"] = p
         else:
             it.pop("img", None)
+
+def icons_map():
+    """Bare file name -> url for every icon on disk, for the UI chrome
+    (sidebar tabs, empty doll slots, elixir slots). Missing files simply
+    do not appear, and the client falls back to its text label."""
+    return {k[len("icons/"):]: v for k, v in _asset_cache().items()
+            if k.startswith("icons/")}
 
 # Bonus gear/consumable drops merged into /api/areas (mob_id -> drops).
 # Every gear piece needs a source: map a mob id to its item id.
@@ -782,6 +799,12 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/api/items":
             _apply_art(_asset_cache())
             return self._send_json({"items": ITEMS}, cache="no-store")
+
+        if path == "/api/icons":
+            # UI chrome art (tabs, doll slots). Resolved per request so a new
+            # PNG shows up on refresh, like item and enemy art.
+            return self._send_json({"ok": True, "icons": icons_map()},
+                                   cache="no-store")
 
         if path == "/api/health":
             return self._send_json({"ok": True, "roots": len(ROOTS_WITH_CHANCE),

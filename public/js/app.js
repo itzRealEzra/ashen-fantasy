@@ -1,6 +1,6 @@
 /* Ashen Fantasy — vanilla JS state machine: username -> roots -> main */
 const $ = (id) => document.getElementById(id);
-const CLIENT_VERSION = "0.8.3"; // must match server.py server_version + footer
+const CLIENT_VERSION = "0.8.4"; // must match server.py server_version + footer
 const state = {
   username: localStorage.getItem("af_user") || "",
   rollId: null,
@@ -383,6 +383,7 @@ function refreshCultPanel() {
 async function enterMain(p) {
   REALM_TABLE = await fetchRealms();
   await fetchItems();
+  await fetchIcons();
   normalizePlayer(p);
   const frac = p.cultivation / stageOf(p).cost;
   stageFlags = { half: frac >= 0.5, full: frac >= 1 };
@@ -944,7 +945,7 @@ function renderInventory() {
     const iid = p.equipment && p.equipment[s];
     const it = iid && ITEM_BY_ID[iid];
     return `<div class="slot${it ? " filled" : ""}" data-slot="${s}"${it ? ` data-tip="${iid}"` : ` data-slot-name="${esc(label)}" data-slot-type="${esc(slotTypeLabel(s))}"`}>` +
-      (it ? iconHtml(it.img, it.glyph, "art-slot") : "") +
+      (it ? iconHtml(it.img, it.glyph, "art-slot") : slotIconHtml(s)) +
       `<span class="slot-name">${it ? esc(it.name) : esc(label)}</span></div>`;
   }).join("") + `</div>`).join("");
   const slots = elixirSlots();
@@ -954,7 +955,7 @@ function renderInventory() {
     const n = iid ? (p.inventory[iid] || 0) : 0;
     const slot = slots[i];
     return `<div class="slot elixir${it ? " filled" : ""}" data-elixir="${i}"${it ? ` data-tip="${iid}"` : ` data-slot-name="${esc(slot.name)}" data-slot-type="${esc(slot.type)}"`}>` +
-      (it ? iconHtml(it.img, it.glyph, "art-slot") : "") +
+      (it ? iconHtml(it.img, it.glyph, "art-slot") : iconImg(ELIXIR_ICON, "slot-icon")) +
       `<span class="slot-name">${it ? esc(it.name) : esc(slot.name)}</span>` +
       (it ? `<span class="count">${n}x</span>` : "") + `</div>`;
   }).join("") + `</div>`;
@@ -1195,6 +1196,75 @@ async function fetchItems() {
     }
   } catch {}
   return ITEM_BY_ID;
+}
+
+// ---------- UI icon art ----------
+// Sidebar tabs, empty doll slots and elixir slots draw from
+// public/assets/icons. The server lists what is actually on disk, so a name
+// with no file simply has no entry and the UI keeps its text label -- icons
+// can be added one file at a time without breaking the layout.
+let ICON = {};
+
+const TAB_ICONS = {
+  character: "character_icon",
+  cultivate: "cultivate_icon",
+  battle: "battle_icon",
+  inventory: "inventory_icon",
+  mail: "mail_icon",
+};
+
+// Doll slot -> icon file. ring1/ring2 are the same ring, so both point at it.
+const SLOT_ICONS = {
+  head: "helmet_icon",
+  sec_weapon: "secondary_weapon_icon",
+  chest: "body_armor_icon",
+  main_weapon: "main_weapon_icon",
+  core: "crown_artifact_icon",
+  arm: "arm_armor_icon",
+  back: "cloak_cape_icon",
+  boots: "foot_armor_icon",
+  legs: "leg_armor_icon",
+  ring1: "spirit_ring_icon",
+  ring2: "spirit_ring_icon",
+  necklace: "jade_pendant_icon",
+  headpiece: "cultivation_artifact_icon",
+};
+
+const ELIXIR_ICON = "elixir_icon";
+
+async function fetchIcons() {
+  try {
+    const r = await fetch("/api/icons", { cache: "no-store" });
+    const j = await r.json();
+    if (j.icons) ICON = j.icons;
+  } catch {}
+  paintTabIcons();
+  return ICON;
+}
+
+// Inline SVG-free <img>, or "" when the file is missing.
+function iconUrl(name) {
+  return ICON[name] || "";
+}
+
+function iconImg(name, cls) {
+  const src = iconUrl(name);
+  return src ? `<img class="${cls}" src="${esc(src)}" alt="" />` : "";
+}
+
+// Icons sit beside the tab text and are decorative -- the label stays for
+// screen readers and for any tab whose art is missing.
+function paintTabIcons() {
+  document.querySelectorAll(".side-btn").forEach(b => {
+    const name = TAB_ICONS[b.dataset.tab];
+    if (!name || b.querySelector(".tab-icon")) return;
+    const img = iconImg(name, "tab-icon");
+    if (img) b.insertAdjacentHTML("afterbegin", img);
+  });
+}
+
+function slotIconHtml(slot) {
+  return iconImg(SLOT_ICONS[slot] || "", "slot-icon");
 }
 
 // Sum of equipped gear bonuses. Single source alongside base stats.
