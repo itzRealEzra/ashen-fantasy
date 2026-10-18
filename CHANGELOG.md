@@ -11,6 +11,51 @@ and push to `main` on https://github.com/itzRealEzra/ashen-fantasy.
 
 ## [Unreleased]
 
+## [0.8.2] - 2026-10-18
+### Security
+- Cross-site hijack closed. `/api/*` sent `Access-Control-Allow-Origin: *`,
+  and since `/api/sync` needs no credential beyond a username, any page the
+  player visited could read their save and silently rewrite it. Binding to
+  `127.0.0.1` never protected against this: the browser is what makes the
+  request. The API now serves same-origin only and refuses any `/api/*` request
+  carrying a foreign `Origin`. The `Origin` check is the real defence rather
+  than the removed header alone, because a cross-origin `POST` with
+  `Content-Type: text/plain` is a "simple request" that skips the preflight
+  entirely and would still have been applied. `OPTIONS` now returns 403
+  outright. Verified live: a cross-origin read and a `text/plain` cross-origin
+  write both return 403 and leave the save untouched, while same-origin and
+  non-browser (curl / native) requests still work.
+- Realm skip closed. `/api/sync` accepted any `realm_idx` above the stored
+  value without checking that the qi had been earned, so a fresh cultivator
+  could `POST realm_idx: 10` and land in Qi Refinement Realm X for free. A
+  jump is now accepted only when the server's own `legit` qi figure can pay
+  every stage on the way, mirroring the client's `advanceRealm` (each stage
+  costs its own value, surplus carries forward, the `cap` stage is never left).
+  The check runs on `legit` rather than the claimed value on purpose:
+  `advanceRealm` already spends the cost before syncing, so the client only
+  ever reports the surplus, and gating on that would be circular.
+
+### Fixed
+- `ROLLS` and `LAST_ROLL_BY_IP` no longer grow without bound. `prune_roll_state`
+  drops expired rolls and roll cooldowns older than an hour, and runs on every
+  `/api/roll`. Previously an abandoned roll stayed resident for the life of
+  the process, since an entry was only removed when its owner came back to
+  spend it.
+
+### Notes
+- Inventory is still client-authoritative (capped at 9,999 per item) and
+  equipment is still not validated against ownership. Both are deliberate for a
+  solo game with no accounts; making loot server-authoritative is the natural
+  first step if shared play is ever added, and no part of this change blocks
+  that. Equipment is currently inert anyway: `GEAR` is empty and all 22 items
+  carry `slot: None`, so no item can satisfy the slot check.
+- No regression for honest play. Verified live on one server: 12s of idle
+  accrued 70 qi with `clamped=False` and the breakthrough to Qi Refinement
+  Realm I was accepted, while an instant `realm_idx: 10` on the same save was
+  refused.
+
+170 tests passing (77 API + 93 client), stable over 3 consecutive runs.
+
 ## [0.8.1] - 2026-10-16
 ### Changed
 - Scrollbars are hidden across the whole app (all 10 scroll containers: the

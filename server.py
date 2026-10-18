@@ -479,6 +479,40 @@ def pill_qi_used(stored, inv_in, hi_idx):
     return total
 
 
+ROLL_IP_TTL = 3600.0  # an IP's 1s roll cooldown is meaningless after an hour
+
+
+def prune_roll_state(now):
+    """Drop expired ROLLS and stale LAST_ROLL_BY_IP entries.
+
+    Without this both dicts grow forever: ROLLS only shed an entry when the
+    owner came back to spend it, so any roll abandoned or replayed past its
+    5-minute window stayed resident for the life of the process.
+    """
+    for rid in [k for k, v in ROLLS.items() if v.get("expires", 0) <= now]:
+        ROLLS.pop(rid, None)
+    for ip in [k for k, t in LAST_ROLL_BY_IP.items() if now - t > ROLL_IP_TTL]:
+        LAST_ROLL_BY_IP.pop(ip, None)
+
+
+def max_affordable_realm(cultivation, start_idx, limit):
+    """Highest realm reachable from `start_idx` with `cultivation` qi.
+
+    Mirrors the client's advanceRealm exactly: each breakthrough spends only
+    the current stage's cost and carries the surplus forward. A stage flagged
+    cap is the peak of the ladder and is never left.
+    """
+    idx = int(start_idx)
+    cult = float(cultivation)
+    while idx < limit and not REALMS[idx].get("cap"):
+        cost = REALMS[idx]["cost"]
+        if cult < cost:
+            break
+        cult -= cost
+        idx += 1
+    return idx
+
+
 def save_players():
     try:
         with open(os.path.join(BASE_DIR, "players.json"), "w", encoding="utf-8") as f:
@@ -549,7 +583,7 @@ def build_player(username, picks):
 
 
 class Handler(BaseHTTPRequestHandler):
-    server_version = "AshenFantasy/0.8.1"
+    server_version = "AshenFantasy/0.8.2"
 
     def log_message(self, fmt, *args):
         pass  # quiet
@@ -561,7 +595,9 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header("Content-Length", str(len(body)))
         if cache:
             self.send_header("Cache-Control", cache)
-        self.send_header("Access-Control-Allow-Origin", "*")
+        # No Access-Control-Allow-Origin: the game is served from this same
+        # origin, so no cross-origin grant is ever needed. Echoing the request
+        # Origin back would let any site the player visits read their save.
         self.end_headers()
         self.wfile.write(body)
 
@@ -578,16 +614,43 @@ class Handler(BaseHTTPRequestHandler):
         except Exception:
             return {}
 
+    # Cross-site guard. /api/* is state-changing and unauthenticated (a solo
+    # game has no logins), so without this any page the player visits could
+    # rewrite their save -- and binding to 127.0.0.1 does not stop that, since
+    # the browser is the one making the request.
+    #
+    # Checking Origin matters more than omitting CORS headers: a cross-origin
+    # POST with Content-Type: text/plain is a "simple request" that skips the
+    # preflight entirely, so it would still be applied even though the attacker
+    # could not read the reply. Only the Origin check stops the write.
+    def _cross_origin(self):
+        origin = self.headers.get("Origin")
+        if not origin:
+            return False  # curl / native clients / same-origin GET: not a browser attack
+        host = self.headers.get("Host") or ""
+        return origin not in ("http://" + host, "https://" + host)
+
+    def _guard_api(self, path):
+        """True if the request may proceed. Writes the 403 itself otherwise."""
+        if not path.startswith("/api/"):
+            return True
+        if self._cross_origin():
+            self._send_json({"error": "cross-origin request refused"}, status=403)
+            return False
+        return True
+
     def do_OPTIONS(self):
-        self.send_response(204)
-        self.send_header("Access-Control-Allow-Origin", "*")
-        self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
-        self.send_header("Access-Control-Allow-Headers", "Content-Type")
+        # Preflight only ever fires for cross-origin requests, all of which
+        # _guard_api rejects, so there is nothing left to negotiate here.
+        self.send_response(403)
+        self.send_header("Content-Length", "0")
         self.end_headers()
 
     def do_GET(self):
         parsed = urlparse(self.path)
         path = parsed.path
+        if not self._guard_api(path):
+            return
 
         if path == "/api/roots":
             roots_sorted = sorted(ROOTS_WITH_CHANCE,
@@ -668,9 +731,12 @@ class Handler(BaseHTTPRequestHandler):
         parsed = urlparse(self.path)
         path = parsed.path
         ip = self.client_address[0] if self.client_address else "unknown"
+        if not self._guard_api(path):
+            return
 
         if path == "/api/roll":
             now = time.time()
+            prune_roll_state(now)
             last = LAST_ROLL_BY_IP.get(ip, 0)
             if now - last < 1.0:
                 return self._send_json({"error": "Rolling too fast. Breathe. (1s cooldown)"}, status=429)
@@ -738,6 +804,17 @@ class Handler(BaseHTTPRequestHandler):
                 claimed = float(stored.get("cultivation", 0))
             clamped = claimed > legit
             cultivation = min(claimed, legit)
+            # Breakthrough guard: realm_idx arrives from the client, so accept
+            # only a realm the server itself says the player has paid for.
+            if idx > stored_idx:
+                # Gate on `legit`, never on the claimed cultivation.
+                # advanceRealm already spends the cost before syncing, so the
+                # client reports only the carried surplus; gating on that
+                # figure would be circular, since an inflated claim would
+                # satisfy the very check meant to reject it.
+                reachable = max_affordable_realm(legit, stored_idx, len(REALMS) - 1)
+                if idx > reachable:
+                    idx = reachable
             stage = REALMS[idx]
             if idx > stored_idx:
                 # breakthrough: the client already spent the stage cost and

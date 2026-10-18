@@ -276,6 +276,127 @@ try:
     server.PLAYERS["hp_hidden"]["hp"] = 555
     st, j = sync("hp_hidden")
     ok(st == 200 and "hp" not in j["player"], "sync response never echoes hp")
+
+    # ============ 12. realm_idx must be earned ============
+    fresh("skipper")
+    st, j = sync("skipper", realm_idx=10, cultivation=10 ** 9)
+    ok(j["player"]["realm_idx"] == 0,
+       "realm skip refused: fresh cultivator claiming realm 10 stays Mortal")
+    ok(j["clamped"] is True, "inflated qi alongside a realm jump is flagged clamped")
+
+    fresh("honest_1")
+    server.PLAYERS["honest_1"]["cultivation"] = server.REALMS[0]["cost"] + 5
+    st, j = sync("honest_1", realm_idx=1, cultivation=5)
+    ok(j["player"]["realm_idx"] == 1, "an affordable breakthrough still succeeds")
+
+    fresh("honest_2")
+    st, j = sync("honest_2", realm_idx=2, cultivation=0)
+    ok(j["player"]["realm_idx"] == 0,
+       "multi-realm jump refused when qi cannot pay every stage on the way")
+
+    fresh("honest_3")
+    server.PLAYERS["honest_3"]["cultivation"] = (
+        server.REALMS[0]["cost"] + server.REALMS[1]["cost"] + 7)
+    st, j = sync("honest_3", realm_idx=2, cultivation=7)
+    ok(j["player"]["realm_idx"] == 2,
+       "multi-realm jump allowed when qi covers each stage (surplus carries)")
+
+    # a realm_idx at or below the stored one is untouched by the guard
+    fresh("hold_high")
+    server.PLAYERS["hold_high"]["realm_idx"] = 4
+    server.PLAYERS["hold_high"]["cultivation"] = 0
+    st, j = sync("hold_high", realm_idx=2, cultivation=0)
+    ok(j["player"]["realm_idx"] == 4, "a lower claim never demotes a stored realm")
+
+    # the peak realm is never left
+    fresh("peak")
+    server.PLAYERS["peak"]["cultivation"] = 10 ** 9
+    st, j = sync("peak", realm_idx=len(server.REALMS) - 1, cultivation=10 ** 9)
+    ok(j["player"]["realm_idx"] == len(server.REALMS) - 1,
+       "the peak realm is reachable with enough qi")
+    st, j = sync("peak", realm_idx=len(server.REALMS), cultivation=10 ** 9)
+    ok(j["player"]["realm_idx"] == len(server.REALMS) - 1,
+       "realm_idx past the ladder still clamps to the last stage")
+
+    # ============ 13. cross-origin requests are refused ============
+    # The game ships from this same origin, so no browser should ever be
+    # sending a foreign Origin to /api/*. These are the requests a page on
+    # another site could otherwise make against a local server.
+    def req_origin(path, payload=None, origin=None, ctype="application/json", method=None):
+        url = "http://127.0.0.1:%d%s" % (PORT, path)
+        data = json.dumps(payload).encode("utf-8") if payload is not None else None
+        headers = {"Content-Type": ctype}
+        if origin:
+            headers["Origin"] = origin
+        r = urllib.request.Request(url, data=data, headers=headers, method=method)
+        try:
+            with urllib.request.urlopen(r, timeout=5) as resp:
+                return resp.status, json.loads(resp.read().decode("utf-8")), dict(resp.headers)
+        except urllib.error.HTTPError as e:
+            return e.code, json.loads(e.read().decode("utf-8")), dict(e.headers)
+
+    EVIL = "http://evil.example.com"
+    fresh("victim")
+    st, j, hd = req_origin("/api/player?username=victim", origin=EVIL)
+    ok(st == 403, "cross-origin read of a save is refused")
+    st, j, hd = req_origin("/api/sync", {"username": "victim", "realm_idx": 10}, origin=EVIL)
+    ok(st == 403, "cross-origin write to /api/sync is refused")
+    st, j, hd = req_origin("/api/sync", {"username": "victim", "realm_idx": 10},
+                           origin=EVIL, ctype="text/plain")
+    ok(st == 403, "cross-origin simple request (text/plain, no preflight) is refused")
+    st, j, hd = req_origin("/api/roll", {}, origin=EVIL)
+    ok(st == 403, "cross-origin roll is refused")
+    ok(server.PLAYERS["victim"]["realm_idx"] == 0,
+       "the refused write left the save untouched")
+
+    # same-origin requests still work, and non-browser clients still work
+    st, j, hd = req_origin("/api/player?username=victim", origin="http://127.0.0.1:%d" % PORT)
+    ok(st == 200, "same-origin read is allowed")
+    st, j, hd = req_origin("/api/player?username=victim", origin=None)
+    ok(st == 200, "no-Origin read (curl / native client) is allowed")
+
+    st, j, hd = req_origin("/api/health")
+    ok("Access-Control-Allow-Origin" not in hd, "no ACAO header on API responses")
+    st, j, hd = req_origin("/api/items")
+    ok("Access-Control-Allow-Origin" not in hd, "no ACAO header on item responses")
+
+    # preflight gets nothing to negotiate
+    r = urllib.request.Request("http://127.0.0.1:%d/api/sync" % PORT, method="OPTIONS")
+    try:
+        with urllib.request.urlopen(r, timeout=5) as resp:
+            pstatus = resp.status
+            pheaders = dict(resp.headers)
+    except urllib.error.HTTPError as e:
+        pstatus = e.code
+        pheaders = dict(e.headers)
+    ok(pstatus == 403, "OPTIONS preflight is refused outright")
+    ok("Access-Control-Allow-Origin" not in pheaders, "preflight grants no origin")
+
+    # ============ 14. roll state is pruned, not accumulated ============
+    server.ROLLS.clear()
+    server.LAST_ROLL_BY_IP.clear()
+    now = time.time()
+    server.ROLLS["stale"] = {"offer": [], "expires": now - 1, "ip": "1.2.3.4"}
+    server.ROLLS["live"] = {"offer": [], "expires": now + 300, "ip": "1.2.3.4"}
+    server.LAST_ROLL_BY_IP["1.2.3.4"] = now - server.ROLL_IP_TTL - 10
+    server.LAST_ROLL_BY_IP["5.6.7.8"] = now
+    server.prune_roll_state(now)
+    ok("stale" not in server.ROLLS, "expired roll is dropped")
+    ok("live" in server.ROLLS, "unexpired roll is kept")
+    ok("1.2.3.4" not in server.LAST_ROLL_BY_IP, "stale roll cooldown is dropped")
+    ok("5.6.7.8" in server.LAST_ROLL_BY_IP, "recent roll cooldown is kept")
+
+    server.ROLLS.clear()
+    server.LAST_ROLL_BY_IP.clear()
+    for i in range(50):
+        server.ROLLS["r%d" % i] = {"offer": [], "expires": now - 1, "ip": "x"}
+    server.prune_roll_state(now)
+    ok(len(server.ROLLS) == 0, "a full batch of expired rolls is fully reclaimed")
+
+    ok(server.max_affordable_realm(0, 0, len(server.REALMS) - 1) == 0,
+       "no qi means no breakthrough")
+    ok(server.max_affordable_realm(server.REALMS[0]["cost"], 0, len(server.REALMS) - 1) == 1,
+       "exactly the stage cost buys exactly one breakthrough")
 finally:
     srv.shutdown()
     srv.server_close()
