@@ -12,6 +12,11 @@ import time
 import uuid
 import os
 import mimetypes
+
+# Single source of truth for the build number. Must match CLIENT_VERSION in
+# public/js/app.js and the footer in public/index.html. A player whose saved
+# patch_version differs gets one patch-note mail when they next check mail.
+SERVER_VERSION = "0.8.3"
 from http.server import ThreadingHTTPServer, BaseHTTPRequestHandler
 from urllib.parse import urlparse, parse_qs
 
@@ -272,6 +277,30 @@ def _con(id, name, glyph, desc, heal_pct=0, qi_pct=0):
 #
 # Remember to add a drop source for it in _GEAR_DROPS below.
 GEAR = [
+    # ---- Newbie starter pack (see STARTER_PACK): a full Common set, one
+    # piece per armour slot. Deliberately not on any drop table -- the only
+    # way to get these is the starter pack mail.
+    _gear("wooden_sword", "Wooden Sword", "main_weapon", "🗡️",
+          "A practice blade, notched from a sapling. Every master kept one.",
+          {"atk": 5}),
+    _gear("leather_helmet", "Leather Helmet", "head", "🧢",
+          "Boiled hide, laced tight. Keeps the scalp from splitting.",
+          {"def": 2, "hp": 10}),
+    _gear("leather_chest", "Leather Chest", "chest", "🦺",
+          "Hardened leather over a cotton wrap. Heavy, honest protection.",
+          {"def": 3, "hp": 20}),
+    _gear("leather_leggings", "Leather Leggings", "legs", "👖",
+          "Reinforced at the knees, where the beast's claws land first.",
+          {"def": 2, "hp": 15}),
+    _gear("leather_bracers", "Leather Bracers", "arm", "🧤",
+          "Thin hide guards. A little defence, a little grip.",
+          {"atk": 1, "def": 2}),
+    _gear("leather_boots", "Leather Boots", "boots", "👢",
+          "Soles thick enough to outlast a wolf's sprint.",
+          {"def": 2, "hp": 10}),
+    _gear("leather_cape", "Leather Cape", "back", "🧣",
+          "Travel-worn, ash-stained. It hides nothing, but it catches the wind.",
+          {"def": 1, "crit": 1}),
 ]
 
 # Gear rarity follows root-rarity colors (valley Mortal -> peaks Immortal).
@@ -367,6 +396,8 @@ def _apply_art(art):
 # Bonus gear/consumable drops merged into /api/areas (mob_id -> drops).
 # Every gear piece needs a source: map a mob id to its item id.
 #   "wild_rat": [("worn_iron_sword", 0.08, 1, 1)],
+#
+# The starter pack gear has no drop source on purpose -- it is mail-only.
 _GEAR_DROPS = {
 }
 
@@ -575,6 +606,10 @@ def build_player(username, picks):
         "equipment": {s: None for s in EQUIP_SLOTS},
         "inventory": {},
         "elixirs": [None, None, None],
+        "mail": [],
+        # Born into this version, so a new cultivator is not handed a patch
+        # note for the build they started on.
+        "patch_version": SERVER_VERSION,
         "hp": None,  # client-tracked; full on first load
         "last_seen": time.time(),
         "roots": roots,
@@ -582,8 +617,89 @@ def build_player(username, picks):
     }
 
 
+# ----------------------------------------------------------------------------
+# Mail (patch notes / starter pack / maintenance rewards)
+#
+# Mail is server-held, so the client cannot grant itself an unclaimed reward:
+# claiming is the only path that moves items into the inventory.
+#
+# Read rule: opening a mail marks it read, EXCEPT when it still carries
+# unclaimed items -- an attachment stays unread until it is actually claimed,
+# so the unread badge keeps pointing at it after you have looked inside.
+# ----------------------------------------------------------------------------
+MAIL_MAX = 50
+STARTER_PACK = {
+    "wooden_sword": 1, "leather_helmet": 1, "leather_chest": 1,
+    "leather_leggings": 1, "leather_bracers": 1, "leather_boots": 1,
+    "leather_cape": 1,
+}
+
+
+def _new_mail(kind, subject, body, items=None):
+    """A fresh mail. Item mail starts unread and unclaimed; plain mail is
+    read-on-arrival, since there is nothing left to open."""
+    items = {k: int(v) for k, v in (items or {}).items() if k in ITEM_BY_ID}
+    return {"id": uuid.uuid4().hex[:12], "kind": kind, "subject": subject,
+            "body": body, "sent": time.time(), "items": items,
+            "read": not items, "claimed": not items}
+
+
+def _trim_mail(box):
+    """Cap the mailbox, discarding only mail that is already read and claimed
+    so a player can never lose an outstanding reward to the cap."""
+    if len(box) <= MAIL_MAX:
+        return
+    for i, m in enumerate(box):
+        if m.get("read") and m.get("claimed"):
+            box.pop(i)
+            if len(box) <= MAIL_MAX:
+                return
+
+
+def _deliver(stored, mail):
+    box = stored.setdefault("mail", [])
+    box.append(mail)
+    box.sort(key=lambda m: m.get("sent", 0))
+    _trim_mail(box)
+    return mail
+
+
+def _mail_unread(stored):
+    return sum(1 for m in stored.get("mail", []) if not m.get("read"))
+
+
+def _find_mail(stored, mid):
+    for m in stored.get("mail", []):
+        if m.get("id") == mid:
+            return m
+    return None
+
+
+def _send_starter_pack(stored):
+    return _deliver(stored, _new_mail(
+        "starter", "Newcomer Provisions",
+        "The Ashen Sect sends a welcome kit to every new cultivator. "
+        "One piece of gear for every armour slot -- plain Common stock, but "
+        "it will keep you alive long enough to earn something better.\n\n"
+        "Claim it, then equip the pieces from your Bag.",
+        STARTER_PACK))
+
+
+def _ensure_patch_mail(stored, version):
+    """Mail a patch note once per version. Players created on this version
+    already have patch_version set, so they never get a retroactive note."""
+    if stored.get("patch_version") == version:
+        return None
+    stored["patch_version"] = version
+    return _deliver(stored, _new_mail(
+        "patch", "Patch Notes",
+        "The game was rebuilt for patch %s. Origin Village stands where the "
+        "hunting grounds used to be, and loot is drawn from a fresh item "
+        "ladder. A newcomer's kit is waiting in your mail." % version))
+
+
 class Handler(BaseHTTPRequestHandler):
-    server_version = "AshenFantasy/0.8.2"
+    server_version = "AshenFantasy/" + SERVER_VERSION
 
     def log_message(self, fmt, *args):
         pass  # quiet
@@ -670,6 +786,21 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/api/health":
             return self._send_json({"ok": True, "roots": len(ROOTS_WITH_CHANCE),
                                     "version": self.server_version})
+
+        if path == "/api/mail":
+            qs = parse_qs(parsed.query)
+            username = (qs.get("username") or [""])[0].strip()
+            stored = PLAYERS.get(username)
+            if not stored:
+                return self._send_json({"error": "Unknown cultivator"}, status=404)
+            if _ensure_patch_mail(stored, SERVER_VERSION):
+                save_players()
+            return self._send_json({
+                "ok": True,
+                "mail": stored.get("mail", []),
+                "unread": _mail_unread(stored),
+                "version": SERVER_VERSION,
+            }, cache="no-store")
 
         if path == "/favicon.ico":
             self.send_response(204)
@@ -771,10 +902,97 @@ class Handler(BaseHTTPRequestHandler):
             if any(pid not in ROOT_BY_ID for pid in picks):
                 return self._send_json({"error": "Unknown root id"}, status=400)
             player = build_player(username, picks)
+            _send_starter_pack(player)
             PLAYERS[username] = player
             ROLLS.pop(roll_id, None)  # single use
             save_players()
             return self._send_json({"ok": True, "player": player})
+
+        if path == "/api/mail/read":
+            data = self._read_json()
+            username = str(data.get("username") or "").strip()
+            stored = PLAYERS.get(username)
+            if not stored:
+                return self._send_json({"error": "Unknown cultivator"}, status=404)
+            m = _find_mail(stored, str(data.get("id") or ""))
+            if not m:
+                return self._send_json({"error": "No such mail"}, status=404)
+            # An attachment stays unread until claimed, so the badge keeps
+            # flagging it after the player has opened and read the body.
+            held = bool(m.get("items")) and not m.get("claimed")
+            if not held:
+                m["read"] = True
+                save_players()
+            return self._send_json({
+                "ok": True, "mail": m, "unread": _mail_unread(stored),
+                "held": held,
+            }, cache="no-store")
+
+        if path == "/api/mail/claim":
+            data = self._read_json()
+            username = str(data.get("username") or "").strip()
+            stored = PLAYERS.get(username)
+            if not stored:
+                return self._send_json({"error": "Unknown cultivator"}, status=404)
+            m = _find_mail(stored, str(data.get("id") or ""))
+            if not m:
+                return self._send_json({"error": "No such mail"}, status=404)
+            if m.get("claimed"):
+                return self._send_json({"error": "Already claimed"}, status=400)
+            granted = {}
+            inv = stored.setdefault("inventory", {})
+            for iid, n in (m.get("items") or {}).items():
+                if iid not in ITEM_BY_ID:
+                    continue
+                try:
+                    n = max(1, int(n))
+                except (TypeError, ValueError):
+                    continue
+                granted[iid] = n
+                inv[iid] = max(0, min(int(inv.get(iid, 0)) + n, 9999))
+            # Claiming is what settles the mail: read and claimed together, so
+            # it leaves the unread count even though opening it did not.
+            m["claimed"] = True
+            m["read"] = True
+            save_players()
+            return self._send_json({
+                "ok": True, "mail": m, "unread": _mail_unread(stored),
+                "granted": granted, "inventory": inv,
+            }, cache="no-store")
+
+        if path == "/api/mail/maintenance":
+            # Admin trigger: mail a maintenance reward to every cultivator.
+            # POST {"subject": ..., "body": ..., "items": {...}} -- optionally
+            # "username" to target one player instead of all.
+            data = self._read_json()
+            subject = str(data.get("subject") or "").strip()[:80]
+            body = str(data.get("body") or "").strip()[:4000]
+            if not subject:
+                return self._send_json({"error": "subject required"}, status=400)
+            items_in = data.get("items") or {}
+            items = {}
+            if isinstance(items_in, dict):
+                for k, v in items_in.items():
+                    if k in ITEM_BY_ID:
+                        try:
+                            n = max(1, min(int(v), 999))
+                        except (TypeError, ValueError):
+                            continue
+                        items[k] = n
+            target = str(data.get("username") or "").strip()
+            if target:
+                targets = [target] if target in PLAYERS else []
+            else:
+                targets = list(PLAYERS.keys())
+            if not targets:
+                return self._send_json({"error": "Unknown cultivator"}, status=404)
+            sent = 0
+            for name in targets:
+                _deliver(PLAYERS[name], _new_mail(
+                    "maintenance", subject, body or subject, items))
+                sent += 1
+            save_players()
+            return self._send_json({"ok": True, "sent": sent, "items": items})
 
         if path == "/api/sync":
             data = self._read_json()

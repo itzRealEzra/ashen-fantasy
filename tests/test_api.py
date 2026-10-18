@@ -94,10 +94,13 @@ try:
         html_src = f.read()
     with open(os.path.join(ROOT, "CHANGELOG.md"), encoding="utf-8") as f:
         md_src = f.read()
-    v_srv = re.search(r'server_version = "AshenFantasy/([\d.]+)"', srv_src).group(1)
+    # The build number lives in the SERVER_VERSION constant (server_version on
+    # the Handler is built from it), so read the constant rather than a literal.
+    v_srv = re.search(r'^SERVER_VERSION = "([\d.]+)"', srv_src, re.M).group(1)
     v_js = re.search(r'CLIENT_VERSION = "([\d.]+)"', js_src).group(1)
     v_html = re.search(r'Ashen Fantasy v([\d.]+)', html_src).group(1)
     ok(v_srv == v_js == v_html, "server/client/footer versions match (%s)" % v_srv)
+    ok(server.SERVER_VERSION == v_srv, "SERVER_VERSION constant matches the source")
     ok(("## [%s]" % v_srv) in md_src, "CHANGELOG has an entry for %s" % v_srv)
 
     st, j = req("/api/health")
@@ -397,6 +400,143 @@ try:
        "no qi means no breakthrough")
     ok(server.max_affordable_realm(server.REALMS[0]["cost"], 0, len(server.REALMS) - 1) == 1,
        "exactly the stage cost buys exactly one breakthrough")
+
+    # ============ 15. mail: read / claim rules ============
+    def mail_get(username):
+        return req("/api/mail?username=" + username)
+
+    def mail_post(path, username, mid=None, **extra):
+        body = {"username": username}
+        if mid:
+            body["id"] = mid
+        body.update(extra)
+        return req(path, body)
+
+    fresh("mailer")
+    st, j = mail_get("mailer")
+    ok(st == 200 and j["ok"] is True, "GET /api/mail serves a mailbox")
+    starter = [m for m in j["mail"] if m["kind"] == "starter"]
+    ok(len(starter) == 1, "a new cultivator is mailed the starter pack")
+    sm = starter[0]
+
+    # ---- the pack contents
+    expected_pack = {"wooden_sword", "leather_helmet", "leather_chest",
+                     "leather_leggings", "leather_bracers", "leather_boots",
+                     "leather_cape"}
+    ok(set(sm["items"]) == expected_pack, "starter pack holds the 7 named pieces")
+    ok(all(i in server.ITEM_BY_ID for i in sm["items"]), "every pack item exists in the item db")
+    ok(all(server.ITEM_BY_ID[i]["slot"] in server.EQUIP_SLOTS for i in sm["items"]),
+       "every pack item equips into a real slot")
+    ok(all(server.ITEM_BY_ID[i]["rarity"] == "Common" for i in sm["items"]),
+       "starter gear is all Common")
+    covered = {server.ITEM_BY_ID[i]["slot"] for i in sm["items"]}
+    ok(len(covered) == 7, "the pack covers 7 distinct armour slots")
+
+    # ---- the read rule: items stay unread until claimed
+    ok(sm["read"] is False and sm["claimed"] is False, "item mail arrives unread and unclaimed")
+    st, j = mail_post("/api/mail/read", "mailer", sm["id"])
+    ok(st == 200 and j["held"] is True, "viewing item mail reports it is held")
+    ok(j["mail"]["read"] is False, "viewing item mail does NOT mark it read")
+    ok(j["unread"] == 1, "unread badge still counts held mail")
+    ok(not server.PLAYERS["mailer"]["inventory"], "viewing grants nothing")
+
+    # ---- claiming is what settles it
+    st, j = mail_post("/api/mail/claim", "mailer", sm["id"])
+    ok(st == 200 and j["ok"] is True, "claim succeeds")
+    ok(set(j["granted"]) == expected_pack, "claim grants all 7 pieces")
+    ok(j["mail"]["read"] is True and j["mail"]["claimed"] is True,
+       "claiming marks the mail read and claimed")
+    ok(j["unread"] == 0, "claiming clears the unread count")
+    inv = j["inventory"]
+    ok(all(inv.get(i) == 1 for i in expected_pack), "claimed gear lands in the bag")
+
+    # ---- claim exactly once
+    st, j = mail_post("/api/mail/claim", "mailer", sm["id"])
+    ok(st == 400, "a second claim is refused")
+    inv2 = server.PLAYERS["mailer"]["inventory"]
+    ok(all(inv2.get(i) == 1 for i in expected_pack), "the refused claim granted nothing extra")
+
+    # ---- plain mail has nothing to open, so it is read on arrival
+    fresh("plainmail")
+    st, j = mail_get("plainmail")
+    pm = [m for m in j["mail"] if m["kind"] == "starter"]
+    st, j = mail_post("/api/mail/claim", "plainmail", pm[0]["id"])
+    st, j = req("/api/mail/maintenance",
+                {"subject": "Downtime apology", "body": "Twenty minutes of downtime."})
+    ok(st == 200 and j["sent"] >= 1, "maintenance endpoint mails every cultivator")
+    st, j = mail_get("plainmail")
+    mt = [m for m in j["mail"] if m["kind"] == "maintenance"]
+    ok(len(mt) == 1, "the maintenance mail arrived")
+    ok(mt[0]["subject"] == "Downtime apology", "maintenance mail keeps its subject")
+    ok(mt[0]["items"] == {}, "a reward with no items is a plain mail")
+    ok(mt[0]["read"] is True, "plain mail is read on arrival (nothing to open)")
+    st, j = mail_get("plainmail")
+    ok(j["unread"] == 0, "a read plain mail does not badge")
+
+    # a maintenance reward that DOES carry items behaves like any attachment
+    st, j = req("/api/mail/maintenance",
+                {"subject": "Bug bounty", "items": {"spirit_meal": 3}})
+    st, j = mail_get("plainmail")
+    bounty = [m for m in j["mail"] if m["kind"] == "maintenance" and m["subject"] == "Bug bounty"]
+    ok(bounty and bounty[0]["read"] is False, "a reward with items arrives unread")
+    ok(bounty and bounty[0]["items"].get("spirit_meal") == 3, "reward items are recorded")
+    st, j = mail_post("/api/mail/read", "plainmail", bounty[0]["id"])
+    ok(j["mail"]["read"] is False, "reward with items stays unread until claimed")
+    st, j = mail_post("/api/mail/claim", "plainmail", bounty[0]["id"])
+    ok(j["unread"] == 0 and j["inventory"].get("spirit_meal") == 3, "reward claim pays out")
+
+    # ---- unknown mail / cultivator
+    st, j = mail_post("/api/mail/read", "mailer", "nope")
+    ok(st == 404, "unknown mail id is a 404")
+    st, j = mail_post("/api/mail/claim", "mailer", "nope")
+    ok(st == 404, "claiming an unknown mail is a 404")
+    st, j = req("/api/mail?username=ghost_here")
+    ok(st == 404, "mail for an unknown cultivator is a 404")
+
+    # ---- mail cannot smuggle in items that do not exist
+    st, j = req("/api/mail/maintenance",
+                {"subject": "Bad items", "items": {"not_a_real_item": 5, "spirit_meal": 1}})
+    ok("not_a_real_item" not in (j.get("items") or {}), "unknown items are dropped from mail")
+    st, j = req("/api/mail/maintenance", {"body": "no subject"})
+    ok(st == 400, "maintenance mail requires a subject")
+
+    # ---- a cultivator born on this build gets no retroactive patch note
+    st, j = mail_get("mailer")
+    kinds = {m["kind"] for m in j["mail"]}
+    ok("patch" not in kinds, "a new cultivator gets no patch note for the build they started on")
+
+    # an older save gets exactly one, and only once
+    server.PLAYERS["mailer"]["patch_version"] = "0.0.1"
+    st, j = mail_get("mailer")
+    ok(len([m for m in j["mail"] if m["kind"] == "patch"]) == 1, "an outdated save is mailed one patch note")
+    st, j = mail_get("mailer")
+    ok(len([m for m in j["mail"] if m["kind"] == "patch"]) == 1, "the patch note is not repeated")
+    ok(server.PLAYERS["mailer"]["patch_version"] == server.SERVER_VERSION,
+       "patch_version advances to the current build")
+
+    # ---- the mailbox is capped, and never eats an unclaimed reward
+    server.PLAYERS["mailer"]["mail"] = []
+    for n in range(server.MAIL_MAX + 20):
+        server._deliver(server.PLAYERS["mailer"], server._new_mail("maintenance", "old %d" % n, "x"))
+    held = server._new_mail("starter", "valuable", "x", server.STARTER_PACK)
+    server._deliver(server.PLAYERS["mailer"], held)
+    box = server.PLAYERS["mailer"]["mail"]
+    ok(len(box) == server.MAIL_MAX, "the mailbox is capped at MAIL_MAX")
+    ok(held in box, "an unclaimed reward survives the cap")
+    kept = [m["subject"] for m in box]
+    ok("old 0" not in kept, "the oldest read mail is trimmed first")
+    ok("old 69" in kept, "the newest mail is kept")
+    ok(len([m for m in box if not m["claimed"]]) == 1,
+       "trimming never drops unclaimed mail")
+
+    # ---- mail is server-held: it is not client-settable through /api/sync
+    server.PLAYERS["mailer"]["mail"] = []
+    server._deliver(server.PLAYERS["mailer"], server._new_mail("starter", "server mail", "x",
+                                                               {"spirit_meal": 1}))
+    before = len(server.PLAYERS["mailer"]["mail"])
+    sync("mailer", mail=[{"id": "fake", "items": {"wooden_sword": 99}, "claimed": False}])
+    ok(len(server.PLAYERS["mailer"]["mail"]) == before, "/api/sync cannot inject or rewrite mail")
+    ok(server.PLAYERS["mailer"]["mail"][0]["id"] != "fake", "a forged mail id is not stored")
 finally:
     srv.shutdown()
     srv.server_close()

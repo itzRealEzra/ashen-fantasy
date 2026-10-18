@@ -1,6 +1,6 @@
 /* Ashen Fantasy — vanilla JS state machine: username -> roots -> main */
 const $ = (id) => document.getElementById(id);
-const CLIENT_VERSION = "0.8.2"; // must match server.py server_version + footer
+const CLIENT_VERSION = "0.8.3"; // must match server.py server_version + footer
 const state = {
   username: localStorage.getItem("af_user") || "",
   rollId: null,
@@ -663,6 +663,7 @@ document.querySelectorAll(".side-btn").forEach(b => b.onclick = () => {
     showBattleAreas(); // refresh realm locks after breakthroughs
   }
   if (b.dataset.tab === "inventory") renderInventory();
+  if (b.dataset.tab === "mail") loadMail();
   document.querySelectorAll(".side-btn").forEach(x => x.classList.remove("active"));
   document.querySelectorAll(".tab").forEach(x => x.classList.remove("active"));
   b.classList.add("active");
@@ -1476,6 +1477,155 @@ function ensureTipWired() {
     if (tipHideTimer) { clearTimeout(tipHideTimer); tipHideTimer = null; }
   });
   tip.addEventListener("mouseleave", hideTip);
+}
+
+// ---------- mail ----------
+// Patch notes, the newcomer starter pack, and maintenance rewards.
+// The server owns the mailbox: opening mail asks it to mark it read, and only
+// claiming ever moves items into the bag. A mail that still carries an
+// attachment deliberately stays unread when opened, so the badge keeps
+// pointing at it until the player actually claims it.
+let mailBox = [], mailOpen = null, mailBusy = false;
+
+function mailUnread() {
+  return mailBox.filter(m => !m.read).length;
+}
+
+function paintMailBadge() {
+  const b = $("mail-badge");
+  if (!b) return;
+  const n = mailUnread();
+  b.textContent = n;
+  b.hidden = n === 0;
+}
+
+function mailDate(sec) {
+  const d = new Date((sec || 0) * 1000);
+  return d.toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" })
+    + " " + d.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" });
+}
+
+function mailItemsHtml(items) {
+  const ids = Object.keys(items || {});
+  if (!ids.length) return "";
+  const total = ids.reduce((a, id) => a + (Number(items[id]) || 0), 0);
+  return `<div class="mail-items">${ids.map(id => {
+    const it = ITEM_BY_ID[id];
+    const rc = ITEM_RARITY_COLORS[(it && it.rarity) || ITEM_DEFAULT_RARITY];
+    return `<div class="mail-item"${it ? ` data-tip="${esc(id)}"` : ""}${rc ? ` style="--rc:${rc}"` : ""}>` +
+      iconHtml(it && it.img, (it && it.glyph) || "✦", "art-slot") +
+      `<span class="mail-item-name">${esc(it ? it.name : id)}</span>` +
+      `<span class="count">x${Number(items[id]) || 0}</span></div>`;
+  }).join("")}</div><p class="mail-item-note">${total} item${total === 1 ? "" : "s"} to claim</p>`;
+}
+
+function renderMail() {
+  const root = $("mail-root");
+  if (!root) return;
+  hideTip();
+  paintMailBadge();
+  if (!mailBox.length) {
+    root.innerHTML = `<div class="mail-empty"><h2>Mail</h2><p class="muted">The mailbox is empty. Patch notes and rewards arrive here.</p></div>`;
+    return;
+  }
+  const rows = [...mailBox].reverse().map(m => {
+    const held = Object.keys(m.items || {}).length > 0 && !m.claimed;
+    const cls = m.read ? (m.claimed ? "mail-row done" : "mail-row") : "mail-row unread";
+    const tag = m.claimed ? '<span class="mail-tag claimed">Claimed</span>'
+      : held ? '<span class="mail-tag held">Unclaimed</span>' : "";
+    return `<div class="${cls}${mailOpen === m.id ? " open" : ""}" data-mail="${esc(m.id)}">` +
+      `<div class="mail-row-head"><span class="mail-dot" aria-hidden="true"></span>` +
+      `<span class="mail-subject">${esc(m.subject)}</span>${tag}</div>` +
+      `<div class="mail-meta">${esc(m.kind)} · ${esc(mailDate(m.sent))}</div>` +
+      `<div class="mail-body">${esc(m.body).replace(/\n/g, "<br/>")}</div>` +
+      mailItemsHtml(m.items) +
+      (held ? `<button class="btn gold mail-claim" data-claim="${esc(m.id)}">Claim ${Object.keys(m.items).length} item${Object.keys(m.items).length === 1 ? "" : "s"}</button>`
+        : (m.claimed && Object.keys(m.items || {}).length ? '<p class="mail-item-note">Received.</p>' : "")) +
+      `</div>`;
+  }).join("");
+  root.innerHTML = `<div class="mail-panel"><h2>Mail</h2>` +
+    `<p class="muted mail-count">${mailBox.length} message${mailBox.length === 1 ? "" : "s"} · ${mailUnread()} unread</p>` +
+    `<div class="mail-list">${rows}</div></div>`;
+
+  root.querySelectorAll("[data-claim]").forEach(b => {
+    b.onclick = e => { e.stopPropagation(); claimMail(b.dataset.claim); };
+  });
+  root.querySelectorAll("[data-mail]").forEach(el => {
+    el.onmousemove = e => {
+      const it = el.querySelector("[data-tip]");
+      if (it) showTip(it.dataset.tip, e.clientX, e.clientY);
+    };
+    el.onmouseleave = hideTip;
+    el.onclick = () => openMail(el.dataset.mail);
+  });
+}
+
+async function loadMail() {
+  const p = state.player;
+  if (!p) return;
+  renderMail();
+  try {
+    const r = await fetch(`/api/mail?username=${encodeURIComponent(p.username)}`, { cache: "no-store" });
+    const j = await r.json();
+    if (j.ok && j.mail) {
+      mailBox = j.mail;
+      mailOpen = null;
+      renderMail();
+    }
+  } catch {
+    /* offline: keep whatever was last shown */
+  }
+}
+
+async function openMail(id) {
+  const p = state.player;
+  if (!p) return;
+  mailOpen = id;
+  renderMail();
+  try {
+    const r = await fetch("/api/mail/read", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ username: p.username, id }),
+    });
+    const j = await r.json();
+    if (j.ok && j.mail) {
+      const i = mailBox.findIndex(m => m.id === id);
+      if (i >= 0) mailBox[i] = j.mail;
+      // held=true means it still carries items: stays unread until claimed.
+      if (!j.held) cEvent(`Mail read — ${j.mail.subject}`);
+      renderMail();
+    }
+  } catch {
+    /* offline */
+  }
+}
+
+async function claimMail(id) {
+  const p = state.player;
+  if (!p || mailBusy) return;
+  mailBusy = true;
+  try {
+    const r = await fetch("/api/mail/claim", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ username: p.username, id }),
+    });
+    const j = await r.json();
+    if (j.ok) {
+      const ids = Object.keys(j.granted || {});
+      const i = mailBox.findIndex(m => m.id === id);
+      if (i >= 0) mailBox[i] = j.mail;
+      // Adopt the server's inventory so the bag reflects the grant at once.
+      if (j.inventory) p.inventory = j.inventory;
+      saveLocal(p);
+      renderMail();
+      renderInventory();
+      const names = ids.map(x => (ITEM_BY_ID[x] ? ITEM_BY_ID[x].name : x)).join(", ");
+      cEvent(`Claimed ${names} — in your Bag.`);
+    }
+  } catch {
+    cEvent("Could not reach the server to claim that mail.");
+  }
+  mailBusy = false;
 }
 
 // Warn plainly (not just console 404s) when the server is unreachable or

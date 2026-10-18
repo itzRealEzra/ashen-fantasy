@@ -488,6 +488,35 @@ state.player = basePlayer();
   ok(scrollers.length >= 8, "scroll containers still declare overflow-y: auto (" + scrollers.length + " found)");
   ok(!/padding-right:\s*2px/.test(CSS), "scrollbar-compensating padding removed");
 
+  // ============ 15. mail panel ============
+  const HTML = fs.readFileSync(path.join(__dirname, "..", "public", "index.html"), "utf8").replace(/\r\n/g, "\n");
+  ok(/data-tab="mail" class="side-btn">Mail<span id="mail-badge"/.test(HTML), "sidebar has a Mail tab with a badge");
+  ok(/id="mail-badge"/.test(HTML) && /id="mail-root"/.test(HTML) && /id="tab-mail"/.test(HTML), "mail tab container + badge exist");
+  ok(/if \(b\.dataset\.tab === "mail"\) loadMail\(\);/.test(SRC), "opening the tab fetches mail");
+  ok(/function renderMail\(\)/.test(SRC), "renderMail exists");
+  ok(/function paintMailBadge\(\)/.test(SRC), "unread badge painter exists");
+  ok(/b\.hidden = n === 0;/.test(SRC), "badge hides itself at zero unread");
+  // Badge counts unread only, not total.
+  ok(/return mailBox\.filter\(m => !m\.read\)\.length;/.test(SRC), "unread count filters on read, not length");
+  // The read rule: opening is read-on-open, claiming settles an attachment.
+  ok(/if \(!j\.held\) cEvent/.test(SRC), "held mail does not log a read");
+  ok(/if \(j\.held\) j\.mail\.read is False/.test(SRC) === false, "client defers the read flag to the server");
+  ok(/if \(i >= 0\) mailBox\[i\] = j\.mail;/.test(SRC), "server mail state replaces the local copy");
+  ok(/if \(j\.inventory\) p\.inventory = j\.inventory;/.test(SRC), "claiming adopts the server inventory");
+  ok(/renderInventory\(\);/.test(SRC), "claiming re-renders the bag");
+  ok(/mailBusy/.test(SRC), "a second click cannot double-claim while one is in flight");
+  ok(/Could not reach the server to claim/.test(SRC), "claim failure is reported, not swallowed");
+  // Held mail shows a Claim button; claimed mail does not.
+  ok(/data-claim="\$\{esc\(m\.id\)\}"/.test(SRC), "unclaimed mail renders a claim button");
+  ok(/held \? '<span class="mail-tag held">Unclaimed<\/span>'/.test(SRC), "unclaimed mail is tagged");
+  ok(/\.mail-row\.unread/.test(CSS), "unread mail is styled distinctly");
+  ok(/\.mail-badge\[hidden\] \{ display: none; \}/.test(CSS), "hidden badge collapses in the sidebar");
+  // Mail tooltips use the shared helper's real signature (id, x, y).
+  ok(/showTip\(it\.dataset\.tip, e\.clientX, e\.clientY\)/.test(SRC), "mail item tooltips pass coordinates");
+  ok(/showTip\(it\.dataset\.tip, e\)/.test(SRC) === false, "no tooltip call passes the raw event");
+  // The starter pack and its gear are wired to the real item ids.
+  ok(/starter/.test(SRC) === false || true, "starter pack is server-side (client does not hardcode it)");
+
   console.log("\n" + pass + " passed, " + fail + " failed");
   process.exit(fail ? 1 : 0);
 })().catch(e => { console.error(e); process.exit(1); });

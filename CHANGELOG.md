@@ -11,6 +11,62 @@ and push to `main` on https://github.com/itzRealEzra/ashen-fantasy.
 
 ## [Unreleased]
 
+## [0.8.3] - 2026-10-18
+### Added
+- Mail. The sidebar gains a Mail tab with an unread badge, covering patch
+  notes, the newcomer starter pack, and maintenance rewards. Mail is held
+  server-side, so a reward can only be reached by claiming it.
+  - `GET /api/mail` — the mailbox, plus the unread count.
+  - `POST /api/mail/read` — opening a mail marks it read.
+  - `POST /api/mail/claim` — grants a mail's items into the bag, exactly once.
+  - `POST /api/mail/maintenance` — admin trigger that mails every cultivator
+    (or one, with `username`). Send a subject, body, and optional items:
+    ```
+    POST /api/mail/maintenance
+    {"subject": "Downtime apology", "body": "We were down 20 minutes.",
+     "items": {"spirit_meal": 3}}
+    ```
+- Read rules, as specified. Opening a mail marks it read — except when it
+  still carries unclaimed items, which stays unread until claimed, so the badge
+  keeps pointing at it after the body has been read. Claiming is what settles
+  an attachment: read and claimed together. A mail with nothing to claim has
+  no reason to stay unread and arrives read.
+- Newcomer starter pack, mailed once to every new cultivator and claimable
+  from Mail: Wooden Sword, Leather Helmet, Leather Chest, Leather Leggings,
+  Leather Bracers, Leather Boots and Leather Cape — one Common piece per
+  armour slot. Claimed gear lands in the Bag and is equipped from the doll.
+- Patch notes are mailed automatically, once per build: a save whose
+  `patch_version` is behind the running server gets one note on its next mail
+  check. Cultivators created on the current build never get a retroactive
+  note for the build they started on.
+- `tools/restore_player.py` — rebuilds `players.json` from a browser
+  `localStorage.af_player` value. `python tools/restore_player.py --list` shows
+  the current save file.
+
+### Changed
+- The build number now lives in a single `SERVER_VERSION` constant in
+  `server.py`, built into `server_version` from there, so the mail code can
+  compare a player's `patch_version` against the running build without
+  needing a request. The version-consistency test reads the constant instead
+  of scraping a literal out of the handler.
+- Seven Common gear pieces are back in the item database (29 items, was 22).
+  They deliberately have no drop source: the starter pack mail is the only
+  way to obtain them. This also re-arms the equipment slot check that has
+  been inert while the database was empty.
+
+### Fixed
+- Version handshake: `SERVER_VERSION` was bumped ahead of the client and
+  footer, so the game refused to start with a "Server/client version mismatch"
+  alert. All three now move together and are checked by a test.
+
+Notes on scope: mail is unauthenticated like the rest of the API, which is
+consistent with a solo game, but it inherits the same cross-site exposure the
+0.8.2 origin guard closes — the guard already applies to the new endpoints.
+Items claimed from mail go through the same 9,999-per-item inventory cap as
+loot.
+
+237 tests passing (123 API + 114 client).
+
 ## [0.8.2] - 2026-10-18
 ### Security
 - Cross-site hijack closed. `/api/*` sent `Access-Control-Allow-Origin: *`,
