@@ -676,6 +676,66 @@ state.player = basePlayer();
      ".line-art uses the same shared knobs as the other slot icons");
   ok(/\.side-btn \{ display: flex/.test(CSS), "sidebar buttons become a flex row to hold an icon");
 
+  // ============ 17. admin state reaches every screen, live ============
+  // Regression: /announce needed a browser refresh. The banner only painted at
+  // page load and the poll was gated on state.player and started inside the
+  // gameplay tick, so an announcement set before you entered the game -- or
+  // while the tab sat in the background -- showed up only on F5.
+  ok(/function startServerStatePoll\(\)/.test(SRC), "startServerStatePoll exists");
+  ok(/^startServerStatePoll\(\);/m.test(SRC), "the poll starts at boot, not only in-game");
+  ok(/serverStateTimer = setInterval\(pollServerState, 5000\)/.test(SRC),
+     "admin state is polled every 5s");
+  ok(/async function pollServerState\(\) \{\s*\n\s*if \(document\.hidden\) return;/.test(SRC),
+     "the poll skips hidden tabs instead of fighting throttling");
+  ok(!/async function pollServerState\(\) \{[\s\S]{0,120}if \(state\.player\)/.test(SRC),
+     "the poll is not gated on having a save");
+  ok(!/function stopTick\(\)[\s\S]{0,200}serverStateTimer/.test(SRC),
+     "stopTick no longer tears down the admin poll");
+  ok(/pollServerState\(\);\s*\n\s*\}\s*\n\s*if \(!state\.player\) return;/.test(SRC),
+     "becoming visible re-polls before the gameplay tick resumes");
+  ok(/pollServerState\(\); \/\/ a fresh panel should never show stale admin state/.test(SRC),
+     "switching tabs re-polls");
+
+  // render-level: the banner must actually repaint from a health payload
+  const bEvents = [];
+  const bannerEl = { textContent: "", className: "server-banner", hidden: true };
+  const sb2 = {
+    console,
+    $: id => (id === "server-banner" ? bannerEl : null),
+    cEvent: m => bEvents.push(m),
+    state: { player: null },
+    document: { hidden: false },
+    fetch: async () => ({ json: async () => ({}) }),
+  };
+  vm.createContext(sb2);
+  for (const fn of ["applyServerState", "paintServerBanner"]) {
+    const src = grabFnSrc(fn);
+    if (src) vm.runInContext(src, sb2);
+  }
+  vm.runInContext('let serverState = { maintenance: { on: false, message: "" }, announcement: "", restartSeq: 0 };', sb2);
+
+  sb2.applyServerState({ announcement: "", restart_seq: 0, maintenance: { on: false, message: "" } });
+  ok(bannerEl.hidden === true, "no banner when the server has nothing to say");
+  sb2.applyServerState({ announcement: "Double qi this weekend", restart_seq: 0, maintenance: { on: false, message: "" } });
+  ok(bannerEl.hidden === false && bannerEl.textContent === "Double qi this weekend",
+     "/announce paints a visible banner");
+  ok(/notice/.test(bannerEl.className), "announcement banner is styled as a notice");
+  sb2.applyServerState({ announcement: "Double qi this weekend", restart_seq: 0, maintenance: { on: true, message: "Patching the sect" } });
+  ok(bannerEl.hidden === false && /Patching the sect/.test(bannerEl.textContent),
+     "/maintenance replaces the banner with its message");
+  ok(/maint/.test(bannerEl.className), "maintenance banner has its own styling");
+  ok(bEvents.some(m => /maintenance/i.test(m)), "maintenance logs an event when it switches on");
+  // restart_seq only announces when it CHANGES from a value already seen, so
+  // loading a page against a server that has restarted 3 times is silent.
+  sb2.applyServerState({ announcement: "", restart_seq: 3, maintenance: { on: false, message: "" } });
+  ok(!bEvents.some(m => /restarted/i.test(m)),
+     "first sighting of a restart count is silent (not a 'just restarted' event)");
+  sb2.applyServerState({ announcement: "", restart_seq: 4, maintenance: { on: false, message: "" } });
+  ok(bEvents.some(m => /restarted/i.test(m)), "a restart seen by the client logs an event");
+  sb2.applyServerState({ announcement: "", restart_seq: 4, maintenance: { on: false, message: "" } });
+  ok(bannerEl.hidden === true, "clearing the announcement hides the banner again");
+  ok(/\.server-banner\[hidden\] \{ display: none; \}/.test(CSS), "a hidden banner collapses");
+
   console.log("\n" + pass + " passed, " + fail + " failed");
   process.exit(fail ? 1 : 0);
 })().catch(e => { console.error(e); process.exit(1); });

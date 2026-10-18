@@ -11,6 +11,32 @@ and push to `main` on https://github.com/itzRealEzra/ashen-fantasy.
 
 ## [Unreleased]
 
+## [0.8.9] - 2026-10-18
+### Fixed
+- `/announce` and `/maintenance` now take effect immediately, without
+  reloading the browser. They only showed up after F5, because admin state was
+  painted exactly twice: once at page load, and never again until you entered
+  the game. Three separate things were wrong:
+  - The poll was gated on `state.player` and its timer was created inside
+    `startTick()`, so it did not exist at all until the gameplay tick began.
+    An announcement raised on the username or root screen did nothing.
+  - `stopTick()` cleared the admin poll along with the gameplay timers. It is
+    now fully decoupled: `startServerStatePoll()` owns its own timer and is
+    called once at boot.
+  - Hidden tabs have their `setInterval` throttled by the browser, so a tab
+    left in the background went stale. The poll now skips while hidden and
+    re-runs the moment the tab becomes visible, and again on every tab switch.
+- Interval lowered from 10s to 5s, so an admin command lands in about a blink.
+
+Verified by driving the real `applyServerState` / `paintServerBanner` against
+a DOM stub: the poll now runs with no save, stays quiet while hidden, and
+resumes when visible, and the banner repaints for announce, maintenance,
+restart and clear. Those checks are in the client suite rather than left in a
+throwaway probe, along with assertions that the poll is no longer tied to the
+gameplay tick.
+
+362 tests passing (139 API + 186 client + 37 admin).
+
 ## [0.8.8] - 2026-10-18
 ### Added
 - Admin console. `python admin.py` opens a terminal of live commands against

@@ -1,6 +1,6 @@
 /* Ashen Fantasy — vanilla JS state machine: username -> roots -> main */
 const $ = (id) => document.getElementById(id);
-const CLIENT_VERSION = "0.8.8"; // must match server.py server_version + footer
+const CLIENT_VERSION = "0.8.9"; // must match server.py server_version + footer
 const state = {
   username: localStorage.getItem("af_user") || "",
   rollId: null,
@@ -505,17 +505,24 @@ function startTick() {
     saveLocal(p);
   }, 1000);
   syncTimer = setInterval(() => syncPlayer(false), 30000);
-  // Admin state (maintenance, announcement) is polled on its own, faster than
-  // the sync, so a /maintenance on lands while the player is mid-session.
-  serverStateTimer = setInterval(pollServerState, 10000);
+}
+
+// Admin state (maintenance, announcement, restart count) has its own poll,
+// started at boot rather than on entering the game. Coupling it to the
+// gameplay tick meant /announce did nothing until you were in the game and
+// still went stale whenever the tab was backgrounded, because browsers
+// throttle setInterval in hidden tabs. Polling here, and again whenever the
+// tab comes back to the front, makes admin commands land live everywhere.
+function startServerStatePoll() {
+  if (serverStateTimer) clearInterval(serverStateTimer);
+  serverStateTimer = setInterval(pollServerState, 5000);
   pollServerState();
 }
 
 function stopTick() {
   if (tickTimer) clearInterval(tickTimer);
   if (syncTimer) clearInterval(syncTimer);
-  if (serverStateTimer) clearInterval(serverStateTimer);
-  tickTimer = syncTimer = serverStateTimer = null;
+  tickTimer = syncTimer = null;
 }
 
 let syncing = false;
@@ -564,6 +571,11 @@ async function syncPlayer(initial) {
 }
 
 document.addEventListener("visibilitychange", () => {
+  if (!document.hidden) {
+    // Hidden tabs are throttled, so the admin poll goes quiet in the
+    // background. Catch up the moment the player comes back.
+    pollServerState();
+  }
   if (!state.player) return;
   if (document.hidden) {
     saveLocal(state.player);
@@ -678,6 +690,7 @@ document.querySelectorAll(".side-btn").forEach(b => b.onclick = () => {
   }
   if (b.dataset.tab === "inventory") renderInventory();
   if (b.dataset.tab === "mail") loadMail();
+  pollServerState(); // a fresh panel should never show stale admin state
   document.querySelectorAll(".side-btn").forEach(x => x.classList.remove("active"));
   document.querySelectorAll(".tab").forEach(x => x.classList.remove("active"));
   b.classList.add("active");
@@ -1555,6 +1568,7 @@ function onPlayerDeath() {
 // boot
 if (state.username) $("username-input").value = state.username;
 checkServerFresh();
+startServerStatePoll();
 
 // Tooltip actions (delegated: tip content re-renders on every hover).
 // Wired lazily so script order can never silently break the buttons again.
@@ -1796,12 +1810,14 @@ function paintServerBanner() {
 }
 
 // Poll for admin state so maintenance and announcements land on their own.
+// Deliberately not gated on having a save: the username and root screens need
+// this too, and that is exactly where a /maintenance notice has to appear
+// before anyone can even start playing.
 async function pollServerState() {
-  if (state.player) {
-    try {
-      const r = await fetch("/api/health", { cache: "no-store" });
-      applyServerState(await r.json());
-    } catch {}
-  }
+  if (document.hidden) return; // hidden tabs get throttled; we catch up on show
+  try {
+    const r = await fetch("/api/health", { cache: "no-store" });
+    applyServerState(await r.json());
+  } catch {}
 }
 
