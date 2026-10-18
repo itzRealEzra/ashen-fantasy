@@ -11,6 +11,30 @@ and push to `main` on https://github.com/itzRealEzra/ashen-fantasy.
 
 ## [Unreleased]
 
+## [0.8.6] - 2026-10-18
+### Added
+- Art for the whole newcomer starter pack: Wooden Sword, Leather Helmet,
+  Leather Chest, Leather Leggings, Leather Bracers, Leather Boots and Leather
+  Cape. These resolve with no code change -- item art is found by id from
+  `assets/items/<id>.png`, which is the existing contract, so the seven pieces
+  now show real pictures in the bag, the doll, mail attachments and tooltips
+  instead of their emoji glyphs.
+- `public/assets/rarity/`: Common, Uncommon, Rare, Epic, Legendary and Mythic
+  icons. **Not yet wired up** -- nothing serves this folder or reads it, so
+  these are committed as assets only and have no effect on the UI yet.
+
+### Changed
+- Refreshed `main_weapon_icon.png`.
+
+### Note
+- Asset weight keeps climbing: items 39 MB, enemies 10 MB, icons 10 MB,
+  rarity 5 MB -- roughly 64 MB of PNGs in the repository. Every one of these
+  files is 1254x1254 while rendering between 22px and 72px. Nothing here is
+  broken, but a single rescale pass would cut the payload by an order of
+  magnitude with no visible change.
+
+293 tests passing (134 API + 159 client).
+
 ## [0.8.5] - 2026-10-18
 ### Fixed
 - Empty elixir slots no longer draw the generic bottle for pills that have
