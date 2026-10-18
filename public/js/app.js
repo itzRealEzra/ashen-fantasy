@@ -1,6 +1,6 @@
 /* Ashen Fantasy — vanilla JS state machine: username -> roots -> main */
 const $ = (id) => document.getElementById(id);
-const CLIENT_VERSION = "0.8.4"; // must match server.py server_version + footer
+const CLIENT_VERSION = "0.8.5"; // must match server.py server_version + footer
 const state = {
   username: localStorage.getItem("af_user") || "",
   rollId: null,
@@ -759,7 +759,11 @@ function elixirSlots() {
     .filter(it => it.kind === "consumable");
   return ELIXIR_SHAPES.map(s => {
     const it = cons.find(x => pillShape(x.use || {}) === s.key);
-    return it ? { name: it.name, type: s.type } : { name: s.fallback, type: s.type };
+    // id travels with the label so an EMPTY slot named after a real pill can
+    // show that pill's art instead of the generic elixir bottle.
+    return it
+      ? { id: it.id, name: it.name, type: s.type }
+      : { id: null, name: s.fallback, type: s.type };
   });
 }
 
@@ -954,8 +958,13 @@ function renderInventory() {
     const it = iid && ITEM_BY_ID[iid];
     const n = iid ? (p.inventory[iid] || 0) : 0;
     const slot = slots[i];
+    // Empty slot: show the named pill's own art. Only a slot with no pill
+    // behind it (the neutral "Elixir I/II/III" fallback) uses the bottle.
+    const named = slot.id && ITEM_BY_ID[slot.id];
     return `<div class="slot elixir${it ? " filled" : ""}" data-elixir="${i}"${it ? ` data-tip="${iid}"` : ` data-slot-name="${esc(slot.name)}" data-slot-type="${esc(slot.type)}"`}>` +
-      (it ? iconHtml(it.img, it.glyph, "art-slot") : iconImg(ELIXIR_ICON, "slot-icon")) +
+      (it ? iconHtml(it.img, it.glyph, "art-slot")
+          : named ? iconHtml(named.img, named.glyph, "art-slot")
+          : iconImg(ELIXIR_ICON, "slot-icon")) +
       `<span class="slot-name">${it ? esc(it.name) : esc(slot.name)}</span>` +
       (it ? `<span class="count">${n}x</span>` : "") + `</div>`;
   }).join("") + `</div>`;
@@ -1219,7 +1228,7 @@ const SLOT_ICONS = {
   sec_weapon: "secondary_weapon_icon",
   chest: "body_armor_icon",
   main_weapon: "main_weapon_icon",
-  core: "crown_artifact_icon",
+  core: "cultivation_artifact_icon",
   arm: "arm_armor_icon",
   back: "cloak_cape_icon",
   boots: "foot_armor_icon",
@@ -1227,7 +1236,7 @@ const SLOT_ICONS = {
   ring1: "spirit_ring_icon",
   ring2: "spirit_ring_icon",
   necklace: "jade_pendant_icon",
-  headpiece: "cultivation_artifact_icon",
+  headpiece: "crown_artifact_icon",
 };
 
 const ELIXIR_ICON = "elixir_icon";

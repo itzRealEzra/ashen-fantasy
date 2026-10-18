@@ -557,11 +557,11 @@ try:
     # every slot the client draws an icon for must actually have a file
     want_slots = {"head": "helmet_icon", "sec_weapon": "secondary_weapon_icon",
                   "chest": "body_armor_icon", "main_weapon": "main_weapon_icon",
-                  "core": "crown_artifact_icon", "arm": "arm_armor_icon",
+                  "core": "cultivation_artifact_icon", "arm": "arm_armor_icon",
                   "back": "cloak_cape_icon", "boots": "foot_armor_icon",
                   "legs": "leg_armor_icon", "ring1": "spirit_ring_icon",
                   "ring2": "spirit_ring_icon", "necklace": "jade_pendant_icon",
-                  "headpiece": "cultivation_artifact_icon"}
+                  "headpiece": "crown_artifact_icon"}
     ok(set(want_slots) == set(server.EQUIP_SLOTS),
        "a slot icon is mapped for every equip slot (%d)" % len(server.EQUIP_SLOTS))
     missing_slots = {s: n for s, n in want_slots.items() if n not in icons}

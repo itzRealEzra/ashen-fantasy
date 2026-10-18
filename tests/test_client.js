@@ -539,13 +539,112 @@ state.player = basePlayer();
   }
   for (const [slot, icon] of Object.entries({
     head: "helmet_icon", sec_weapon: "secondary_weapon_icon", chest: "body_armor_icon",
-    main_weapon: "main_weapon_icon", core: "crown_artifact_icon", arm: "arm_armor_icon",
+    main_weapon: "main_weapon_icon", core: "cultivation_artifact_icon", arm: "arm_armor_icon",
     back: "cloak_cape_icon", boots: "foot_armor_icon", legs: "leg_armor_icon",
     ring1: "spirit_ring_icon", ring2: "spirit_ring_icon", necklace: "jade_pendant_icon",
-    headpiece: "cultivation_artifact_icon",
+    headpiece: "crown_artifact_icon",
   })) {
     ok(new RegExp(`${slot}: "${icon}"`).test(SRC), `${slot} slot -> ${icon}`);
   }
+  // The two artifact slots were mapped the wrong way round once: a crown on
+  // the Spirit Core and a medallion on the Immortal Crown.
+  ok(/core: "crown_artifact_icon"/.test(SRC) === false, "Spirit Core no longer wears the crown art");
+  ok(/headpiece: "cultivation_artifact_icon"/.test(SRC) === false,
+     "Immortal Crown no longer wears the spirit-core art");
+
+  // An empty elixir slot named after a real pill must show THAT pill's art,
+  // not the generic bottle. Only a slot with no pill behind it uses the bottle.
+  ok(/const named = slot\.id && ITEM_BY_ID\[slot\.id\];/.test(SRC),
+     "empty elixir slot resolves the pill behind its label");
+  ok(/: named \? iconHtml\(named\.img, named\.glyph, "art-slot"\)\s*\n\s*: iconImg\(ELIXIR_ICON, "slot-icon"\)\)/.test(SRC),
+     "empty elixir slot prefers the named pill's art, bottle only as fallback");
+  ok(/return it\s*\n\s*\? \{ id: it\.id, name: it\.name, type: s\.type \}\s*\n\s*: \{ id: null, name: s\.fallback, type: s\.type \};/.test(SRC),
+     "elixirSlots carries the pill id alongside its label");
+  ok(/iconImg\(ELIXIR_ICON/.test(SRC), "the neutral elixir bottle is still used somewhere");
+    ok(/iconImg\(ELIXER_ICON, "slot-icon"\)\)\s*\+\s*`\s*\n\s*`<span class="slot-name">\$\{it \? esc\(it\.name\) : esc\(slot\.name\)\}/.test(SRC) === false,
+     "the bottle is not applied unconditionally to a named slot");
+
+  // ---- render-level check ----------------------------------------------------
+  // The assertions above are source-level, and they passed while BOTH of these
+  // bugs were live: a swapped slot map and an empty elixir slot drawing the
+  // bottle instead of its own pill. So render the real markup and read the srcs.
+  const vm = require("vm");
+  function grabFnSrc(name) {
+    const start = SRC.indexOf("function " + name + "(");
+    if (start < 0) return null;
+    let depth = 0;
+    const i = SRC.indexOf("{", start);
+    for (let j = i; j < SRC.length; j++) {
+      if (SRC[j] === "{") depth++;
+      else if (SRC[j] === "}") { depth--; if (!depth) return SRC.slice(start, j + 1); }
+    }
+    return null;
+  }
+  function renderInventorySrc(overrides) {
+    let html = "";
+    const root = { set innerHTML(v) { html = v; }, get innerHTML() { return html; }, querySelectorAll: () => [] };
+    const art = {
+      qi_pill: "/assets/icons/qi_pill_icon.png",
+      spirit_meal: "/assets/icons/spirit_meal_icon.png",
+    };
+    const sb = {
+      console,
+      ITEM_BY_ID: JSON.parse(JSON.stringify(ITEM_FIXTURE)),
+      ICON: { elixir_icon: "/assets/icons/elixir_icon.png" },
+      ELIXIR_ICON: "elixir_icon",
+      SLOT_TYPE_LABELS: { core: "Cultivation Artifact", headpiece: "Artifact", ring: "Accessory" },
+      SLOT_ICONS: {},
+      ELIXIR_SHAPES: [
+        { key: "heal", fallback: "Elixir I", type: "Recovery Consumable" },
+        { key: "qi", fallback: "Elixir II", type: "Cultivation Consumable" },
+        { key: "both", fallback: "Elixir III", type: "Restorative Consumable" },
+      ],
+      DOLL_ROWS: [[{ s: "core", label: "Spirit Core" }, { s: "headpiece", label: "Immortal Crown" }]],
+      BAG_TABS: [["all", "All"]],
+      ITEM_RARITY_COLORS: {}, ITEM_DEFAULT_RARITY: "Common",
+      state: { player: { username: "t", equipment: {}, elixirs: [null, null, null], inventory: { qi_pill: 3, spirit_meal: 1 } } },
+      invTab: "all",
+      $: id => (id === "inventory-root" ? root : null),
+      hideTip() {}, renderInventory() {}, slotTypeLabel() { return ""; },
+      equipTargets: () => [], bagTabOf: () => "all",
+      esc: s => String(s == null ? "" : s),
+      iconHtml: (img, glyph, cls) => (img ? `<img class="${cls}" src="${img}" />` : `<span class="glyph">${glyph || ""}</span>`),
+      // Mirrors the real iconImg: resolves through the ICON map the server
+      // supplies, so the neutral bottle is found by name.
+      iconImg: (name, cls) => (sb.ICON[name] ? `<img class="${cls}" src="${sb.ICON[name]}" />` : ""),
+    };
+    Object.assign(sb, overrides || {});
+    // Attach art to the two consumables the way the server does.
+    for (const id of ["qi_pill", "spirit_meal"]) sb.ITEM_BY_ID[id].img = art[id];
+    // The shared fixture still carries healing_pill (removed from the live
+    // item db in 0.8.0). Drop it here so the render matches the real game:
+    // with no heal-only pill, slot 0 is the neutral "Elixir I" fallback.
+    delete sb.ITEM_BY_ID.healing_pill;
+    vm.createContext(sb);
+    for (const fn of ["esc", "pillShape", "elixirSlots", "iconHtml", "slotIconHtml", "bagTabOf", "renderInventory"]) {
+      const src = grabFnSrc(fn);
+      if (src) vm.runInContext(src, sb);
+    }
+    sb.renderInventory();
+    return html;
+  }
+
+  const empty = renderInventorySrc();
+  const elixirSrcs = [...empty.matchAll(/data-elixir="(\d)"[^>]*>.*?src="([^"]+)"/gs)].map(m => m[2]);
+  ok(elixirSrcs.length === 3, "three elixir slots render");
+  ok(elixirSrcs[0] === "/assets/icons/elixir_icon.png",
+     "empty neutral 'Elixir I' slot uses the generic bottle");
+  ok(elixirSrcs[1] === "/assets/icons/qi_pill_icon.png",
+     "empty slot labelled 'Qi Pill' shows the Qi Pill art, not the bottle");
+  ok(elixirSrcs[2] === "/assets/icons/spirit_meal_icon.png",
+     "empty slot labelled 'Spirit Meal' shows the Spirit Meal art, not the bottle");
+  ok(!empty.includes("Elixir II</span>"), "the qi slot is labelled with a real pill name");
+  ok(/Elixir I<\/span>/.test(empty), "a slot with no pill behind it keeps the neutral label");
+  // The bottle must never appear on a slot that names a pill.
+  ok(!(/data-elixir="1"[^>]*>.*?elixir_icon/.test(empty)),
+     "no bottle icon on the Qi Pill slot");
+
+
   ok(/\.tab-icon \{ width: 22px/.test(CSS), "tab icons are sized for the sidebar");
   ok(/\.slot \.slot-icon \{ width: 34px/.test(CSS), "slot icons are sized for the doll");
   ok(/\.side-btn \{ display: flex/.test(CSS), "sidebar buttons become a flex row to hold an icon");

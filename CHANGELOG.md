@@ -11,6 +11,34 @@ and push to `main` on https://github.com/itzRealEzra/ashen-fantasy.
 
 ## [Unreleased]
 
+## [0.8.5] - 2026-10-18
+### Fixed
+- Empty elixir slots no longer draw the generic bottle for pills that have
+  their own art. `elixirSlots()` names each slot after a real pill when one
+  fits it, so a slot labelled "Qi Pill" or "Spirit Meal" was showing the
+  neutral elixir bottle until something was loaded into it. The pill's id now
+  travels with its label and the slot draws that pill's art. The bottle is now
+  only used where there is genuinely no pill behind the slot — the "Elixir I"
+  fallback for heal-only pills, which the item database does not currently
+  have.
+- Spirit Core and Immortal Crown art were swapped: the Spirit Core wore the
+  crown and the Immortal Crown wore the spirit-core medallion. `core` now maps
+  to `cultivation_artifact_icon` and `headpiece` to `crown_artifact_icon`,
+  confirmed against the files themselves.
+
+### Changed
+- The client test suite gained a render-level check that runs the real
+  `renderInventory` against a DOM stub and reads the emitted `src` values.
+  The existing icon assertions are source-level regexes, and they passed
+  green while both of the bugs above were live: a regex cannot see which
+  picture actually got rendered. The render check does, and now pins the
+  bottle vs. named-pill behaviour per slot.
+- Its fixture drops `healing_pill` when rendering. That item was removed from
+  the live item database in 0.8.0 but survives in the shared client fixture,
+  which left no neutral slot to render and masked the real layout.
+
+289 tests passing (133 API + 159 client).
+
 ## [0.8.4] - 2026-10-18
 ### Added
 - UI icon art from `public/assets/icons`, all 20 files wired up:
