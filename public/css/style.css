@@ -179,7 +179,7 @@ input { background: #0e0e14; border: 1px solid var(--line); color: var(--ink); p
 .slot { width: 72px; height: 72px; border: 1px solid var(--line); border-radius: 6px; background: #0e0e15; display: flex; flex-direction: column; align-items: center; justify-content: center; cursor: pointer; position: relative; }
 .slot:hover { border-color: var(--gold); }
 .slot .glyph { font-size: 28px; line-height: 1; }
-.slot .art-slot { width: 40px; height: 40px; object-fit: contain; }
+.slot .art-slot { width: 46px; height: 46px; object-fit: contain; }
 .slot .slot-name { font-size: 10px; color: var(--muted); margin-top: 2px; text-align: center; }
 .slot.filled { border-color: var(--gold); background: var(--panel2); }
 .slot .count { position: absolute; right: 3px; bottom: 3px; font-size: 10px; line-height: 1.4; color: var(--gold2); background: rgba(8, 8, 12, .85); border: 1px solid var(--line); border-radius: 3px; padding: 0 4px; }
@@ -231,18 +231,29 @@ input { background: #0e0e14; border: 1px solid var(--line); color: var(--ink); p
 .mail-item-note { font-size: 11px; color: var(--muted); margin: 6px 0 0; }
 .mail-claim { margin-top: 10px; padding: 7px 16px; font-size: 13px; }
 /* ---------- ui icon art ---------- */
-/* Icon sits beside the label, so the button becomes a flex row and the
-   vertical padding comes down: a 20px icon inside 22px of padding made each
-   tab ~63px tall, and the Mail tab pushed the sidebar past the fold. */
+:root {
+  /* Art in public/assets/icons is white line art, not a colour illustration.
+     These are the two knobs for dimming it so it sits quietly on the dark
+     slots; .slot-icon (an empty equip slot) and .line-art (an item whose art
+     came from icons/) share them so the two never drift apart. */
+  --line-art-opacity: .3;
+  --line-art-gray: .6;
+}
 .side-btn { display: flex; align-items: center; justify-content: flex-start;
   gap: 10px; padding: 15px 18px; text-align: left; }
 .tab-icon { width: 22px; height: 22px; object-fit: contain; flex: none;
   opacity: .68; filter: grayscale(.35); transition: opacity .18s ease, filter .18s ease; }
 .side-btn:hover .tab-icon { opacity: 1; filter: none; }
 .side-btn.active .tab-icon { opacity: 1; filter: none; }
-.slot .slot-icon { width: 34px; height: 34px; object-fit: contain; opacity: .3;
-  filter: grayscale(.6); transition: opacity .18s ease, filter .18s ease; }
+.slot .slot-icon { width: 42px; height: 42px; object-fit: contain;
+  opacity: var(--line-art-opacity); filter: grayscale(var(--line-art-gray));
+  transition: opacity .18s ease, filter .18s ease; }
 .slot:hover .slot-icon { opacity: .62; filter: grayscale(.2); }
+/* Items whose art came from assets/icons -- Qi Pill and Spirit Meal. Without
+   this they render as solid white next to the colour illustrations. */
+.line-art { opacity: var(--line-art-opacity);
+  filter: grayscale(var(--line-art-gray)); }
+.slot.filled:hover .line-art { opacity: .75; filter: grayscale(.2); }
 /* stats notification — bottom-right corner of the screen, ~3s then fade */
 #stat-notice { position: fixed; right: 16px; bottom: 24px; transform: translateY(10px); z-index: 400;
   display: flex; flex-direction: column; gap: 2px; align-items: flex-end; background: rgba(14, 14, 21, .96);

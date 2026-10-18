@@ -1,6 +1,6 @@
 /* Ashen Fantasy — vanilla JS state machine: username -> roots -> main */
 const $ = (id) => document.getElementById(id);
-const CLIENT_VERSION = "0.8.6"; // must match server.py server_version + footer
+const CLIENT_VERSION = "0.8.7"; // must match server.py server_version + footer
 const state = {
   username: localStorage.getItem("af_user") || "",
   rollId: null,
@@ -786,6 +786,14 @@ function iconHtml(img, glyph, artCls) {
              : `<span class="glyph">${esc(glyph || "")}</span>`;
 }
 
+// Art from public/assets/icons is white line art, not a colour illustration.
+// Item art normally renders at full strength against the dark slots, so those
+// two items would show up as a solid white blob; `lineArt` is the server's
+// flag for them and gets the same dimming the other slot icons use.
+function artCls(it, base) {
+  return base + (it && it.lineArt ? " line-art" : "");
+}
+
 // What should bag gear do: equip another, or unequip what's worn?
 // Unequip wins when there is nothing left to equip.
 function bagGearAction(itemId) {
@@ -825,7 +833,7 @@ function itemTipHtml(itemId, ctx) {
   if (!it) return "";
   ctx = ctx || {};
   const col = ITEM_RARITY_COLORS[it.rarity] || ITEM_RARITY_COLORS[ITEM_DEFAULT_RARITY];
-  let h = `<div class="tip-title"><b>${iconHtml(it.img, it.glyph, "art-tip")} ${esc(it.name)}</b><span style="color:${col}">${esc(it.rarity || ITEM_DEFAULT_RARITY)}</span></div>` +
+  let h = `<div class="tip-title"><b>${iconHtml(it.img, it.glyph, artCls(it, "art-tip"))} ${esc(it.name)}</b><span style="color:${col}">${esc(it.rarity || ITEM_DEFAULT_RARITY)}</span></div>` +
     `<div><small class="muted">${esc(itemTypeLabel(it))}</small></div>` +
     `<div class="muted">${esc(it.desc)}</div>`;
   const st = Object.entries(it.stats || {}).filter(([, v]) => v).map(([k, v]) => `${k}+${v}`).join(" · ");
@@ -948,9 +956,11 @@ function renderInventory() {
   const doll = DOLL_ROWS.map(row => `<div class="doll-row">` + row.map(({ s, label }) => {
     const iid = p.equipment && p.equipment[s];
     const it = iid && ITEM_BY_ID[iid];
+    // Icon only: the label lives in data-slot-name and still shows in the
+    // tooltip, but an equipped slot shows nothing but its picture.
     return `<div class="slot${it ? " filled" : ""}" data-slot="${s}"${it ? ` data-tip="${iid}"` : ` data-slot-name="${esc(label)}" data-slot-type="${esc(slotTypeLabel(s))}"`}>` +
-      (it ? iconHtml(it.img, it.glyph, "art-slot") : slotIconHtml(s)) +
-      `<span class="slot-name">${it ? esc(it.name) : esc(label)}</span></div>`;
+      (it ? iconHtml(it.img, it.glyph, artCls(it, "art-slot")) : slotIconHtml(s)) +
+      `</div>`;
   }).join("") + `</div>`).join("");
   const slots = elixirSlots();
   const elix = `<div class="doll-row">` + [0, 1, 2].map(i => {
@@ -962,10 +972,9 @@ function renderInventory() {
     // behind it (the neutral "Elixir I/II/III" fallback) uses the bottle.
     const named = slot.id && ITEM_BY_ID[slot.id];
     return `<div class="slot elixir${it ? " filled" : ""}" data-elixir="${i}"${it ? ` data-tip="${iid}"` : ` data-slot-name="${esc(slot.name)}" data-slot-type="${esc(slot.type)}"`}>` +
-      (it ? iconHtml(it.img, it.glyph, "art-slot")
-          : named ? iconHtml(named.img, named.glyph, "art-slot")
+      (it ? iconHtml(it.img, it.glyph, artCls(it, "art-slot"))
+          : named ? iconHtml(named.img, named.glyph, artCls(named, "art-slot"))
           : iconImg(ELIXIR_ICON, "slot-icon")) +
-      `<span class="slot-name">${it ? esc(it.name) : esc(slot.name)}</span>` +
       (it ? `<span class="count">${n}x</span>` : "") + `</div>`;
   }).join("") + `</div>`;
   const tabs = BAG_TABS
@@ -992,7 +1001,7 @@ function renderInventory() {
     const rc = ITEM_RARITY_COLORS[it.rarity] || ITEM_RARITY_COLORS[ITEM_DEFAULT_RARITY];
     // Every item gets the real tooltip; no native title (it would double up).
     return `<div class="slot inv-slot" data-item="${id}" data-tip="${id}"${rc ? ` style="--rc:${rc}"` : ""}>` +
-      `${iconHtml(it.img, it.glyph, "art-slot")}<span class="count">${p.inventory[id]}x</span></div>`;
+      `${iconHtml(it.img, it.glyph, artCls(it, "art-slot"))}<span class="count">${p.inventory[id]}x</span></div>`;
   }).join("");
   // Empty cells so the bag always reads as a real 48-slot RPG grid.
   const emptyCells = entries.length < 48
@@ -1592,7 +1601,7 @@ function mailItemsHtml(items) {
     const it = ITEM_BY_ID[id];
     const rc = ITEM_RARITY_COLORS[(it && it.rarity) || ITEM_DEFAULT_RARITY];
     return `<div class="mail-item"${it ? ` data-tip="${esc(id)}"` : ""}${rc ? ` style="--rc:${rc}"` : ""}>` +
-      iconHtml(it && it.img, (it && it.glyph) || "✦", "art-slot") +
+      iconHtml(it && it.img, (it && it.glyph) || "✦", artCls(it, "art-slot")) +
       `<span class="mail-item-name">${esc(it ? it.name : id)}</span>` +
       `<span class="count">x${Number(items[id]) || 0}</span></div>`;
   }).join("")}</div><p class="mail-item-note">${total} item${total === 1 ? "" : "s"} to claim</p>`;

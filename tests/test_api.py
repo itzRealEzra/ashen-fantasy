@@ -618,6 +618,18 @@ try:
            "every item that resolved art really has an img key")
     finally:
         server.ITEMS.remove(probe)
+
+    # Art from assets/icons is white line art; art from assets/items is a
+    # colour illustration. The server flags the difference so the client can
+    # dim the former instead of rendering it as a solid white blob.
+    for iid, icon in server._ITEM_ICON_FILES.items():
+        it = by_id[iid]
+        ok(it.get("lineArt") is True, "%s is flagged lineArt (icons/ art)" % iid)
+        ok(it["img"].startswith("/assets/icons/"), "%s draws from icons/" % iid)
+    colour_art = [i for i in j["items"]
+                  if i.get("img") and i["img"].startswith("/assets/items/")]
+    ok(colour_art and all("lineArt" not in i for i in colour_art),
+       "items/ colour art is never flagged lineArt (%d checked)" % len(colour_art))
 finally:
     srv.shutdown()
     srv.server_close()

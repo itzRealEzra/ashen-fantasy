@@ -16,7 +16,7 @@ import mimetypes
 # Single source of truth for the build number. Must match CLIENT_VERSION in
 # public/js/app.js and the footer in public/index.html. A player whose saved
 # patch_version differs gets one patch-note mail when they next check mail.
-SERVER_VERSION = "0.8.6"
+SERVER_VERSION = "0.8.7"
 from http.server import ThreadingHTTPServer, BaseHTTPRequestHandler
 from urllib.parse import urlparse, parse_qs
 
@@ -395,13 +395,24 @@ def _apply_art(art):
             else:
                 m.pop("img", None)
     for it in ITEMS:
-        # assets/items/<id> first, then the icons/ override if this item has one.
-        p = (art.get("items/" + it["id"])
-             or art.get("icons/" + _ITEM_ICON_FILES.get(it["id"], "")))
+        # assets/items/<id>.png first, then the icons/ override if this item
+        # has one. Art from icons/ is white line art rather than a colour
+        # illustration, so it is flagged `lineArt` and the client dims it to
+        # match the other slot icons instead of rendering it as solid white.
+        p = art.get("items/" + it["id"])
+        over = _ITEM_ICON_FILES.get(it["id"])
+        if not p and over:
+            p = art.get("icons/" + over)
+            if p:
+                it["lineArt"] = True
         if p:
             it["img"] = p
+            if not it.get("lineArt"):
+                it.pop("lineArt", None)
         else:
             it.pop("img", None)
+            it.pop("lineArt", None)
+
 
 def icons_map():
     """Bare file name -> url for every icon on disk, for the UI chrome

@@ -11,6 +11,30 @@ and push to `main` on https://github.com/itzRealEzra/ashen-fantasy.
 
 ## [Unreleased]
 
+## [0.8.7] - 2026-10-18
+### Fixed
+- Qi Pill and Spirit Meal no longer render as a solid white blob. Their art
+  lives in `assets/icons/`, which is white line art — measured at 99% and 99%
+  pure white, against 0% for every `assets/items/` and `assets/enemies/`
+  illustration. The empty slot icons were already dimmed by CSS, but these two
+  are the only items drawn from that folder, and they render through the
+  *item* art path, which had no dimming at all. The server now flags items
+  whose art came from `icons/` with `lineArt`, and the client applies the same
+  treatment the other slot icons use. Colour item art is untouched.
+- The two dimming values are now CSS custom properties (`--line-art-opacity`,
+  `--line-art-gray`) shared by `.slot-icon` and `.line-art`, so the empty-slot
+  icon and a line-art item can never drift apart again.
+
+### Changed
+- Equipment slots are icon-only. The name under each slot is gone, so an
+  equipped slot shows nothing but its picture and an empty one shows only the
+  slot icon. The label still travels in `data-slot-name` and still appears in
+  the tooltip, so nothing became unreachable.
+- Slot art grew to fill the space the label vacated: equipped art 40px → 46px,
+  empty slot icons 34px → 42px.
+
+307 tests passing (139 API + 168 client).
+
 ## [0.8.6] - 2026-10-18
 ### Added
 - Art for the whole newcomer starter pack: Wooden Sword, Leather Helmet,

@@ -98,6 +98,7 @@ const parts = [
   grab(/function bagTabOf\(it\) \{[\s\S]*?\n\}/, "bagTabOf"),
   grab(/const BAG_TABS = \[[\s\S]*?\n\];/, "BAG_TABS"),
   grab(/function iconHtml\(img, glyph, artCls\) \{[\s\S]*?\n\}/, "iconHtml"),
+  grab(/function artCls\(it, base\) \{[\s\S]*?\n\}/, "artCls"),
   grab(/function dropsFor\(itemName\) \{[\s\S]*?\n\}/, "dropsFor"),
   grab(/function itemTypeLabel\(it\) \{[\s\S]*?\n\}/, "itemTypeLabel"),
   grab(/function itemTipHtml\(itemId, ctx\) \{[\s\S]*?\n\}/, "itemTipHtml"),
@@ -148,7 +149,7 @@ const lib = new Function("__", prelude + parts + `
     advanceRealm, accrue, equipItem, unequipSlot, bagGearAction, useConsumable,
     loadElixirSlot, unloadElixir, elixirPreferredSlot, leaveActiveHunt,
     showBattleAreas, battleTick, derivedStats, playerMaxHp, addInv, takeInv,
-    itemTipHtml, itemTypeLabel, bagTabOf, dropsFor, iconHtml, BAG_TABS, slotTypeLabel,
+    itemTipHtml, itemTypeLabel, bagTabOf, dropsFor, iconHtml, artCls, BAG_TABS, slotTypeLabel,
     ITEM_RARITY_COLORS,
     clickBreakthrough: () => els["breakthrough-btn"].onclick(),
   };
@@ -530,7 +531,7 @@ state.player = basePlayer();
   ok(/if \(!name \|\| b\.querySelector\(".tab-icon"\)\) return;/.test(SRC),
      "tab icons are not double-inserted");
   // Slot art only ever shows on an EMPTY slot; a filled slot keeps the item.
-  ok(/\(it \? iconHtml\(it\.img, it\.glyph, "art-slot"\) : slotIconHtml\(s\)\)/.test(SRC),
+  ok(/\(it \? iconHtml\(it\.img, it\.glyph, artCls\(it, "art-slot"\)\) : slotIconHtml\(s\)\)/.test(SRC),
      "doll slots show the slot icon only when empty");
   ok(/iconImg\(ELIXIR_ICON, "slot-icon"\)/.test(SRC), "empty elixir slots use the elixir icon");
   // All five tabs and all thirteen slots must be mapped.
@@ -556,7 +557,7 @@ state.player = basePlayer();
   // not the generic bottle. Only a slot with no pill behind it uses the bottle.
   ok(/const named = slot\.id && ITEM_BY_ID\[slot\.id\];/.test(SRC),
      "empty elixir slot resolves the pill behind its label");
-  ok(/: named \? iconHtml\(named\.img, named\.glyph, "art-slot"\)\s*\n\s*: iconImg\(ELIXIR_ICON, "slot-icon"\)\)/.test(SRC),
+  ok(/: named \? iconHtml\(named\.img, named\.glyph, artCls\(named, "art-slot"\)\)\s*\n\s*: iconImg\(ELIXIR_ICON, "slot-icon"\)\)/.test(SRC),
      "empty elixir slot prefers the named pill's art, bottle only as fallback");
   ok(/return it\s*\n\s*\? \{ id: it\.id, name: it\.name, type: s\.type \}\s*\n\s*: \{ id: null, name: s\.fallback, type: s\.type \};/.test(SRC),
      "elixirSlots carries the pill id alongside its label");
@@ -580,7 +581,7 @@ state.player = basePlayer();
     }
     return null;
   }
-  function renderInventorySrc(overrides) {
+  function renderInventorySrc(overrides, lineArtIds) {
     let html = "";
     const root = { set innerHTML(v) { html = v; }, get innerHTML() { return html; }, querySelectorAll: () => [] };
     const art = {
@@ -614,14 +615,18 @@ state.player = basePlayer();
       iconImg: (name, cls) => (sb.ICON[name] ? `<img class="${cls}" src="${sb.ICON[name]}" />` : ""),
     };
     Object.assign(sb, overrides || {});
-    // Attach art to the two consumables the way the server does.
+    // Attach art to the two consumables the way the server does, and mark
+    // them lineArt exactly as _apply_art does for icons/ sourced art.
     for (const id of ["qi_pill", "spirit_meal"]) sb.ITEM_BY_ID[id].img = art[id];
+    for (const id of Object.keys(lineArtIds || {})) {
+      if (lineArtIds[id] && sb.ITEM_BY_ID[id]) sb.ITEM_BY_ID[id].lineArt = true;
+    }
     // The shared fixture still carries healing_pill (removed from the live
     // item db in 0.8.0). Drop it here so the render matches the real game:
     // with no heal-only pill, slot 0 is the neutral "Elixir I" fallback.
     delete sb.ITEM_BY_ID.healing_pill;
     vm.createContext(sb);
-    for (const fn of ["esc", "pillShape", "elixirSlots", "iconHtml", "slotIconHtml", "bagTabOf", "renderInventory"]) {
+    for (const fn of ["esc", "pillShape", "elixirSlots", "iconHtml", "artCls", "slotIconHtml", "bagTabOf", "renderInventory"]) {
       const src = grabFnSrc(fn);
       if (src) vm.runInContext(src, sb);
     }
@@ -638,15 +643,37 @@ state.player = basePlayer();
      "empty slot labelled 'Qi Pill' shows the Qi Pill art, not the bottle");
   ok(elixirSrcs[2] === "/assets/icons/spirit_meal_icon.png",
      "empty slot labelled 'Spirit Meal' shows the Spirit Meal art, not the bottle");
-  ok(!empty.includes("Elixir II</span>"), "the qi slot is labelled with a real pill name");
-  ok(/Elixir I<\/span>/.test(empty), "a slot with no pill behind it keeps the neutral label");
+  // Equipment slots are icon-only now: no name element is emitted at all,
+  // filled or empty. The label still rides along in data-slot-name and still
+  // shows in the tooltip.
+  ok(!/class="slot-name"/.test(empty), "no slot name element is rendered on elixir slots");
+  ok(!/slot-name"/.test(empty.replace(/data-slot-name="[^"]*"/g, "")),
+     "no visible slot-name text remains outside the data attribute");
+  ok(/data-slot-name="Elixir I"/.test(empty),
+     "an empty slot still carries its name in data-slot-name for the tooltip");
+  ok(/data-slot-name="Qi Pill"/.test(empty), "a named pill slot carries its name for the tooltip");
   // The bottle must never appear on a slot that names a pill.
   ok(!(/data-elixir="1"[^>]*>.*?elixir_icon/.test(empty)),
      "no bottle icon on the Qi Pill slot");
 
+  // lineArt art is dimmed the same way as the other slot icons; colour art
+  // is left alone.
+  ok(/function artCls\(it, base\)/.test(SRC), "artCls exists");
+  ok(/return base \+ \(it && it\.lineArt \? " line-art" : ""\);/.test(SRC),
+     "artCls appends line-art only for items the server flagged");
+  const lineArted = renderInventorySrc({}, { qi_pill: true, spirit_meal: true });
+  ok(/data-elixir="1"[^>]*>[\s\S]{0,200}class="art art-slot line-art"/.test(lineArted),
+     "a flagged pill renders with the line-art class");
+  const plainArt = renderInventorySrc();
+  ok(!/line-art/.test(plainArt), "no line-art class when the server flagged nothing");
 
   ok(/\.tab-icon \{ width: 22px/.test(CSS), "tab icons are sized for the sidebar");
-  ok(/\.slot \.slot-icon \{ width: 34px/.test(CSS), "slot icons are sized for the doll");
+  ok(/\.slot \.slot-icon \{ width: 42px/.test(CSS), "slot icons are sized for the doll");
+  ok(/\.slot \.art-slot \{ width: 46px/.test(CSS), "equipped slot art fills the now-label-free slot");
+  ok(/--line-art-opacity: \.3/.test(CSS) && /--line-art-gray: \.6/.test(CSS),
+     "line art has shared dimming knobs");
+  ok(/opacity: var\(--line-art-opacity\);\s*\n?\s*filter: grayscale\(var\(--line-art-gray\)\); \}/.test(CSS),
+     ".line-art uses the same shared knobs as the other slot icons");
   ok(/\.side-btn \{ display: flex/.test(CSS), "sidebar buttons become a flex row to hold an icon");
 
   console.log("\n" + pass + " passed, " + fail + " failed");
