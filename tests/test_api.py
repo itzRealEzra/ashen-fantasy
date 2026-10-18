@@ -42,20 +42,55 @@ PORT = srv.server_address[1]
 threading.Thread(target=srv.serve_forever, daemon=True).start()
 
 
+def _send(request):
+    """Perform a request, retrying bare transport failures.
+
+    The suite opens ~150 loopback connections back to back, and Windows
+    intermittently resets one of them (Winsock 10053, seen in roughly a quarter
+    of runs) as the ephemeral port is recycled. That is an OS/connection-level
+    event, not a server fault: no HTTP status ever arrives, so there is nothing
+    to assert on. A real client (the browser) retries this itself; the harness
+    has to as well. Only transport errors are retried -- an HTTPError is a real
+    answer from the server and is handed straight back to the caller.
+    """
+    last = None
+    for attempt in range(4):
+        try:
+            with urllib.request.urlopen(request, timeout=5) as resp:
+                return resp.status, resp.read(), dict(resp.headers)
+        except urllib.error.HTTPError as e:
+            return e.code, e.read(), dict(e.headers)
+        except OSError as e:
+            # urllib wraps connection resets in URLError, and URLError is an
+            # OSError, so this covers ConnectionResetError, RemoteDisconnected,
+            # ConnectionAbortedError (Winsock 10053) and socket timeouts alike.
+            last = e
+            time.sleep(0.05 * (attempt + 1))
+    raise last
+
+
 def req(path, payload=None):
     url = "http://127.0.0.1:%d%s" % (PORT, path)
     data = json.dumps(payload).encode("utf-8") if payload is not None else None
     r = urllib.request.Request(url, data=data, headers={"Content-Type": "application/json"})
-    try:
-        with urllib.request.urlopen(r, timeout=5) as resp:
-            return resp.status, json.loads(resp.read().decode("utf-8"))
-    except urllib.error.HTTPError as e:
-        return e.code, json.loads(e.read().decode("utf-8"))
+    st, raw, _ = _send(r)
+    return st, json.loads(raw.decode("utf-8"))
 
 
 def roll():
-    server.LAST_ROLL_BY_IP.clear()  # tests may roll faster than players can
-    st, j = req("/api/roll", {})
+    """Roll nine roots, retrying past the 1s cooldown.
+
+    _send may retry the request after a transport reset, and a retried roll
+    that the server already processed comes back 429 with no roll_id. Clearing
+    the cooldown before each attempt makes a repeat harmless.
+    """
+    st, j = 0, {}
+    for attempt in range(4):
+        server.LAST_ROLL_BY_IP.clear()  # tests may roll faster than players can
+        st, j = req("/api/roll", {})
+        if "roll_id" in j:
+            return st, j
+        time.sleep(0.05 * (attempt + 1))
     return st, j
 
 
@@ -339,11 +374,8 @@ try:
         if origin:
             headers["Origin"] = origin
         r = urllib.request.Request(url, data=data, headers=headers, method=method)
-        try:
-            with urllib.request.urlopen(r, timeout=5) as resp:
-                return resp.status, json.loads(resp.read().decode("utf-8")), dict(resp.headers)
-        except urllib.error.HTTPError as e:
-            return e.code, json.loads(e.read().decode("utf-8")), dict(e.headers)
+        st, raw, hd = _send(r)
+        return st, json.loads(raw.decode("utf-8")), hd
 
     EVIL = "http://evil.example.com"
     fresh("victim")
@@ -372,13 +404,7 @@ try:
 
     # preflight gets nothing to negotiate
     r = urllib.request.Request("http://127.0.0.1:%d/api/sync" % PORT, method="OPTIONS")
-    try:
-        with urllib.request.urlopen(r, timeout=5) as resp:
-            pstatus = resp.status
-            pheaders = dict(resp.headers)
-    except urllib.error.HTTPError as e:
-        pstatus = e.code
-        pheaders = dict(e.headers)
+    pstatus, _, pheaders = _send(r)
     ok(pstatus == 403, "OPTIONS preflight is refused outright")
     ok("Access-Control-Allow-Origin" not in pheaders, "preflight grants no origin")
 

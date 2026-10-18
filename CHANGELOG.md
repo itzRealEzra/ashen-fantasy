@@ -32,6 +32,17 @@ and push to `main` on https://github.com/itzRealEzra/ashen-fantasy.
   files is 1254x1254 while rendering between 22px and 72px. Nothing here is
   broken, but a single rescale pass would cut the payload by an order of
   magnitude with no visible change.
+- The API test suite crashed on roughly a quarter of runs with
+  `ConnectionAbortedError` (Winsock 10053). The suite opens ~150 loopback
+  connections back to back and Windows intermittently resets one while
+  recycling the ephemeral port; no HTTP status ever arrives, so there was
+  nothing to assert on. Requests now retry a few times, but only on a
+  transport-level failure -- an HTTP status is still handed straight back, so
+  nothing can be retried into a false pass. Retrying alone was not enough and
+  exposed a second bug: `/api/roll` is not idempotent, so a retried roll that
+  the server had already processed came back 429 with no `roll_id`. `roll()`
+  now clears the 1s cooldown before each attempt. 55 consecutive runs, 0
+  failures.
 
 293 tests passing (134 API + 159 client).
 
