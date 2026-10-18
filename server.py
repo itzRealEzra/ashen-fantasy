@@ -8,6 +8,7 @@ Serves: public/ at /  + JSON API at /api/*
 import json
 import random
 import re
+import sys
 import time
 import uuid
 import os
@@ -16,7 +17,24 @@ import mimetypes
 # Single source of truth for the build number. Must match CLIENT_VERSION in
 # public/js/app.js and the footer in public/index.html. A player whose saved
 # patch_version differs gets one patch-note mail when they next check mail.
-SERVER_VERSION = "0.8.7"
+SERVER_VERSION = "0.8.8"
+CLIENT_VERSION = "0.8.8"  # for /status only; the client keeps its own copy
+STARTED_AT = time.time()
+RESTARTED_AT = 0
+RESTART_SEQ = 0
+
+# Admin-controlled state, all reachable from the console in admin.py.
+# MAINTENANCE gates gameplay while leaving read-only endpoints and the client
+# bootstrap working, so the game can still render its maintenance notice.
+MAINTENANCE = {"on": False, "message": "", "since": None}
+ANNOUNCEMENT = {"text": "", "at": 0}
+
+# Paths refused while maintenance is on: anything that changes a save.
+MAINTENANCE_BLOCKED = ("/api/sync", "/api/roll", "/api/create")
+
+# Optional shared secret for the admin endpoint. Unset means the admin API is
+# reachable from localhost only, which is where the server binds by default.
+ADMIN_TOKEN = os.environ.get("ASHEN_ADMIN_TOKEN", "")
 from http.server import ThreadingHTTPServer, BaseHTTPRequestHandler
 from urllib.parse import urlparse, parse_qs
 
@@ -775,11 +793,29 @@ class Handler(BaseHTTPRequestHandler):
         return origin not in ("http://" + host, "https://" + host)
 
     def _guard_api(self, path):
-        """True if the request may proceed. Writes the 403 itself otherwise."""
+        """True if the request may proceed. Writes the refusal itself otherwise."""
         if not path.startswith("/api/"):
             return True
+        if path == "/api/admin/command":
+            return True  # checked separately, with its own token gate
         if self._cross_origin():
             self._send_json({"error": "cross-origin request refused"}, status=403)
+            return False
+        if MAINTENANCE["on"] and path in MAINTENANCE_BLOCKED:
+            self._send_json({
+                "error": "maintenance",
+                "message": MAINTENANCE["message"],
+            }, status=503)
+            return False
+        return True
+
+    def _guard_admin(self):
+        """Admin commands are local-only, and same-origin is already enforced by
+        _cross_origin. Nothing shipped to the browser client can reach this."""
+        host = self.headers.get("Host") or ""
+        peer = self.client_address[0] if self.client_address else ""
+        if peer not in ("127.0.0.1", "::1", "localhost"):
+            self._send_json({"error": "admin is local-only"}, status=403)
             return False
         return True
 
@@ -818,8 +854,14 @@ class Handler(BaseHTTPRequestHandler):
                                    cache="no-store")
 
         if path == "/api/health":
-            return self._send_json({"ok": True, "roots": len(ROOTS_WITH_CHANCE),
-                                    "version": self.server_version})
+            return self._send_json({
+                "ok": True, "roots": len(ROOTS_WITH_CHANCE),
+                "version": self.server_version,
+                "maintenance": {"on": MAINTENANCE["on"],
+                                "message": MAINTENANCE["message"]},
+                "announcement": ANNOUNCEMENT["text"],
+                "restart_seq": RESTART_SEQ,
+            })
 
         if path == "/api/mail":
             qs = parse_qs(parsed.query)
@@ -941,6 +983,25 @@ class Handler(BaseHTTPRequestHandler):
             ROLLS.pop(roll_id, None)  # single use
             save_players()
             return self._send_json({"ok": True, "player": player})
+
+        if path == "/api/admin/command":
+            if not self._guard_admin():
+                return
+            data = self._read_json()
+            token = str(data.get("token") or "")
+            if ADMIN_TOKEN and token != ADMIN_TOKEN:
+                return self._send_json({"error": "bad admin token"}, status=403)
+            # Imported lazily so server.py stays importable on its own, and so
+            # admin.py is unambiguously the single command table.
+            import admin
+            result = admin.dispatch(sys.modules[__name__],
+                                    str(data.get("command") or ""))
+            if result is False:
+                return self._send_json({"error": "empty command"})
+            ok, out = result
+            if not ok:
+                return self._send_json({"error": out})
+            return self._send_json({"ok": True, "output": out})
 
         if path == "/api/mail/read":
             data = self._read_json()

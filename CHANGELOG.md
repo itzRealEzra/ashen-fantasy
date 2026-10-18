@@ -11,6 +11,40 @@ and push to `main` on https://github.com/itzRealEzra/ashen-fantasy.
 
 ## [Unreleased]
 
+## [0.8.8] - 2026-10-18
+### Added
+- Admin console. `python admin.py` opens a terminal of live commands against
+  the running server. The server keeps running throughout — nothing here
+  restarts or kills it.
+  - `/help`, `/status`, `/players`, `/items`
+  - `/maintenance [on|off] [message]` — gates gameplay while leaving reads
+    working, so the client can still render its notice
+  - `/restart` — soft restart: re-reads `players.json`, drops in-memory
+    drift, clears `ROLLS` and `LAST_ROLL_BY_IP`, rescans art, and bumps a
+    counter the client reads from `/api/health`. The port is never unbound.
+  - `/announce <text>`, `/mail <subject> | <body> [{"item":n}]`,
+    `/give <player> <item_id> <n>`, `/reset <player>`
+- `admin.py` is the single command table. The server imports `COMMANDS` from
+  it and dispatches in its own process — which is what lets `/restart` do real
+  work without ending anything — while the terminal posts to that endpoint.
+  There is no second implementation to drift out of sync.
+- Maintenance mode and the announcement banner surface in the game. `/api/health`
+  reports both, and the client polls it every 10s, so a `/maintenance on` lands
+  mid-session without the player doing anything. A sync refused by maintenance
+  also surfaces immediately rather than waiting for the next poll, and progress
+  stays local in the meantime.
+- `tools/test_admin.py` — 37 assertions driving a live server from a throwaway
+  copy of the tree, covering every command, the maintenance gate, and that a
+  restart leaves the port bound and gameplay working.
+
+### Security
+- Admin authority lives entirely server-side; nothing shipped to the browser
+  client can reach it. The endpoint refuses any request carrying a foreign
+  `Origin` (the 0.8.2 guard) and anything not from `127.0.0.1`. Setting
+  `ASHEN_ADMIN_TOKEN` additionally requires a token on every call.
+
+344 tests passing (139 API + 168 client + 37 admin).
+
 ## [0.8.7] - 2026-10-18
 ### Fixed
 - Qi Pill and Spirit Meal no longer render as a solid white blob. Their art

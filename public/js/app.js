@@ -1,6 +1,6 @@
 /* Ashen Fantasy — vanilla JS state machine: username -> roots -> main */
 const $ = (id) => document.getElementById(id);
-const CLIENT_VERSION = "0.8.7"; // must match server.py server_version + footer
+const CLIENT_VERSION = "0.8.8"; // must match server.py server_version + footer
 const state = {
   username: localStorage.getItem("af_user") || "",
   rollId: null,
@@ -210,7 +210,7 @@ $("confirm-btn").onclick = async () => {
 
 // ---------- idle cultivation engine (v0.2.0) ----------
 let REALM_TABLE = [];
-let tickTimer = null, syncTimer = null, lastTick = 0;
+let tickTimer = null, syncTimer = null, serverStateTimer = null, lastTick = 0;
 let stageFlags = { half: false, full: false };
 const TABID = Math.random().toString(36).slice(2);
 const OFFLINE_CAP_SEC = 8 * 3600, OFFLINE_EFF = 0.5;
@@ -505,12 +505,17 @@ function startTick() {
     saveLocal(p);
   }, 1000);
   syncTimer = setInterval(() => syncPlayer(false), 30000);
+  // Admin state (maintenance, announcement) is polled on its own, faster than
+  // the sync, so a /maintenance on lands while the player is mid-session.
+  serverStateTimer = setInterval(pollServerState, 10000);
+  pollServerState();
 }
 
 function stopTick() {
   if (tickTimer) clearInterval(tickTimer);
   if (syncTimer) clearInterval(syncTimer);
-  tickTimer = syncTimer = null;
+  if (serverStateTimer) clearInterval(serverStateTimer);
+  tickTimer = syncTimer = serverStateTimer = null;
 }
 
 let syncing = false;
@@ -528,6 +533,14 @@ async function syncPlayer(initial) {
       }),
     });
     const j = await r.json();
+    // Maintenance refuses writes with 503; surface it right away rather than
+    // waiting for the next poll. Progress stays local until it lifts.
+    if (j.error === "maintenance") {
+      applyServerState({ maintenance: { on: true, message: j.message || "" },
+                        announcement: "", restart_seq: serverState.restartSeq });
+      if (!initial) cEvent("The heavens are quiet — progress is held locally while maintenance runs.");
+      return;
+    }
     if (j.ok && j.player) {
       // hp is client-tracked; the server only holds null — never let it clobber
       if (!(j.player.hp > 0)) delete j.player.hp;
@@ -1731,12 +1744,64 @@ function serverAlert(msg) {
 
 async function checkServerFresh() {
   try {
-    const r = await fetch("/api/health");
+    const r = await fetch("/api/health", { cache: "no-store" });
     const j = await r.json();
     if (!String(j.version || "").endsWith(CLIENT_VERSION)) {
       serverAlert(`Server/client version mismatch (server: ${j.version || "unknown"}, client: v${CLIENT_VERSION}). Restart server.py from the latest pull.`);
     }
+    applyServerState(j);
   } catch {
     serverAlert("Cannot reach the game server. Start it with: python server.py");
   }
 }
+
+// Maintenance mode and the admin announcement banner, both driven from
+// /api/health so they appear without the player doing anything.
+let serverState = { maintenance: { on: false, message: "" }, announcement: "", restartSeq: 0 };
+
+function applyServerState(j) {
+  const prev = serverState;
+  serverState = {
+    maintenance: j.maintenance || { on: false, message: "" },
+    announcement: j.announcement || "",
+    restartSeq: j.restart_seq || 0,
+  };
+  if (serverState.maintenance.on && !prev.maintenance.on) {
+    cEvent("The heavens are quiet — the game is down for maintenance.");
+  }
+  if (serverState.restartSeq !== prev.restartSeq && prev.restartSeq) {
+    cEvent("The server restarted. Your progress was reloaded.");
+  }
+  paintServerBanner();
+}
+
+function paintServerBanner() {
+  const el = $("server-banner");
+  if (!el) return;
+  const m = serverState.maintenance;
+  const a = serverState.announcement;
+  if (m.on) {
+    el.textContent = "Under maintenance — " + (m.message || "returning shortly");
+    el.className = "server-banner maint";
+    el.hidden = false;
+    return;
+  }
+  if (a) {
+    el.textContent = a;
+    el.className = "server-banner notice";
+    el.hidden = false;
+    return;
+  }
+  el.hidden = true;
+}
+
+// Poll for admin state so maintenance and announcements land on their own.
+async function pollServerState() {
+  if (state.player) {
+    try {
+      const r = await fetch("/api/health", { cache: "no-store" });
+      applyServerState(await r.json());
+    } catch {}
+  }
+}
+
