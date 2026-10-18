@@ -577,8 +577,21 @@ try:
     for iid, icon in server._ITEM_ICON_FILES.items():
         ok(iid in by_id and by_id[iid].get("img") == "/assets/icons/%s.png" % icon,
            "%s draws its art from icons/%s" % (iid, icon))
-    ok("img" not in by_id["wooden_sword"],
-       "gear with no art file still falls back to its glyph")
+    # Fallback contract, stated so it does not depend on which art files happen
+    # to exist on disk: an item with no matching file carries no img key at
+    # all, and the client then renders the item's emoji glyph. Probed with a
+    # synthetic id rather than a real item, since art gets added over time.
+    probe = dict(server.ITEM_BY_ID["wooden_sword"])
+    probe["id"] = "no_such_art_file"
+    server.ITEMS.append(probe)
+    try:
+        server._apply_art(server._asset_cache())
+        ok("img" not in probe, "an item with no art file carries no img key (glyph fallback)")
+        have = [i["id"] for i in server.ITEMS if i.get("img")]
+        ok(all("img" in server.ITEM_BY_ID[i] for i in have),
+           "every item that resolved art really has an img key")
+    finally:
+        server.ITEMS.remove(probe)
 finally:
     srv.shutdown()
     srv.server_close()

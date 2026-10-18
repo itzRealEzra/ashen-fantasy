@@ -39,6 +39,14 @@ and push to `main` on https://github.com/itzRealEzra/ashen-fantasy.
 
 289 tests passing (133 API + 159 client).
 
+### Fixed
+- The "gear with no art file falls back to its glyph" test asserted a specific
+  item had no art, which broke the moment art for it was added to disk. It now
+  probes with a synthetic item id, so it checks the fallback contract itself
+  rather than the current contents of the art folder.
+
+293 tests passing (134 API + 159 client).
+
 ## [0.8.4] - 2026-10-18
 ### Added
 - UI icon art from `public/assets/icons`, all 20 files wired up:
