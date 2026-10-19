@@ -1,6 +1,6 @@
 /* Ashen Fantasy — vanilla JS state machine: username -> roots -> main */
 const $ = (id) => document.getElementById(id);
-const CLIENT_VERSION = "0.9.2"; // must match server.py server_version + footer
+const CLIENT_VERSION = "0.9.3"; // must match server.py server_version + footer
 const state = {
   username: localStorage.getItem("af_user") || "",
   rollId: null,
@@ -259,7 +259,9 @@ function stageOf(p) {
 
 function cultRate(p) {
   const st = stageOf(p);
-  return 1.0 * p.stats.qi_mult * st.rate_mult;
+  const gear = gearBonus(p);
+  return 1.0 * p.stats.qi_mult * st.rate_mult
+    * Math.max(0, 1 + gear.qi_rate_pct / 100);
 }
 
 function normalizePlayer(p) {
@@ -424,6 +426,7 @@ function renderChar(p) {
     `<div><span>Defense</span><b>${d.def}</b></div>` +
     `<div><span>Crit chance</span><b>${d.crit}%</b></div>` +
     `<div><span>Crit dmg</span><b>${d.critDmg}%</b></div>` +
+    `<div><span>Qi Rate Bonus</span><b>${d.qi_rate_pct}%</b></div>` +
     `</div>` +
     `<p class="muted">💠 Dao Insight ×${p.dao_insight} · ${esc(st.flavor)}</p>` +
     p.roots.map(r => `<div class="char-card" style="border-left-color:${r.color}"><b style="color:${r.color}">${esc(r.name)}</b> <small>${esc(r.rarity)} · ${esc(r.element)}</small><br/>${esc(r.desc)}</div>`).join("");
@@ -438,8 +441,9 @@ function derivedStats(p) {
     hp: Math.round((100 + s.physique * 25) * (1 + r * 0.1)) + g.hp,
     atk: Math.round(10 + (s.physique * 2 + s.comprehension * 1.5) * (1 + r * 0.08)) + g.atk,
     def: Math.round(5 + s.physique * 1.2 + r * 2) + g.def,
-    crit: Math.min(60, Math.round(5 + s.comprehension * 1.2 + s.fortune * 0.5) + g.crit),
+    crit: Math.min(60, Math.round(5 + s.comprehension * 1.2 + s.fortune * 0.5 + g.crit)),
     critDmg: Math.round(150 + s.fortune * 4 + s.comprehension * 1.5) + g.critDmg,
+    qi_rate_pct: g.qi_rate_pct,
   };
 }
 
@@ -856,6 +860,25 @@ function dropsFor(itemName) {
   return out.sort((x, y) => y.chance - x.chance);
 }
 
+// Equipment uses additive bonuses across every slot. Percentage stats are
+// shown with % because crit is in percentage points and Qi Rate is a bonus.
+const GEAR_STAT_KEYS = ["atk", "def", "hp", "crit", "critDmg", "qi_rate_pct"];
+const STAT_DISPLAY_NAMES = {
+  atk: "ATK", def: "DEF", hp: "HP", crit: "Crit Chance",
+  critDmg: "Crit Damage", qi_rate_pct: "Qi Rate",
+};
+const PERCENT_STAT_KEYS = new Set(["crit", "critDmg", "qi_rate_pct"]);
+
+function formatStatValue(key, value, withSign = false) {
+  const n = Number(value) || 0;
+  const sign = withSign && n > 0 ? "+" : "";
+  return `${sign}${n}${PERCENT_STAT_KEYS.has(key) ? "%" : ""}`;
+}
+
+function formatStatEntry(key, value) {
+  return `${STAT_DISPLAY_NAMES[key] || key} ${formatStatValue(key, value, true)}`;
+}
+
 // Hover tooltip. Layout: name + rarity / type / desc / stats / source /
 // actions. Every item gets one; only the action buttons are conditional.
 function itemTipHtml(itemId, ctx) {
@@ -866,7 +889,8 @@ function itemTipHtml(itemId, ctx) {
   let h = `<div class="tip-title"><b>${iconHtml(it.img, it.glyph, artCls(it, "art-tip"))} ${esc(it.name)}</b><span style="color:${col}">${esc(it.rarity || ITEM_DEFAULT_RARITY)}</span></div>` +
     `<div><small class="muted">${esc(itemTypeLabel(it))}</small></div>` +
     `<div class="muted">${esc(it.desc)}</div>`;
-  const st = Object.entries(it.stats || {}).filter(([, v]) => v).map(([k, v]) => `${k}+${v}`).join(" · ");
+  const st = Object.entries(it.stats || {}).filter(([, v]) => v)
+    .map(([k, v]) => formatStatEntry(k, v)).join(" · ");
   if (st) h += `<div><span class="inv-stats">${esc(st)}</span></div>`;
   // Drop source: essential for materials, useful everywhere else.
   const src = dropsFor(it.name);
@@ -885,14 +909,18 @@ function itemTipHtml(itemId, ctx) {
   if (it.kind === "gear" && !ctx.unequip) {
     const p = state.player;
     const targets = it.slot === "ring" ? ["ring1", "ring2"] : [it.slot];
-    const cur = p && p.equipment ? (targets.map(s => p.equipment[s]).find(x => x) || null) : null;
+    // Preview the same slot equipItem will choose: a free ring slot first,
+    // otherwise ring1. Never compare a new ring against the wrong finger.
+    const targetSlot = p && p.equipment
+      ? (targets.find(s => !p.equipment[s]) || targets[0]) : targets[0];
+    const cur = p && p.equipment ? (p.equipment[targetSlot] || null) : null;
     if (cur && cur !== itemId && ITEM_BY_ID[cur]) {
       const a = ITEM_BY_ID[cur].stats || {}, b = it.stats || {};
-      const cmp = ["atk", "def", "hp", "crit", "critDmg"]
+      const cmp = GEAR_STAT_KEYS
         .filter(k => (a[k] || 0) !== (b[k] || 0))
         .map(k => {
           const d = (b[k] || 0) - (a[k] || 0);
-          return `<span class="${d > 0 ? "up" : "down"}">${k} ${a[k] || 0} → ${b[k] || 0}</span>`;
+          return `<span class="${d > 0 ? "up" : "down"}">${STAT_DISPLAY_NAMES[k]} ${formatStatValue(k, a[k] || 0, true)} → ${formatStatValue(k, b[k] || 0, true)}</span>`;
         }).join(" · ") || `<span class="muted">identical stats</span>`;
       h += `<div><small class="muted">vs ${esc(ITEM_BY_ID[cur].name)}:</small><br/>${cmp}</div>`;
     }
@@ -1076,8 +1104,11 @@ function equipTargets(it) {
 }
 
 // ---------- stats notification: bottom-center popup on gear change ----------
-const STAT_NOTICE_LABELS = { hp: "HP", atk: "ATK", def: "DEF", crit: "Crit", critDmg: "Crit DMG" };
-const STAT_NOTICE_KEYS = ["hp", "atk", "def", "crit", "critDmg"];
+const STAT_NOTICE_LABELS = {
+  hp: "HP", atk: "ATK", def: "DEF", crit: "Crit Chance",
+  critDmg: "Crit Damage", qi_rate_pct: "Qi Rate Bonus",
+};
+const STAT_NOTICE_KEYS = GEAR_STAT_KEYS;
 
 // Rows for a gear change. Up: "HP: 500 → +550" green, down: "HP: 550 ← 500"
 // red. Empty string when no stat moved (no popup then).
@@ -1087,8 +1118,8 @@ function statNoticeHtml(before, after) {
     const a = before[k] || 0, b = after[k] || 0;
     if (a === b) continue;
     const label = STAT_NOTICE_LABELS[k];
-    if (b > a) rows.push(`<div><span>${label}: ${a} →</span> <b class="up">+${b}</b></div>`);
-    else rows.push(`<div><span>${label}: ${a} ←</span> <b class="down">${b}</b></div>`);
+    if (b > a) rows.push(`<div><span>${label}: ${formatStatValue(k, a)} →</span> <b class="up">${formatStatValue(k, b, true)}</b></div>`);
+    else rows.push(`<div><span>${label}: ${formatStatValue(k, a)} ←</span> <b class="down">${formatStatValue(k, b, true)}</b></div>`);
   }
   return rows.join("");
 }
@@ -1315,30 +1346,15 @@ function slotIconHtml(slot) {
   return iconImg(SLOT_ICONS[slot] || "", "slot-icon");
 }
 
-// Sum of equipped gear bonuses. Single source alongside base stats.
-// Slots worn in pairs. Two rings are the same slot worn twice, not two
-// different slots, so they take the best value per stat rather than adding up:
-// a second ring must never dilute the first.
-const PAIRED_SLOTS = ["ring1", "ring2"];
-
+// Add every equipped item's contribution. Both Spirit Ring slots are equal:
+// two offensive, two defensive, two Qi-focused, and hybrid builds all work.
 function gearBonus(p) {
-  const b = { atk: 0, def: 0, hp: 0, crit: 0, critDmg: 0 };
+  const b = Object.fromEntries(GEAR_STAT_KEYS.map(k => [k, 0]));
   if (!p.equipment) return b;
-  const paired = PAIRED_SLOTS.map(() => []);
-  for (const s of Object.keys(p.equipment)) {
-    const it = ITEM_BY_ID[p.equipment[s]];
-    if (!it || !it.stats) continue;
-    const pi = PAIRED_SLOTS.indexOf(s);
-    if (pi >= 0) { paired[pi].push(it.stats); continue; }
-    for (const k of Object.keys(b)) b[k] += it.stats[k] || 0;
-  }
-  // One max across the pair, not a max per ring: adding a max per ring would
-  // be identical to summing them.
-  const worn = paired.flat();
-  if (worn.length) {
-    for (const k of Object.keys(b)) {
-      b[k] += Math.max(...worn.map(s => s[k] || 0));
-    }
+  for (const slot of Object.keys(p.equipment)) {
+    const it = ITEM_BY_ID[p.equipment[slot]];
+    if (!it || it.kind !== "gear" || !it.stats) continue;
+    for (const k of GEAR_STAT_KEYS) b[k] += Number(it.stats[k]) || 0;
   }
   return b;
 }
