@@ -833,11 +833,8 @@ function artCls(it, base) {
 function bagGearAction(itemId) {
   const p = state.player, it = ITEM_BY_ID[itemId];
   if (!it || it.kind !== "gear" || !((p.inventory[itemId] || 0) > 0)) return null;
-  const eq = p.equipment || {};
-  const targets = it.slot === "ring" ? ["ring1", "ring2"] : [it.slot];
-  const worn = targets.find(s => eq[s] === itemId) || null;
-  const free = targets.find(s => !eq[s]) || null;
-  if (worn && !free) return { act: "unequip", slot: worn };
+  // A bag stack represents unequipped copies. The bag action always equips
+  // that copy; explicit unequip is available from the occupied slot tooltip.
   return { act: "equip", slot: null };
 }
 
@@ -912,7 +909,9 @@ function itemTipHtml(itemId, ctx) {
     // Preview the same slot equipItem will choose: a free ring slot first,
     // otherwise ring1. Never compare a new ring against the wrong finger.
     const targetSlot = p && p.equipment
-      ? (targets.find(s => !p.equipment[s]) || targets[0]) : targets[0];
+      ? (targets.find(s => !p.equipment[s])
+          || targets.find(s => p.equipment[s] !== itemId)
+          || targets[0]) : targets[0];
     const cur = p && p.equipment ? (p.equipment[targetSlot] || null) : null;
     if (cur && cur !== itemId && ITEM_BY_ID[cur]) {
       const a = ITEM_BY_ID[cur].stats || {}, b = it.stats || {};
@@ -1159,7 +1158,11 @@ function equipItem(itemId) {
   if (!it || it.kind !== "gear" || (p.inventory[itemId] || 0) <= 0) return;
   const before = derivedStats(p);
   const targets = equipTargets(it);
-  const slot = targets.find(s => !p.equipment[s]) || targets[0];
+  // Fill a free slot first. If both rings are occupied, replace a different
+  // ring before ever swapping a duplicate with itself.
+  const slot = targets.find(s => !p.equipment[s])
+    || targets.find(s => p.equipment[s] !== itemId)
+    || targets[0];
   const prev = p.equipment[slot];
   takeInv(itemId, 1);
   if (prev) addInv(prev, 1);
