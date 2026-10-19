@@ -1,6 +1,6 @@
 /* Ashen Fantasy — vanilla JS state machine: username -> roots -> main */
 const $ = (id) => document.getElementById(id);
-const CLIENT_VERSION = "0.9.0"; // must match server.py server_version + footer
+const CLIENT_VERSION = "0.9.1"; // must match server.py server_version + footer
 const state = {
   username: localStorage.getItem("af_user") || "",
   rollId: null,
@@ -1316,13 +1316,29 @@ function slotIconHtml(slot) {
 }
 
 // Sum of equipped gear bonuses. Single source alongside base stats.
+// Slots worn in pairs. Two rings are the same slot worn twice, not two
+// different slots, so they take the best value per stat rather than adding up:
+// a second ring must never dilute the first.
+const PAIRED_SLOTS = ["ring1", "ring2"];
+
 function gearBonus(p) {
   const b = { atk: 0, def: 0, hp: 0, crit: 0, critDmg: 0 };
   if (!p.equipment) return b;
+  const paired = PAIRED_SLOTS.map(() => []);
   for (const s of Object.keys(p.equipment)) {
     const it = ITEM_BY_ID[p.equipment[s]];
     if (!it || !it.stats) continue;
+    const pi = PAIRED_SLOTS.indexOf(s);
+    if (pi >= 0) { paired[pi].push(it.stats); continue; }
     for (const k of Object.keys(b)) b[k] += it.stats[k] || 0;
+  }
+  // One max across the pair, not a max per ring: adding a max per ring would
+  // be identical to summing them.
+  const worn = paired.flat();
+  if (worn.length) {
+    for (const k of Object.keys(b)) {
+      b[k] += Math.max(...worn.map(s => s[k] || 0));
+    }
   }
   return b;
 }

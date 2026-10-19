@@ -122,9 +122,9 @@ try:
 
     ok("now 1" in adm("/give alpha wooden_sword 1"), "/give grants an item")
     ok("unknown item" in adm("/give alpha not_a_real_item 1"), "/give rejects unknown item")
-    ok("unknown cultivator" in adm("/give ghost qi_pill 1"), "/give rejects unknown cultivator")
-    ok("whole number" in adm("/give alpha qi_pill many"), "/give rejects a bad count")
-    ok("with {'spirit_meal': 3}" in adm('/mail Bug fix | Thanks {"spirit_meal":3}'),
+    ok("unknown cultivator" in adm("/give ghost minor_qi_pill 1"), "/give rejects unknown cultivator")
+    ok("whole number" in adm("/give alpha minor_qi_pill many"), "/give rejects a bad count")
+    ok("with {'roasted_wild_rat_meat': 3}" in adm('/mail Bug fix | Thanks {"roasted_wild_rat_meat":3}'),
        "/mail sends items to everyone")
     ok(adm("/announce Double qi").startswith("announced"), "/announce sets a banner")
     ok("reset alpha" in adm("/reset alpha"), "/reset wipes one cultivator")

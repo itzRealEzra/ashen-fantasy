@@ -11,6 +11,42 @@ and push to `main` on https://github.com/itzRealEzra/ashen-fantasy.
 
 ## [Unreleased]
 
+## [0.9.1] - 2026-10-18
+### Changed
+- Cloth Headband moved from the `head` slot to `headpiece` -- the Immortal
+  Crown / Artifact slot. The helmet keeps `head`.
+- Elixir slots are now the three restores, one per slot, none neutral:
+  - Slot I (Recovery) — **Minor Vitality Elixir**, heal only
+  - Slot II (Cultivation) — **Minor Qi Pill**, Qi only
+  - Slot III (Restorative) — **Roasted Wild Rat Meat**, heal + Qi
+- Qi Pill and Spirit Meal are gone; other items cover those roles. Minor
+  Healing Pill is renamed **Minor Qi Pill**, since a pill granting only Qi is
+  not a healing pill -- it takes over the Qi slot they left behind. Its art is
+  renamed to `minor_qi_pill.png` to match the id, so it still resolves.
+- The two ring fingers now take the **best** value per stat instead of adding
+  up. Jade Guard Ring (def+2 hp+15 crit+1) worn with Copper Spirit Ring
+  (crit+2) reads def 2, hp 15, **crit 2** -- not crit 3, and never less than
+  the better ring. Two rings are the same slot worn twice, not two slots, so
+  the second must not dilute the first. Every other slot still sums, and
+  swapping which finger holds which ring changes nothing.
+
+### Changed (internals)
+- Ring equipping is data-driven. `SLOT_GROUPS` declares that a `ring` item
+  fits either finger and `slot_accepts()` asks it, so the hardcoded
+  `s in ("ring1", "ring2")` test is gone from the sync handler. Adding another
+  worn-pairs slot is now a one-line entry.
+
+### Fixed
+- The ring change shipped with a real bug that the new test caught: it took the
+  maximum **per ring and added the two together**, which is arithmetically
+  identical to summing them, so crit still came out 3. It now takes one maximum
+  across the pair.
+- `_ITEM_ICON_FILES` is empty again. With Qi Pill and Spirit Meal gone, no item
+  draws white line art, so no item is flagged `lineArt`. The mechanism stays in
+  place for when a line-art item returns.
+
+383 tests passing (142 API + 204 client + 37 admin).
+
 ## [0.9.0] - 2026-10-18
 ### Added
 - Second item batch, wired to the art in `public/assets/items`. Every piece is

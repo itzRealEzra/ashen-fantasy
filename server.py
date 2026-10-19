@@ -17,8 +17,8 @@ import mimetypes
 # Single source of truth for the build number. Must match CLIENT_VERSION in
 # public/js/app.js and the footer in public/index.html. A player whose saved
 # patch_version differs gets one patch-note mail when they next check mail.
-SERVER_VERSION = "0.9.0"
-CLIENT_VERSION = "0.9.0"  # for /status only; the client keeps its own copy
+SERVER_VERSION = "0.9.1"
+CLIENT_VERSION = "0.9.1"  # for /status only; the client keeps its own copy
 STARTED_AT = time.time()
 RESTARTED_AT = 0
 RESTART_SEQ = 0
@@ -326,8 +326,9 @@ GEAR = [
     _gear("wooden_shield", "Wooden Shield", "sec_weapon", "🛡️",
           "Planks and a iron rim. Heavy, honest, and better than an open hand.",
           {"def": 3, "hp": 10}),
-    _gear("cloth_headband", "Cloth Headband", "head", "🎗️",
-          "A knotted strip of dyed linen. It stops sweat reaching the eyes.",
+    _gear("cloth_headband", "Cloth Headband", "headpiece", "🎗️",
+          "A knotted strip of dyed linen, worn at the brow. It stops sweat "
+          "reaching the eyes -- and takes the place a crown would.",
           {"def": 1, "hp": 5}),
     _gear("cracked_qi_stone", "Cracked Qi Stone", "core", "🪨",
           "A stone split by a thin seam of living qi. It hums when you breathe.",
@@ -352,21 +353,22 @@ for _g in GEAR:
 # Consumables are the seed items. Add new ones here with
 # _con(id, name, glyph, desc, heal_pct=, qi_pct=). A pill's `use` stats decide
 # which elixir slot it can occupy: heal only / qi only / both.
+# Consumables are the elixir slots. Each restores either HP, Qi, or both, and
+# a slot is labelled after the first consumable matching its shape, so the
+# intended pill for each of the three slots is listed first.
 CONSUMABLES = [
-    # Order matters: elixirSlots() labels a slot after the FIRST consumable
-    # matching its shape, so the intended one for each of the three slots is
-    # listed first. heal-only -> Elixir I, qi-only -> II, both -> III.
-    _con("minor_healing_pill", "Minor Healing Pill", "💊",
-         "A cheap grey pill from the sect store. Knits flesh, nothing more.",
-         heal_pct=20),
-    _con("qi_pill", "Qi Pill", "🔮", "Condensed morning mist. Grants 15% of a stage in Qi.", qi_pct=15),
-    _con("spirit_meal", "Spirit Meal", "🍱", "A hot otherworldly lunch. Restores 15% HP and a little Qi.", heal_pct=15, qi_pct=5),
+    # ---- elixir slot I (heal only)
     _con("minor_vitality_elixir", "Minor Vitality Elixir", "🧪",
-         "Red as a fresh wound. Restores a little of everything.",
-         heal_pct=12, qi_pct=12),
+         "Red as a fresh wound, and it burns going down. Restores a good "
+         "share of the body, and nothing else.", heal_pct=20),
+    # ---- elixir slot II (Qi only)
+    _con("minor_qi_pill", "Minor Qi Pill", "🔹",
+         "A thin blue pellet. Cloud enters through it faster than breath.",
+         qi_pct=15),
+    # ---- elixir slot III (heal + Qi)
     _con("roasted_wild_rat_meat", "Roasted Wild Rat Meat", "🍖",
-         "Hot, salted, and better than it looks. A hunter's staple.",
-         heal_pct=10),
+         "Hot, salted, and better than it looks. Feeds the body and warms "
+         "the meridians at once.", heal_pct=15, qi_pct=5),
 ]
 for _c in CONSUMABLES:
     _c["rarity"] = "Common"
@@ -408,6 +410,18 @@ for _it in ITEMS:
 EQUIP_SLOTS = ("head", "sec_weapon", "chest", "main_weapon", "core", "arm",
                "back", "boots", "legs", "ring1", "ring2", "necklace", "headpiece")
 
+# Gear slots worn more than once. An item declares the group ("ring") and any
+# one of the group's slots will take it, so nothing downstream has to special
+# case ring1/ring2 by name.
+SLOT_GROUPS = {"ring": ("ring1", "ring2")}
+
+
+def slot_accepts(item_slot, equip_slot):
+    """True if a piece with `item_slot` may be worn in `equip_slot`."""
+    if item_slot == equip_slot:
+        return True
+    return equip_slot in SLOT_GROUPS.get(item_slot, ())
+
 # ----------------------------------------------------------------------------
 # Art assets. A mob or item draws its picture from a file named after its id
 # (public/assets/enemies/wild_rat.png, public/assets/items/rat_fur.png). Any id
@@ -422,8 +436,6 @@ _ASSET_DIRS = ("enemies", "items", "icons")
 # Items whose art lives in public/assets/icons rather than assets/items.
 # An item with no entry here is looked up in assets/items by its own id.
 _ITEM_ICON_FILES = {
-    "qi_pill": "qi_pill_icon",
-    "spirit_meal": "spirit_meal_icon",
 }
 
 
@@ -722,8 +734,7 @@ STARTER_PACK = {
     # cloth_headband is a second, weaker head option alongside the helmet
     "cloth_headband": 1, "jade_guard_ring": 1,
     # ---- supplies, so a new cultivator can actually heal and cultivate
-    "minor_healing_pill": 3, "roasted_wild_rat_meat": 3,
-    "minor_vitality_elixir": 2, "qi_pill": 2, "spirit_meal": 2,
+    "minor_vitality_elixir": 3, "roasted_wild_rat_meat": 3, "minor_qi_pill": 2,
 }
 
 
@@ -1208,7 +1219,7 @@ class Handler(BaseHTTPRequestHandler):
                     iid = equip_in.get(s)
                     if iid in ITEM_BY_ID:
                         it = ITEM_BY_ID[iid]
-                        if it["slot"] == s or (s in ("ring1", "ring2") and it["slot"] == "ring"):
+                        if slot_accepts(it["slot"], s):
                             equipment[s] = iid
             inventory = {}
             inv_in = data.get("inventory") or {}

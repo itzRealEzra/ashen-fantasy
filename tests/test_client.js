@@ -35,9 +35,9 @@ const state = { username: "tester", player: null };
 
 const ZERO_STATS = { atk: 0, def: 0, hp: 0, crit: 0, critDmg: 0 };
 const ITEM_FIXTURE = {
-  healing_pill: { id: "healing_pill", name: "Healing Pill", kind: "consumable", slot: null, glyph: "💊", rarity: "Common", desc: "", stats: { ...ZERO_STATS }, use: { heal_pct: 40, qi_pct: 0 } },
-  qi_pill: { id: "qi_pill", name: "Qi Pill", kind: "consumable", slot: null, glyph: "🔮", rarity: "Common", desc: "", stats: { ...ZERO_STATS }, use: { heal_pct: 0, qi_pct: 15 } },
-  spirit_meal: { id: "spirit_meal", name: "Spirit Meal", kind: "consumable", slot: null, glyph: "🍱", rarity: "Common", desc: "", stats: { ...ZERO_STATS }, use: { heal_pct: 15, qi_pct: 5 } },
+  minor_vitality_elixir: { id: "minor_vitality_elixir", name: "Minor Vitality Elixir", kind: "consumable", slot: null, glyph: "💊", rarity: "Common", desc: "", stats: { ...ZERO_STATS }, use: { heal_pct: 40, qi_pct: 0 } },
+  minor_qi_pill: { id: "minor_qi_pill", name: "Minor Qi Pill", kind: "consumable", slot: null, glyph: "🔮", rarity: "Common", desc: "", stats: { ...ZERO_STATS }, use: { heal_pct: 0, qi_pct: 15 } },
+  roasted_wild_rat_meat: { id: "roasted_wild_rat_meat", name: "Roasted Wild Rat Meat", kind: "consumable", slot: null, glyph: "🍱", rarity: "Common", desc: "", stats: { ...ZERO_STATS }, use: { heal_pct: 15, qi_pct: 5 } },
   linen_robe: { id: "linen_robe", name: "Linen Robe", kind: "gear", slot: "chest", glyph: "🥋", rarity: "Common", desc: "", stats: { ...ZERO_STATS, def: 4, hp: 30 } },
   copper_ring: { id: "copper_ring", name: "Copper Ring", kind: "gear", slot: "ring", glyph: "⭕", rarity: "Common", desc: "", stats: { ...ZERO_STATS, crit: 2 } },
   rat_fur: { id: "rat_fur", name: "Rat Fur", kind: "material", slot: null, glyph: "✦", rarity: "Common", desc: "", stats: { ...ZERO_STATS } },
@@ -80,6 +80,7 @@ const parts = [
   grab(/async function fetchServerPlayer\(username\) \{[\s\S]*?\n\}/, "fetchServerPlayer"),
   grab(/async function syncPlayer\(initial\) \{[\s\S]*?\n\}/, "syncPlayer"),
   grab(/function derivedStats\(p\) \{[\s\S]*?\n\}/, "derivedStats"),
+  grab(/const PAIRED_SLOTS = \[[^\]]*\];/, "PAIRED_SLOTS"),
   grab(/function gearBonus\(p\) \{[\s\S]*?\n\}/, "gearBonus"),
   grab(/function playerMaxHp\(p\) \{ return derivedStats\(p\)\.hp; \}/, "playerMaxHp"),
   grab(/function equipTargets\(it\) \{[^}]*\}/, "equipTargets"),
@@ -145,11 +146,13 @@ const lib = new Function("__", prelude + parts + `
   return {
     battle, calls,
     setRealms: t => { REALM_TABLE = t; },
+    ITEM_BY_ID,
     syncPlayer, fetchServerPlayer, normalizePlayer, breakthroughReady, updateQi,
     advanceRealm, accrue, equipItem, unequipSlot, bagGearAction, useConsumable,
     loadElixirSlot, unloadElixir, elixirPreferredSlot, leaveActiveHunt,
     showBattleAreas, battleTick, derivedStats, playerMaxHp, addInv, takeInv,
     itemTipHtml, itemTypeLabel, bagTabOf, dropsFor, iconHtml, artCls, BAG_TABS, slotTypeLabel,
+    ITEM_BY_ID, gearBonus, derivedStats,
     ITEM_RARITY_COLORS,
     clickBreakthrough: () => els["breakthrough-btn"].onclick(),
   };
@@ -192,27 +195,27 @@ state.player = basePlayer();
   // ============ 3. restore-safe normalize: legacy 4-slot elixirs re-home to 3 ============
   lib.setRealms(REALMS_FIXTURE);
   let p = basePlayer();
-  p.elixirs = ["healing_pill", "healing_pill", "qi_pill", "spirit_meal"]; // legacy + dup
-  p.inventory = { healing_pill: 2, qi_pill: 1, spirit_meal: 1, bogus_item: 5 };
+  p.elixirs = ["minor_vitality_elixir", "minor_vitality_elixir", "minor_qi_pill", "roasted_wild_rat_meat"]; // legacy + dup
+  p.inventory = { minor_vitality_elixir: 2, minor_qi_pill: 1, roasted_wild_rat_meat: 1, bogus_item: 5 };
   p.equipment.head = "linen_robe"; // wrong slot (chest item) -> cleared
   p.realm_idx = 0;
   lib.normalizePlayer(p);
-  ok(JSON.stringify(p.elixirs) === JSON.stringify(["healing_pill", "qi_pill", "spirit_meal"]),
+  ok(JSON.stringify(p.elixirs) === JSON.stringify(["minor_vitality_elixir", "minor_qi_pill", "roasted_wild_rat_meat"]),
     "legacy 4-slot elixirs dedup + re-home into 3 named slots");
   ok(p.equipment.head === null, "wrong-slot equipped item cleared on normalize");
   ok(p.equipment.chest === "linen_robe", "wrong-slot gear re-homes to its real slot");
   ok(!("bogus_item" in p.inventory), "unknown inventory item dropped");
 
   p = basePlayer();
-  p.elixirs = [null, null, null, "qi_pill"]; // pill stranded in old slot 4
+  p.elixirs = [null, null, null, "minor_qi_pill"]; // pill stranded in old slot 4
   p.stats = undefined; p.roots = undefined;
   lib.normalizePlayer(p);
-  ok(p.elixirs[1] === "qi_pill" && p.elixirs.length === 3, "stranded pill re-homed; missing stats/roots defaulted");
+  ok(p.elixirs[1] === "minor_qi_pill" && p.elixirs.length === 3, "stranded pill re-homed; missing stats/roots defaulted");
   ok(p.stats && p.stats.qi_mult === 1 && Array.isArray(p.roots), "restore-safe stats/roots defaults");
 
-  ok(lib.elixirPreferredSlot(ITEM_FIXTURE.healing_pill) === 0, "healing pill -> slot 0");
-  ok(lib.elixirPreferredSlot(ITEM_FIXTURE.qi_pill) === 1, "qi pill -> slot 1");
-  ok(lib.elixirPreferredSlot(ITEM_FIXTURE.spirit_meal) === 2, "spirit meal -> slot 2");
+  ok(lib.elixirPreferredSlot(ITEM_FIXTURE.minor_vitality_elixir) === 0, "healing pill -> slot 0");
+  ok(lib.elixirPreferredSlot(ITEM_FIXTURE.minor_qi_pill) === 1, "qi pill -> slot 1");
+  ok(lib.elixirPreferredSlot(ITEM_FIXTURE.roasted_wild_rat_meat) === 2, "spirit meal -> slot 2");
 
   // ============ 4. equipment / inventory counts / rings ============
   state.player = basePlayer();
@@ -234,32 +237,69 @@ state.player = basePlayer();
     "two rings fill both ring slots");
   ok(JSON.stringify(lib.bagGearAction("copper_ring")) === JSON.stringify({ act: "unequip", slot: "ring1" }),
     "bag action unequip when both fingers full");
+
+  // ---- paired slots take the best value, they do not add up
+  // Jade Guard Ring def+2 hp+15 crit+1 against Copper Spirit Ring crit+2 must
+  // read def 2, hp 15, crit 2 -- not crit 3, and never less than the better ring.
+  const jade = { id: "jade_guard_ring", name: "Jade Guard Ring", kind: "gear", slot: "ring", glyph: "d", rarity: "Uncommon", desc: "", stats: { ...ZERO_STATS, def: 2, hp: 15, crit: 1 } };
+  const copper = { id: "copper_spirit_ring", name: "Copper Spirit Ring", kind: "gear", slot: "ring", glyph: "r", rarity: "Common", desc: "", stats: { ...ZERO_STATS, crit: 2 } };
+  lib.ITEM_BY_ID[jade.id] = jade;
+  lib.ITEM_BY_ID[copper.id] = copper;
+  state.player.equipment = { ring1: null, ring2: null, chest: null, head: null, main_weapon: null };
+  const base = { ...lib.gearBonus(state.player) };
+  ok(base.def === 0 && base.hp === 0 && base.crit === 0, "no rings means no ring bonus");
+
+  state.player.equipment.ring1 = jade.id;
+  const oneJade = lib.gearBonus(state.player);
+  ok(oneJade.def === 2 && oneJade.hp === 15 && oneJade.crit === 1,
+    "a single Jade Guard Ring gives its own stats");
+
+  state.player.equipment.ring2 = copper.id;
+  const both = lib.gearBonus(state.player);
+  ok(both.crit === 2, "two rings take the higher crit (2), never the sum (3)");
+  ok(both.def === 2 && both.hp === 15, "a stat only one ring has is kept in full");
+  ok(both.crit >= Math.max(oneJade.crit, 2), "the second ring never reduces the first");
+
+  // swapping the fingers must not change anything
+  state.player.equipment.ring1 = copper.id;
+  state.player.equipment.ring2 = jade.id;
+  const swapped = lib.gearBonus(state.player);
+  ok(swapped.crit === both.crit && swapped.def === both.def && swapped.hp === both.hp,
+    "ring order does not matter");
+
+  // a stat neither ring has still contributes nothing, and non-paired gear
+  // keeps summing normally
+  state.player.equipment.chest = "linen_robe"; // def+4 hp+30
+  const withChest = lib.gearBonus(state.player);
+  ok(withChest.def === both.def + 4 && withChest.hp === both.hp + 30,
+    "non-paired slots still add up on top of the paired ones");
+  state.player.equipment = { ring1: null, ring2: null, chest: null, head: null, main_weapon: null };
   ok(state.player.inventory.copper_ring === 1, "ring stack consumed on wear");
 
   // ============ 5. consumables never wasted ============
   state.player = basePlayer();
   state.player.hp = MAXHP; // full
-  state.player.inventory = { healing_pill: 1 };
-  lib.useConsumable("healing_pill");
-  ok(state.player.inventory.healing_pill === 1 && state.player.hp === MAXHP,
+  state.player.inventory = { minor_vitality_elixir: 1 };
+  lib.useConsumable("minor_vitality_elixir");
+  ok(state.player.inventory.minor_vitality_elixir === 1 && state.player.hp === MAXHP,
     "healing pill at full HP is not consumed");
 
   state.player.hp = 100;
-  lib.useConsumable("healing_pill");
+  lib.useConsumable("minor_vitality_elixir");
   ok(Math.round(state.player.hp) === Math.round(100 + MAXHP * 0.4), "healing pill heals 40% when hurt");
-  ok(!state.player.inventory.healing_pill, "consumed pill removed from bag");
+  ok(!state.player.inventory.minor_vitality_elixir, "consumed pill removed from bag");
 
   state.player = basePlayer();
-  state.player.inventory = { qi_pill: 1 };
+  state.player.inventory = { minor_qi_pill: 1 };
   state.player.cultivation = 0;
-  lib.useConsumable("qi_pill");
+  lib.useConsumable("minor_qi_pill");
   ok(Math.abs(state.player.cultivation - 50 * 0.15) < 1e-9, "qi pill grants 15% of stage qi");
 
   state.player = basePlayer();
   state.player.hp = MAXHP;
-  state.player.inventory = { spirit_meal: 1 };
-  lib.useConsumable("spirit_meal");
-  ok(Math.abs(state.player.cultivation - 50 * 0.05) < 1e-9 && !state.player.inventory.spirit_meal,
+  state.player.inventory = { roasted_wild_rat_meat: 1 };
+  lib.useConsumable("roasted_wild_rat_meat");
+  ok(Math.abs(state.player.cultivation - 50 * 0.05) < 1e-9 && !state.player.inventory.roasted_wild_rat_meat,
     "spirit meal at full HP still grants its qi and is consumed");
 
   // ============ 6. combat loop: kill, loot, qi, hp mirror, respawn guard ============
@@ -420,7 +460,7 @@ state.player = basePlayer();
   // Materials used to fall back to a slow native title attribute. Every item
   // in the bag must now render the real tooltip.
   state.player = basePlayer();
-  state.player.inventory = { rat_fur: 3, wolf_fang: 2, beast_core_fragment: 1, qi_pill: 2, linen_robe: 1 };
+  state.player.inventory = { rat_fur: 3, wolf_fang: 2, beast_core_fragment: 1, minor_qi_pill: 2, linen_robe: 1 };
   lib.battle.areas = [{
     id: "origin_village", name: "Origin Village", req_idx: 0, req: "Mortal", difficulty: "Beginner",
     mobs: [
@@ -439,7 +479,7 @@ state.player = basePlayer();
   ok(/85%/.test(matTip), "material tooltip shows the drop chance");
   ok(/Held: 3/.test(matTip), "material tooltip shows how many are held");
   ok(!/tip-actions/.test(matTip), "material tooltip offers no actions");
-  const conTip = lib.itemTipHtml("qi_pill", {});
+  const conTip = lib.itemTipHtml("minor_qi_pill", {});
   ok(/Cultivation Consumable/.test(conTip) && /tip-actions/.test(conTip), "consumable tooltip keeps its type + actions");
   const gearTip = lib.itemTipHtml("linen_robe", {});
   ok(/Body Armor/.test(gearTip) && /def\+4/.test(gearTip), "gear tooltip shows slot type + stats");
@@ -584,9 +624,11 @@ state.player = basePlayer();
   function renderInventorySrc(overrides, lineArtIds) {
     let html = "";
     const root = { set innerHTML(v) { html = v; }, get innerHTML() { return html; }, querySelectorAll: () => [] };
+    // Items now all draw colour art from assets/items; nothing is line art.
     const art = {
-      qi_pill: "/assets/icons/qi_pill_icon.png",
-      spirit_meal: "/assets/icons/spirit_meal_icon.png",
+      minor_vitality_elixir: "/assets/items/minor_vitality_elixir.png",
+      minor_qi_pill: "/assets/items/minor_qi_pill.png",
+      roasted_wild_rat_meat: "/assets/items/roasted_wild_rat_meat.png",
     };
     const sb = {
       console,
@@ -603,7 +645,7 @@ state.player = basePlayer();
       DOLL_ROWS: [[{ s: "core", label: "Spirit Core" }, { s: "headpiece", label: "Immortal Crown" }]],
       BAG_TABS: [["all", "All"]],
       ITEM_RARITY_COLORS: {}, ITEM_DEFAULT_RARITY: "Common",
-      state: { player: { username: "t", equipment: {}, elixirs: [null, null, null], inventory: { qi_pill: 3, spirit_meal: 1 } } },
+      state: { player: { username: "t", equipment: {}, elixirs: [null, null, null], inventory: { minor_qi_pill: 3, roasted_wild_rat_meat: 1 } } },
       invTab: "all",
       $: id => (id === "inventory-root" ? root : null),
       hideTip() {}, renderInventory() {}, slotTypeLabel() { return ""; },
@@ -615,16 +657,13 @@ state.player = basePlayer();
       iconImg: (name, cls) => (sb.ICON[name] ? `<img class="${cls}" src="${sb.ICON[name]}" />` : ""),
     };
     Object.assign(sb, overrides || {});
-    // Attach art to the two consumables the way the server does, and mark
-    // them lineArt exactly as _apply_art does for icons/ sourced art.
-    for (const id of ["qi_pill", "spirit_meal"]) sb.ITEM_BY_ID[id].img = art[id];
+    for (const id of Object.keys(art)) sb.ITEM_BY_ID[id].img = art[id];
     for (const id of Object.keys(lineArtIds || {})) {
       if (lineArtIds[id] && sb.ITEM_BY_ID[id]) sb.ITEM_BY_ID[id].lineArt = true;
     }
-    // The shared fixture still carries healing_pill (removed from the live
-    // item db in 0.8.0). Drop it here so the render matches the real game:
-    // with no heal-only pill, slot 0 is the neutral "Elixir I" fallback.
-    delete sb.ITEM_BY_ID.healing_pill;
+    // All three elixir slots have a real consumable behind them now, so the
+    // neutral "Elixir I" fallback no longer occurs in the live game. Nothing to
+    // delete: the fixture matches the shipped item set.
     vm.createContext(sb);
     for (const fn of ["esc", "pillShape", "elixirSlots", "iconHtml", "artCls", "slotIconHtml", "bagTabOf", "renderInventory"]) {
       const src = grabFnSrc(fn);
@@ -637,21 +676,27 @@ state.player = basePlayer();
   const empty = renderInventorySrc();
   const elixirSrcs = [...empty.matchAll(/data-elixir="(\d)"[^>]*>.*?src="([^"]+)"/gs)].map(m => m[2]);
   ok(elixirSrcs.length === 3, "three elixir slots render");
-  ok(elixirSrcs[0] === "/assets/icons/elixir_icon.png",
-     "empty neutral 'Elixir I' slot uses the generic bottle");
-  ok(elixirSrcs[1] === "/assets/icons/qi_pill_icon.png",
-     "empty slot labelled 'Qi Pill' shows the Qi Pill art, not the bottle");
-  ok(elixirSrcs[2] === "/assets/icons/spirit_meal_icon.png",
-     "empty slot labelled 'Spirit Meal' shows the Spirit Meal art, not the bottle");
+  ok(/data-slot-name="Minor Vitality Elixir"/.test(empty),
+     "slot I is named Minor Vitality Elixir");
+  ok(/data-slot-name="Minor Qi Pill"/.test(empty), "slot II is named Minor Qi Pill");
+  ok(/data-slot-name="Roasted Wild Rat Meat"/.test(empty),
+     "slot III is named Roasted Wild Rat Meat");
+  ok(!empty.includes("Elixir I"), "no elixir slot falls back to a neutral name");
+  ok(!empty.includes("/assets/icons/elixir_icon.png"),
+     "the generic bottle is unused while every slot has a real pill");
+  ok(elixirSrcs[1] === "/assets/items/minor_qi_pill.png",
+     "empty slot II shows the Minor Qi Pill's own art");
+  ok(elixirSrcs[2] === "/assets/items/roasted_wild_rat_meat.png",
+     "empty slot III shows the Roasted Wild Rat Meat's own art");
   // Equipment slots are icon-only now: no name element is emitted at all,
   // filled or empty. The label still rides along in data-slot-name and still
   // shows in the tooltip.
   ok(!/class="slot-name"/.test(empty), "no slot name element is rendered on elixir slots");
   ok(!/slot-name"/.test(empty.replace(/data-slot-name="[^"]*"/g, "")),
      "no visible slot-name text remains outside the data attribute");
-  ok(/data-slot-name="Elixir I"/.test(empty),
+  ok(/data-slot-name="Minor Qi Pill"/.test(empty),
      "an empty slot still carries its name in data-slot-name for the tooltip");
-  ok(/data-slot-name="Qi Pill"/.test(empty), "a named pill slot carries its name for the tooltip");
+  ok(/data-slot-name="Minor Qi Pill"/.test(empty), "a named pill slot carries its name for the tooltip");
   // The bottle must never appear on a slot that names a pill.
   ok(!(/data-elixir="1"[^>]*>.*?elixir_icon/.test(empty)),
      "no bottle icon on the Qi Pill slot");
@@ -661,7 +706,7 @@ state.player = basePlayer();
   ok(/function artCls\(it, base\)/.test(SRC), "artCls exists");
   ok(/return base \+ \(it && it\.lineArt \? " line-art" : ""\);/.test(SRC),
      "artCls appends line-art only for items the server flagged");
-  const lineArted = renderInventorySrc({}, { qi_pill: true, spirit_meal: true });
+  const lineArted = renderInventorySrc({}, { minor_qi_pill: true, roasted_wild_rat_meat: true });
   ok(/data-elixir="1"[^>]*>[\s\S]{0,200}class="art art-slot line-art"/.test(lineArted),
      "a flagged pill renders with the line-art class");
   const plainArt = renderInventorySrc();

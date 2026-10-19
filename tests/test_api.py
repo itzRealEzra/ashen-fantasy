@@ -263,11 +263,11 @@ try:
        "breakthrough advances the realm server-side")
 
     # ============ 7. qi pill inventory delta = allowance, not a cheat ============
-    fresh("pill_user", cultivation=100, inventory={"spirit_meal": 3, "qi_pill": 2})
+    fresh("pill_user", cultivation=100, inventory={"roasted_wild_rat_meat": 3, "minor_qi_pill": 2})
     cost0 = server.REALMS[0]["cost"]
     claim = 100 + cost0 * 0.15
     st, j = sync("pill_user", cultivation=claim,
-                 inventory={"spirit_meal": 3, "qi_pill": 1})
+                 inventory={"roasted_wild_rat_meat": 3, "minor_qi_pill": 1})
     ok(st == 200 and j["clamped"] is False, "one qi pill consumed is never clamped")
     ok(abs(j["player"]["cultivation"] - claim) < 0.01, "pill qi lands in full")
 
@@ -275,7 +275,7 @@ try:
     server.PLAYERS["pill_user"]["cultivation"] = 100
     server.PLAYERS["pill_user"]["last_seen"] = time.time()
     st, j = sync("pill_user", cultivation=claim,
-                 inventory={"spirit_meal": 3, "qi_pill": 1})
+                 inventory={"roasted_wild_rat_meat": 3, "minor_qi_pill": 1})
     ok(st == 200 and j["clamped"] is True, "same claim without spending a pill is clamped")
     ok(j["player"]["cultivation"] < claim, "clamped cultivation stays below the claim")
 
@@ -290,24 +290,24 @@ try:
     # slot rules against whatever items exist now: the seed consumables.
     fresh("gear_valid")
     st, j = sync("gear_valid",
-                 equipment={"head": "qi_pill", "chest": "bogus_crown",
-                            "ring1": "spirit_meal", "boots": "bogus_crown"},
-                 inventory={"spirit_meal": 100000, "bogus_item": 9,
-                            "qi_pill": "many", "healing_pill": 4},
-                 elixirs=["qi_pill", "qi_pill", "spirit_meal", "healing_pill"])
+                 equipment={"head": "minor_qi_pill", "chest": "bogus_crown",
+                            "ring1": "roasted_wild_rat_meat", "boots": "bogus_crown"},
+                 inventory={"roasted_wild_rat_meat": 100000, "bogus_item": 9,
+                            "minor_qi_pill": "many", "minor_vitality_elixir": 4},
+                 elixirs=["minor_qi_pill", "minor_qi_pill", "roasted_wild_rat_meat", "minor_vitality_elixir"])
     eq = j["player"]["equipment"]
     ok(st == 200 and eq.get("head") is None, "wrong-slot item rejected server-side")
     ok(all(v is None for v in eq.values()), "no item equips into a slot it doesn't belong to")
     ok(eq.get("boots") is None, "unknown gear rejected")
     inv = j["player"]["inventory"]
-    ok(inv.get("healing_pill") is None, "removed item dropped from inventory")
-    ok(inv.get("spirit_meal") == 9999, "item counts clamp to 9999")
-    ok("bogus_item" not in inv and "qi_pill" not in inv, "unknown / non-numeric items dropped")
-    ok(j["player"]["elixirs"] == ["qi_pill", None, "spirit_meal"],
+    ok(inv.get("qi_pill") is None, "removed item dropped from inventory")
+    ok(inv.get("roasted_wild_rat_meat") == 9999, "item counts clamp to 9999")
+    ok("bogus_item" not in inv and "minor_qi_pill" not in inv, "unknown / non-numeric items dropped")
+    ok(j["player"]["elixirs"] == ["minor_qi_pill", None, "roasted_wild_rat_meat"],
        "elixirs dedup to 3 named slots")
 
-    st, j = sync("gear_valid", inventory={"spirit_meal": -2})
-    ok(j["player"]["inventory"].get("spirit_meal") == 0, "negative counts clamp to zero")
+    st, j = sync("gear_valid", inventory={"roasted_wild_rat_meat": -2})
+    ok(j["player"]["inventory"].get("roasted_wild_rat_meat") == 0, "negative counts clamp to zero")
 
     # ============ 10. dao insight is monotonic ============
     fresh("insight_sage", cultivation=0, dao_insight=5)
@@ -458,12 +458,11 @@ try:
         # common armour set, one per slot
         "wooden_sword", "wooden_shield", "leather_helmet", "leather_chest",
         "leather_leggings", "leather_bracers", "leather_boots", "leather_cape",
-        # the slots the first set left empty, plus a second head option
+        # the slots the first set left empty
         "cracked_qi_stone", "chipped_jade_pendant", "copper_spirit_ring",
         "cloth_headband", "jade_guard_ring",
-        # supplies
-        "minor_healing_pill", "roasted_wild_rat_meat",
-        "minor_vitality_elixir", "qi_pill", "spirit_meal",
+        # supplies: one per elixir slot
+        "minor_vitality_elixir", "minor_qi_pill", "roasted_wild_rat_meat",
     }
     ok(set(sm["items"]) == expected_pack,
        "starter pack holds all %d entries" % len(expected_pack))
@@ -489,18 +488,25 @@ try:
     first_of = {}
     for c in server.CONSUMABLES:
         first_of.setdefault(shape(c["use"]), c["id"])
-    ok(first_of.get("heal") == "minor_healing_pill",
-       "the heal-only elixir slot is now named Minor Healing Pill")
-    ok(first_of.get("qi") == "qi_pill", "the qi-only slot stays Qi Pill")
-    ok(first_of.get("both") == "spirit_meal", "the restorative slot stays Spirit Meal")
+    ok(first_of.get("heal") == "minor_vitality_elixir",
+       "the heal-only elixir slot is named Minor Vitality Elixir")
+    ok(first_of.get("qi") == "minor_qi_pill", "the qi-only slot is named Minor Qi Pill")
+    ok(first_of.get("both") == "roasted_wild_rat_meat",
+       "the restorative slot is named Roasted Wild Rat Meat")
+    ok(len(first_of) == 3 and "" not in first_of,
+       "all three elixir slots have a named consumable and none is neutral")
     ok(all(shape(server.ITEM_BY_ID[i]["use"]) for i in sm["items"]
            if server.ITEM_BY_ID[i]["kind"] == "consumable"),
        "every consumable in the pack has a real effect")
     covered = {server.ITEM_BY_ID[i]["slot"] for i in pack_gear}
-    ok(len(covered) == 11, "the pack covers 11 distinct equip slots (got %d)" % len(covered))
+    ok(len(covered) == 12, "the pack covers 12 distinct equip slots (got %d)" % len(covered))
     ok({"main_weapon", "sec_weapon", "head", "chest", "core", "arm", "back",
-        "boots", "legs", "necklace", "ring"} <= covered,
+        "boots", "legs", "necklace", "ring", "headpiece"} <= covered,
        "the pack still covers every slot it set out to")
+    ok(server.ITEM_BY_ID["cloth_headband"]["slot"] == "headpiece",
+       "Cloth Headband sits in the Immortal Crown / Artifact slot, not head")
+    ok(server.ITEM_BY_ID["leather_helmet"]["slot"] == "head",
+       "the helmet keeps the head slot")
 
     # ---- the read rule: items stay unread until claimed
     ok(sm["read"] is False and sm["claimed"] is False, "item mail arrives unread and unclaimed")
@@ -548,17 +554,17 @@ try:
 
     # a maintenance reward that DOES carry items behaves like any attachment
     st, j = req("/api/mail/maintenance",
-                {"subject": "Bug bounty", "items": {"spirit_meal": 3}})
+                {"subject": "Bug bounty", "items": {"roasted_wild_rat_meat": 3}})
     st, j = mail_get("plainmail")
     bounty = [m for m in j["mail"] if m["kind"] == "maintenance" and m["subject"] == "Bug bounty"]
     ok(bounty and bounty[0]["read"] is False, "a reward with items arrives unread")
-    ok(bounty and bounty[0]["items"].get("spirit_meal") == 3, "reward items are recorded")
+    ok(bounty and bounty[0]["items"].get("roasted_wild_rat_meat") == 3, "reward items are recorded")
     st, j = mail_post("/api/mail/read", "plainmail", bounty[0]["id"])
     ok(j["mail"]["read"] is False, "reward with items stays unread until claimed")
     st, j = mail_post("/api/mail/claim", "plainmail", bounty[0]["id"])
     # plainmail already claimed the starter pack, so the reward adds to it.
-    expect = server.STARTER_PACK.get("spirit_meal", 0) + 3
-    ok(j["unread"] == 0 and j["inventory"].get("spirit_meal") == expect,
+    expect = server.STARTER_PACK.get("roasted_wild_rat_meat", 0) + 3
+    ok(j["unread"] == 0 and j["inventory"].get("roasted_wild_rat_meat") == expect,
        "reward claim pays out on top of what the player already held")
 
     # ---- unknown mail / cultivator
@@ -571,7 +577,7 @@ try:
 
     # ---- mail cannot smuggle in items that do not exist
     st, j = req("/api/mail/maintenance",
-                {"subject": "Bad items", "items": {"not_a_real_item": 5, "spirit_meal": 1}})
+                {"subject": "Bad items", "items": {"not_a_real_item": 5, "roasted_wild_rat_meat": 1}})
     ok("not_a_real_item" not in (j.get("items") or {}), "unknown items are dropped from mail")
     st, j = req("/api/mail/maintenance", {"body": "no subject"})
     ok(st == 400, "maintenance mail requires a subject")
@@ -608,7 +614,7 @@ try:
     # ---- mail is server-held: it is not client-settable through /api/sync
     server.PLAYERS["mailer"]["mail"] = []
     server._deliver(server.PLAYERS["mailer"], server._new_mail("starter", "server mail", "x",
-                                                               {"spirit_meal": 1}))
+                                                               {"roasted_wild_rat_meat": 1}))
     before = len(server.PLAYERS["mailer"]["mail"])
     sync("mailer", mail=[{"id": "fake", "items": {"wooden_sword": 99}, "claimed": False}])
     ok(len(server.PLAYERS["mailer"]["mail"]) == before, "/api/sync cannot inject or rewrite mail")
