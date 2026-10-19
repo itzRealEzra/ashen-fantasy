@@ -17,7 +17,7 @@ import mimetypes
 # Single source of truth for the build number. Must match CLIENT_VERSION in
 # public/js/app.js and the footer in public/index.html. A player whose saved
 # patch_version differs gets one patch-note mail when they next check mail.
-SERVER_VERSION = "0.9.2"
+SERVER_VERSION = "0.9.3"
 CLIENT_VERSION = "0.9.2"  # for /status only; the client keeps its own copy
 STARTED_AT = time.time()
 RESTARTED_AT = 0
@@ -275,7 +275,9 @@ ITEM_RARITY_BANDS = {
 }
 
 def _gear(id, name, slot, glyph, desc, stats=None):
-    base = {"atk": 0, "def": 0, "hp": 0, "crit": 0, "critDmg": 0}
+    # qi_rate_pct is a percentage bonus to passive, offline, and manual cultivation.
+    base = {"atk": 0, "def": 0, "hp": 0, "crit": 0, "critDmg": 0,
+            "qi_rate_pct": 0}
     if stats:
         base.update(stats)
     return {"id": id, "name": name, "kind": "gear", "slot": slot,
@@ -284,14 +286,16 @@ def _gear(id, name, slot, glyph, desc, stats=None):
 def _con(id, name, glyph, desc, heal_pct=0, qi_pct=0):
     return {"id": id, "name": name, "kind": "consumable", "slot": None,
             "glyph": glyph, "desc": desc,
-            "stats": {"atk": 0, "def": 0, "hp": 0, "crit": 0, "critDmg": 0},
+            "stats": {"atk": 0, "def": 0, "hp": 0, "crit": 0, "critDmg": 0,
+                      "qi_rate_pct": 0},
             "use": {"heal_pct": heal_pct, "qi_pct": qi_pct}}
 
 # Items are added back one at a time. Copy the template below and give the
 # new item a unique id, the slot it equips into, and its stat block.
 #
 #   _gear("item_id", "Item Name", "main_weapon", "⚔️", "Flavour text.",
-#         {"atk": 6, "def": 0, "hp": 0, "crit": 0, "critDmg": 0}),
+#         {"atk": 6, "def": 0, "hp": 0, "crit": 0, "critDmg": 0,
+#          "qi_rate_pct": 0}),
 #
 # Remember to add a drop source for it in _GEAR_DROPS below.
 GEAR = [
@@ -332,16 +336,19 @@ GEAR = [
           {"def": 1, "hp": 5}),
     _gear("cracked_qi_stone", "Cracked Qi Stone", "core", "🪨",
           "A stone split by a thin seam of living qi. It hums when you breathe.",
-          {"def": 2, "hp": 15}),
+          {"def": 2, "hp": 15, "qi_rate_pct": 5}),
     _gear("chipped_jade_pendant", "Chipped Jade Pendant", "necklace", "📿",
           "Jade with a corner broken off. Still cool against the sternum.",
           {"hp": 12, "crit": 1}),
     _gear("copper_spirit_ring", "Copper Spirit Ring", "ring", "💍",
-          "A plain copper band. The sect gives one to every new disciple.",
-          {"crit": 2}),
+          "A plain copper band that sharpens the wearer's critical strikes.",
+          {"crit": 2, "critDmg": 5}),
     _gear("jade_guard_ring", "Jade Guard Ring", "ring", "💎",
-          "A darker green jade, kept polished by a nervous thumb.",
-          {"def": 2, "hp": 15, "crit": 1}),
+          "Dense green jade that steadies the body and turns aside blows.",
+          {"def": 2, "hp": 15}),
+    _gear("qi_gathering_ring", "Qi Gathering Ring", "ring", "🔹",
+          "A spirit-threaded ring that helps draw ambient Qi into the dantian.",
+          {"qi_rate_pct": 5}),
 ]
 
 # Gear rarity follows root-rarity colors (valley Mortal -> peaks Immortal).
@@ -376,7 +383,8 @@ for _c in CONSUMABLES:
 def _slug(name):
     return re.sub(r"[^a-z0-9]+", "_", name.lower()).strip("_")
 
-_ZERO = {"atk": 0, "def": 0, "hp": 0, "crit": 0, "critDmg": 0}
+_ZERO = {"atk": 0, "def": 0, "hp": 0, "crit": 0, "critDmg": 0,
+         "qi_rate_pct": 0}
 
 def _material_rarities():
     """Highest rarity any beast drops each material under."""
@@ -553,17 +561,43 @@ def _build_realms():
 
 REALMS = _build_realms()
 
+def gear_qi_rate_pct(player):
+    """Additive Qi-rate percentage from every valid equipped gear slot."""
+    equipment = player.get("equipment") or {}
+    if not isinstance(equipment, dict):
+        return 0.0
+    total = 0.0
+    for slot in EQUIP_SLOTS:
+        iid = equipment.get(slot)
+        it = ITEM_BY_ID.get(iid)
+        if not it or it.get("kind") != "gear":
+            continue
+        if not slot_accepts(it.get("slot"), slot):
+            continue
+        try:
+            total += float((it.get("stats") or {}).get("qi_rate_pct", 0) or 0)
+        except (TypeError, ValueError):
+            continue
+    return total
+
+
+def effective_qi_multiplier(player):
+    """Root Qi multiplier with the sum of equipped Qi-rate bonuses applied."""
+    try:
+        root_mult = float((player.get("stats") or {}).get("qi_mult", 1.0))
+    except (TypeError, ValueError):
+        root_mult = 1.0
+    return max(0.0, root_mult) * max(0.0, 1.0 + gear_qi_rate_pct(player) / 100.0)
+
+
 def stage_rate(player):
-    """Authoritative Qi/sec for sync validation."""
+    """Authoritative Qi/sec for sync validation, including equipped gear."""
     try:
         idx = int(player.get("realm_idx", 0))
     except (TypeError, ValueError):
         idx = 0
     idx = max(0, min(idx, len(REALMS) - 1))
-    try:
-        mult = float(player.get("stats", {}).get("qi_mult", 1.0))
-    except (TypeError, ValueError):
-        mult = 1.0
+    mult = effective_qi_multiplier(player)
     mode = SECLUSION_MULT if player.get("seclusion") else 1.0
     return BASE_QI_PER_SEC * mult * REALMS[idx]["rate_mult"] * mode
 
@@ -574,7 +608,7 @@ def max_legit_cultivation(stored, elapsed):
     online = min(elapsed, ONLINE_GRACE_SEC)
     offline = min(max(elapsed - ONLINE_GRACE_SEC, 0), OFFLINE_CAP_SEC)
     rate = stage_rate(stored)
-    qi_mult = float(stored.get("stats", {}).get("qi_mult", 1.0))
+    qi_mult = effective_qi_multiplier(stored)
     idle = rate * online + rate * offline * OFFLINE_EFF
     manual = MANUAL_ALLOW_MULT * qi_mult * online
     return float(stored.get("cultivation", 0)) + idle + manual
@@ -729,10 +763,12 @@ STARTER_PACK = {
     "wooden_sword": 1, "wooden_shield": 1, "leather_helmet": 1,
     "leather_chest": 1, "leather_leggings": 1, "leather_bracers": 1,
     "leather_boots": 1, "leather_cape": 1,
-    # ---- second batch: the slots the first set left empty
-    "cracked_qi_stone": 1, "chipped_jade_pendant": 1, "copper_spirit_ring": 1,
+    # ---- second batch: remaining equipment slots and balanced accessories
+    "cracked_qi_stone": 1, "chipped_jade_pendant": 1,
+    # Two copies per ring let players choose offense, defense, Qi, or hybrids.
+    "copper_spirit_ring": 2, "jade_guard_ring": 2, "qi_gathering_ring": 2,
     # cloth_headband is a second, weaker head option alongside the helmet
-    "cloth_headband": 1, "jade_guard_ring": 1,
+    "cloth_headband": 1,
     # ---- supplies, so a new cultivator can actually heal and cultivate
     "minor_vitality_elixir": 3, "roasted_wild_rat_meat": 3, "minor_qi_pill": 2,
 }
@@ -782,9 +818,9 @@ def _send_starter_pack(stored):
     return _deliver(stored, _new_mail(
         "starter", "Newcomer Provisions",
         "The Ashen Sect sends a welcome kit to every new cultivator. "
-        "One piece of gear for every armour slot -- plain Common stock, but "
-        "it will keep you alive long enough to earn something better.\n\n"
-        "Claim it, then equip the pieces from your Bag.",
+        "Common equipment for every slot, plus offensive, defensive, and "
+        "Qi-focused Spirit Rings so you can try different builds.\n\n"
+        "Claim the kit, then equip your choices from the Bag.",
         STARTER_PACK))
 
 
@@ -796,9 +832,13 @@ def _ensure_patch_mail(stored, version):
     stored["patch_version"] = version
     return _deliver(stored, _new_mail(
         "patch", "Patch Notes",
-        "The game was rebuilt for patch %s. Origin Village stands where the "
-        "hunting grounds used to be, and loot is drawn from a fresh item "
-        "ladder. A newcomer's kit is waiting in your mail." % version))
+        "Equipment bonuses now add across all equipped slots, including both "
+        "Spirit Ring slots. Qi Rate gear improves passive and offline "
+        "cultivation as well as the displayed rate. This patch includes two "
+        "copies each of an offensive, defensive, and Qi-focused ring so you "
+        "can test double-ring and hybrid builds." % version,
+        {"copper_spirit_ring": 2, "jade_guard_ring": 2,
+         "qi_gathering_ring": 2}))
 
 
 class Handler(BaseHTTPRequestHandler):
