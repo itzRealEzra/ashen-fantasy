@@ -832,7 +832,7 @@ def _ensure_patch_mail(stored, version):
     stored["patch_version"] = version
     return _deliver(stored, _new_mail(
         "patch", "Patch Notes",
-        "Equipment bonuses now add across all equipped slots, including both "
+        "Patch %s: equipment bonuses now add across all equipped slots, including both "
         "Spirit Ring slots. Qi Rate gear improves passive and offline "
         "cultivation as well as the displayed rate. This patch includes two "
         "copies each of an offensive, defensive, and Qi-focused ring so you "
