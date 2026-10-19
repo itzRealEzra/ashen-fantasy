@@ -1,6 +1,6 @@
 /* Ashen Fantasy — vanilla JS state machine: username -> roots -> main */
 const $ = (id) => document.getElementById(id);
-const CLIENT_VERSION = "0.8.9"; // must match server.py server_version + footer
+const CLIENT_VERSION = "0.9.0"; // must match server.py server_version + footer
 const state = {
   username: localStorage.getItem("af_user") || "",
   rollId: null,
@@ -1037,7 +1037,11 @@ function renderInventory() {
     `<div class="inv-bag"><h2>Bag</h2><div class="inv-tabs">${tabs}</div>` +
     `<div class="inv-grid">${grid}${emptyCells}</div></div></div>`;
   root.querySelectorAll(".slot[data-slot]").forEach(el => {
-    el.onclick = () => unequipSlot(el.dataset.slot);
+    // Clicking an equipped slot deliberately does nothing. It used to
+    // unequip, which meant a stray click silently sent gear back to the bag
+    // and then hid it from view (worn gear is filtered out of the bag grid),
+    // so it looked like the item had vanished. Unequipping is now only via
+    // the tooltip's explicit action.
     el.onmousemove = e => {
       if (el.dataset.tip) showTip(el.dataset.tip, e.clientX, e.clientY, { unequip: el.dataset.slot });
       else showSlotTip(el.dataset.slotName, el.dataset.slotType, "Bag → hover an item → Equip.", e.clientX, e.clientY, el.dataset.slot);

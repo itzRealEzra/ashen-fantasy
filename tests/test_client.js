@@ -736,6 +736,26 @@ state.player = basePlayer();
   ok(bannerEl.hidden === true, "clearing the announcement hides the banner again");
   ok(/\.server-banner\[hidden\] \{ display: none; \}/.test(CSS), "a hidden banner collapses");
 
+  // ============ 18. clicking an equipped slot must not unequip ============
+  // It used to: a stray click sent gear back to the bag, and worn gear is
+  // filtered out of the bag grid, so the item looked like it had vanished.
+  const dollBlock = SRC.slice(SRC.indexOf('root.querySelectorAll(".slot[data-slot]")'),
+                              SRC.indexOf('root.querySelectorAll(".slot[data-elixir]")'));
+  ok(dollBlock.length > 0, "the equipment slot wiring block is present");
+  ok(!/el\.onclick = \(\) => unequipSlot/.test(dollBlock),
+     "clicking an equipped slot no longer calls unequipSlot");
+  ok(!/onclick/.test(dollBlock),
+     "the equipment slot block has no click handler at all");
+  ok(/showTip\(el\.dataset\.tip, e\.clientX, e\.clientY, \{ unequip: el\.dataset\.slot \}\)/.test(dollBlock),
+     "the tooltip still offers unequip as an explicit action");
+  // Elixir slots keep their own click: that one USES the pill.
+  ok(/el\.onclick = \(\) => useElixir\(\+el\.dataset\.elixir\);/.test(SRC),
+     "elixir slots still consume on click");
+  // unequipSlot must survive for the tooltip action to call.
+  ok(/function unequipSlot\(slot\)/.test(SRC), "unequipSlot still exists for the tooltip");
+  ok(/act === "unequip" && e\.target\.dataset\.slot/.test(SRC),
+     "the tooltip action path is untouched");
+
   console.log("\n" + pass + " passed, " + fail + " failed");
   process.exit(fail ? 1 : 0);
 })().catch(e => { console.error(e); process.exit(1); });

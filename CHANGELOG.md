@@ -11,6 +11,45 @@ and push to `main` on https://github.com/itzRealEzra/ashen-fantasy.
 
 ## [Unreleased]
 
+## [0.9.0] - 2026-10-18
+### Added
+- Second item batch, wired to the art in `public/assets/items`. Every piece is
+  checked against its art rather than its filename. 38 items total, was 29.
+  - Gear, each in the slot it belongs to:
+    Wooden Shield (off-hand), Cracked Qi Stone (Spirit Core), Chipped Jade
+    Pendant (necklace), Cloth Headband (head), Copper Spirit Ring and Jade
+    Guard Ring (both accessory). Jade Guard Ring is the pack's one Uncommon
+    piece; it beats the Copper Ring on every stat.
+  - Consumables: Minor Healing Pill (heal only), Minor Vitality Elixir
+    (heal + qi), Roasted Wild Rat Meat (heal only).
+- The heal-only elixir slot is no longer a placeholder. It had no pill behind
+  it and was labelled the neutral "Elixir I"; it is now named Minor Healing
+  Pill. All three slots resolve to a real consumable.
+- Consumable ordering is now load-bearing and documented: `elixirSlots()` names
+  a slot after the first consumable matching its shape, so the intended pill
+  for each slot is listed first. Minor Vitality Elixir and Roasted Wild Rat
+  Meat deliberately sit after Spirit Meal and Minor Healing Pill, which keeps
+  the established names on those slots.
+- The starter pack now ships every new item alongside the original set: 18
+  entries covering 11 equip slots instead of 7, plus supplies. It has two head
+  pieces (Leather Helmet and Cloth Headband) and two rings, so one of each is
+  a spare that waits in the bag — there is only one head slot and two
+  fingers. The `headpiece` slot is still empty; no Crown art has landed yet.
+
+### Changed
+- Every item now carries its rarity `color`, not just materials, so the client
+  can colour a slot from the payload alone. Gear had no `color` key, which
+  only stayed hidden because every gear piece happened to be Common.
+
+### Fixed
+- Clicking an equipped slot no longer unequips it. It used to send the piece
+  straight back to the bag, and worn gear is filtered out of the bag grid, so a
+  stray click made the item look like it had vanished. Unequipping is now only
+  through the tooltip's explicit action. Elixir slots keep their click, since
+  that one consumes the pill.
+
+375 tests passing (145 API + 193 client + 37 admin).
+
 ## [0.8.9] - 2026-10-18
 ### Fixed
 - `/announce` and `/maintenance` now take effect immediately, without

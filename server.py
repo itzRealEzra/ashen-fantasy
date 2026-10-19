@@ -17,8 +17,8 @@ import mimetypes
 # Single source of truth for the build number. Must match CLIENT_VERSION in
 # public/js/app.js and the footer in public/index.html. A player whose saved
 # patch_version differs gets one patch-note mail when they next check mail.
-SERVER_VERSION = "0.8.9"
-CLIENT_VERSION = "0.8.9"  # for /status only; the client keeps its own copy
+SERVER_VERSION = "0.9.0"
+CLIENT_VERSION = "0.9.0"  # for /status only; the client keeps its own copy
 STARTED_AT = time.time()
 RESTARTED_AT = 0
 RESTART_SEQ = 0
@@ -319,11 +319,33 @@ GEAR = [
     _gear("leather_cape", "Leather Cape", "back", "🧣",
           "Travel-worn, ash-stained. It hides nothing, but it catches the wind.",
           {"def": 1, "crit": 1}),
+
+    # ---- Second batch. Slots were picked to fill the ones the starter pack
+    # left empty (off-hand, core, necklace, accessory) plus a second, weaker
+    # option for the head slot.
+    _gear("wooden_shield", "Wooden Shield", "sec_weapon", "🛡️",
+          "Planks and a iron rim. Heavy, honest, and better than an open hand.",
+          {"def": 3, "hp": 10}),
+    _gear("cloth_headband", "Cloth Headband", "head", "🎗️",
+          "A knotted strip of dyed linen. It stops sweat reaching the eyes.",
+          {"def": 1, "hp": 5}),
+    _gear("cracked_qi_stone", "Cracked Qi Stone", "core", "🪨",
+          "A stone split by a thin seam of living qi. It hums when you breathe.",
+          {"def": 2, "hp": 15}),
+    _gear("chipped_jade_pendant", "Chipped Jade Pendant", "necklace", "📿",
+          "Jade with a corner broken off. Still cool against the sternum.",
+          {"hp": 12, "crit": 1}),
+    _gear("copper_spirit_ring", "Copper Spirit Ring", "ring", "💍",
+          "A plain copper band. The sect gives one to every new disciple.",
+          {"crit": 2}),
+    _gear("jade_guard_ring", "Jade Guard Ring", "ring", "💎",
+          "A darker green jade, kept polished by a nervous thumb.",
+          {"def": 2, "hp": 15, "crit": 1}),
 ]
 
 # Gear rarity follows root-rarity colors (valley Mortal -> peaks Immortal).
 # Add an id here to override its rarity; anything unlisted stays "Common".
-_GEAR_RARITY = {}
+_GEAR_RARITY = {"jade_guard_ring": "Uncommon"}
 for _g in GEAR:
     _g["rarity"] = _GEAR_RARITY.get(_g["id"], "Common")
 
@@ -331,8 +353,20 @@ for _g in GEAR:
 # _con(id, name, glyph, desc, heal_pct=, qi_pct=). A pill's `use` stats decide
 # which elixir slot it can occupy: heal only / qi only / both.
 CONSUMABLES = [
+    # Order matters: elixirSlots() labels a slot after the FIRST consumable
+    # matching its shape, so the intended one for each of the three slots is
+    # listed first. heal-only -> Elixir I, qi-only -> II, both -> III.
+    _con("minor_healing_pill", "Minor Healing Pill", "💊",
+         "A cheap grey pill from the sect store. Knits flesh, nothing more.",
+         heal_pct=20),
     _con("qi_pill", "Qi Pill", "🔮", "Condensed morning mist. Grants 15% of a stage in Qi.", qi_pct=15),
     _con("spirit_meal", "Spirit Meal", "🍱", "A hot otherworldly lunch. Restores 15% HP and a little Qi.", heal_pct=15, qi_pct=5),
+    _con("minor_vitality_elixir", "Minor Vitality Elixir", "🧪",
+         "Red as a fresh wound. Restores a little of everything.",
+         heal_pct=12, qi_pct=12),
+    _con("roasted_wild_rat_meat", "Roasted Wild Rat Meat", "🍖",
+         "Hot, salted, and better than it looks. A hunter's staple.",
+         heal_pct=10),
 ]
 for _c in CONSUMABLES:
     _c["rarity"] = "Common"
@@ -367,6 +401,10 @@ MATERIALS = [{"id": _slug(name), "name": name, "kind": "material", "slot": None,
 
 ITEMS = GEAR + CONSUMABLES + MATERIALS
 ITEM_BY_ID = {it["id"]: it for it in ITEMS}
+# Every item carries its rarity colour, not just materials, so the client can
+# colour a slot from the payload alone.
+for _it in ITEMS:
+    _it["color"] = ITEM_RARITY_COLORS[_it["rarity"]]
 EQUIP_SLOTS = ("head", "sec_weapon", "chest", "main_weapon", "core", "arm",
                "back", "boots", "legs", "ring1", "ring2", "necklace", "headpiece")
 
@@ -675,9 +713,17 @@ def build_player(username, picks):
 # ----------------------------------------------------------------------------
 MAIL_MAX = 50
 STARTER_PACK = {
-    "wooden_sword": 1, "leather_helmet": 1, "leather_chest": 1,
-    "leather_leggings": 1, "leather_bracers": 1, "leather_boots": 1,
-    "leather_cape": 1,
+    # ---- Common armour set, one per slot
+    "wooden_sword": 1, "wooden_shield": 1, "leather_helmet": 1,
+    "leather_chest": 1, "leather_leggings": 1, "leather_bracers": 1,
+    "leather_boots": 1, "leather_cape": 1,
+    # ---- second batch: the slots the first set left empty
+    "cracked_qi_stone": 1, "chipped_jade_pendant": 1, "copper_spirit_ring": 1,
+    # cloth_headband is a second, weaker head option alongside the helmet
+    "cloth_headband": 1, "jade_guard_ring": 1,
+    # ---- supplies, so a new cultivator can actually heal and cultivate
+    "minor_healing_pill": 3, "roasted_wild_rat_meat": 3,
+    "minor_vitality_elixir": 2, "qi_pill": 2, "spirit_meal": 2,
 }
 
 

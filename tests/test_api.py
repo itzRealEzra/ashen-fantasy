@@ -452,18 +452,55 @@ try:
     ok(len(starter) == 1, "a new cultivator is mailed the starter pack")
     sm = starter[0]
 
-    # ---- the pack contents
-    expected_pack = {"wooden_sword", "leather_helmet", "leather_chest",
-                     "leather_leggings", "leather_bracers", "leather_boots",
-                     "leather_cape"}
-    ok(set(sm["items"]) == expected_pack, "starter pack holds the 7 named pieces")
+    # ---- the pack contents. Written out in full rather than derived from
+    # STARTER_PACK, so an accidental edit to the pack fails a test.
+    expected_pack = {
+        # common armour set, one per slot
+        "wooden_sword", "wooden_shield", "leather_helmet", "leather_chest",
+        "leather_leggings", "leather_bracers", "leather_boots", "leather_cape",
+        # the slots the first set left empty, plus a second head option
+        "cracked_qi_stone", "chipped_jade_pendant", "copper_spirit_ring",
+        "cloth_headband", "jade_guard_ring",
+        # supplies
+        "minor_healing_pill", "roasted_wild_rat_meat",
+        "minor_vitality_elixir", "qi_pill", "spirit_meal",
+    }
+    ok(set(sm["items"]) == expected_pack,
+       "starter pack holds all %d entries" % len(expected_pack))
     ok(all(i in server.ITEM_BY_ID for i in sm["items"]), "every pack item exists in the item db")
-    ok(all(server.ITEM_BY_ID[i]["slot"] in server.EQUIP_SLOTS for i in sm["items"]),
-       "every pack item equips into a real slot")
-    ok(all(server.ITEM_BY_ID[i]["rarity"] == "Common" for i in sm["items"]),
-       "starter gear is all Common")
-    covered = {server.ITEM_BY_ID[i]["slot"] for i in sm["items"]}
-    ok(len(covered) == 7, "the pack covers 7 distinct armour slots")
+    pack_gear = {i for i in sm["items"] if server.ITEM_BY_ID[i]["kind"] == "gear"}
+    # "ring" is a gear slot that maps onto the two ring fingers, so it is not
+    # itself a member of EQUIP_SLOTS.
+    def slot_is_wearable(sl):
+        return sl in server.EQUIP_SLOTS or sl == "ring"
+    ok(all(slot_is_wearable(server.ITEM_BY_ID[i]["slot"]) for i in pack_gear),
+       "every pack gear item equips into a real slot")
+    ok(all(server.ITEM_BY_ID[i]["rarity"] in server.ITEM_RARITY_ORDER for i in sm["items"]),
+       "every pack item has a valid rarity")
+    ok(server.ITEM_BY_ID["jade_guard_ring"]["rarity"] == "Uncommon",
+       "the better ring is the one Uncommon piece in the pack")
+    # Both elixir shapes that were unfilled must now have a named pill, and
+    # heal-only must map to the slot that was empty before.
+    def shape(u):
+        if u.get("heal_pct") and u.get("qi_pct"): return "both"
+        if u.get("heal_pct"): return "heal"
+        if u.get("qi_pct"): return "qi"
+        return ""
+    first_of = {}
+    for c in server.CONSUMABLES:
+        first_of.setdefault(shape(c["use"]), c["id"])
+    ok(first_of.get("heal") == "minor_healing_pill",
+       "the heal-only elixir slot is now named Minor Healing Pill")
+    ok(first_of.get("qi") == "qi_pill", "the qi-only slot stays Qi Pill")
+    ok(first_of.get("both") == "spirit_meal", "the restorative slot stays Spirit Meal")
+    ok(all(shape(server.ITEM_BY_ID[i]["use"]) for i in sm["items"]
+           if server.ITEM_BY_ID[i]["kind"] == "consumable"),
+       "every consumable in the pack has a real effect")
+    covered = {server.ITEM_BY_ID[i]["slot"] for i in pack_gear}
+    ok(len(covered) == 11, "the pack covers 11 distinct equip slots (got %d)" % len(covered))
+    ok({"main_weapon", "sec_weapon", "head", "chest", "core", "arm", "back",
+        "boots", "legs", "necklace", "ring"} <= covered,
+       "the pack still covers every slot it set out to")
 
     # ---- the read rule: items stay unread until claimed
     ok(sm["read"] is False and sm["claimed"] is False, "item mail arrives unread and unclaimed")
@@ -476,18 +513,21 @@ try:
     # ---- claiming is what settles it
     st, j = mail_post("/api/mail/claim", "mailer", sm["id"])
     ok(st == 200 and j["ok"] is True, "claim succeeds")
-    ok(set(j["granted"]) == expected_pack, "claim grants all 7 pieces")
+    ok(set(j["granted"]) == expected_pack,
+       "claim grants every entry in the pack")
     ok(j["mail"]["read"] is True and j["mail"]["claimed"] is True,
        "claiming marks the mail read and claimed")
     ok(j["unread"] == 0, "claiming clears the unread count")
     inv = j["inventory"]
-    ok(all(inv.get(i) == 1 for i in expected_pack), "claimed gear lands in the bag")
+    ok(all(inv.get(i) == n for i, n in server.STARTER_PACK.items()),
+       "claimed items land in the bag with their listed counts")
 
     # ---- claim exactly once
     st, j = mail_post("/api/mail/claim", "mailer", sm["id"])
     ok(st == 400, "a second claim is refused")
     inv2 = server.PLAYERS["mailer"]["inventory"]
-    ok(all(inv2.get(i) == 1 for i in expected_pack), "the refused claim granted nothing extra")
+    ok(all(inv2.get(i) == n for i, n in server.STARTER_PACK.items()),
+       "the refused claim granted nothing extra")
 
     # ---- plain mail has nothing to open, so it is read on arrival
     fresh("plainmail")
@@ -516,7 +556,10 @@ try:
     st, j = mail_post("/api/mail/read", "plainmail", bounty[0]["id"])
     ok(j["mail"]["read"] is False, "reward with items stays unread until claimed")
     st, j = mail_post("/api/mail/claim", "plainmail", bounty[0]["id"])
-    ok(j["unread"] == 0 and j["inventory"].get("spirit_meal") == 3, "reward claim pays out")
+    # plainmail already claimed the starter pack, so the reward adds to it.
+    expect = server.STARTER_PACK.get("spirit_meal", 0) + 3
+    ok(j["unread"] == 0 and j["inventory"].get("spirit_meal") == expect,
+       "reward claim pays out on top of what the player already held")
 
     # ---- unknown mail / cultivator
     st, j = mail_post("/api/mail/read", "mailer", "nope")
