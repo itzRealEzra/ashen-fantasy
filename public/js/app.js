@@ -1,6 +1,6 @@
 /* Ashen Fantasy — vanilla JS state machine: username -> roots -> main */
 const $ = (id) => document.getElementById(id);
-const CLIENT_VERSION = "0.9.1"; // must match server.py server_version + footer
+const CLIENT_VERSION = "0.9.2"; // must match server.py server_version + footer
 const state = {
   username: localStorage.getItem("af_user") || "",
   rollId: null,
@@ -759,16 +759,19 @@ function bagTabOf(it) {
 // 0 = heals only, 1 = grants qi only, 2 = heals and grants qi. A slot only
 // wears a pill name once such a pill exists in the item database; until then
 // it shows a neutral label, so nothing advertises a pill that cannot be found.
+// The three consumable slots, named for what they hold rather than for what
+// the pill does. `shape` is still what decides which pill fits; `id` is the
+// stable slot identifier and `icon` is the art an empty slot draws.
 const ELIXIR_SHAPES = [
-  { key: "heal", fallback: "Elixir I", type: "Recovery Consumable" },
-  { key: "qi", fallback: "Elixir II", type: "Cultivation Consumable" },
-  { key: "both", fallback: "Elixir III", type: "Restorative Consumable" },
+  { id: "elixir_slot", shape: "heal", icon: "elixir_icon", fallback: "Elixir I", type: "Recovery Consumable" },
+  { id: "pill_slot", shape: "qi", icon: "qi_pill_icon", fallback: "Elixir II", type: "Cultivation Consumable" },
+  { id: "meal_slot", shape: "both", icon: "spirit_meal_icon", fallback: "Elixir III", type: "Restorative Consumable" },
 ];
 
 // Which elixir slot a consumable belongs to, by what it does. Returns -1 when
 // it fits no named slot.
 function elixirPreferredSlot(it) {
-  const i = ELIXIR_SHAPES.findIndex(s => s.key === pillShape((it && it.use) || {}));
+  const i = ELIXIR_SHAPES.findIndex(s => s.shape === pillShape((it && it.use) || {}));
   return i >= 0 ? i : -1;
 }
 
@@ -784,12 +787,13 @@ function elixirSlots() {
   const cons = Object.keys(ITEM_BY_ID).map(k => ITEM_BY_ID[k])
     .filter(it => it.kind === "consumable");
   return ELIXIR_SHAPES.map(s => {
-    const it = cons.find(x => pillShape(x.use || {}) === s.key);
-    // id travels with the label so an EMPTY slot named after a real pill can
-    // show that pill's art instead of the generic elixir bottle.
-    return it
-      ? { id: it.id, name: it.name, type: s.type }
-      : { id: null, name: s.fallback, type: s.type };
+    const it = cons.find(x => pillShape(x.use || {}) === s.shape);
+    // The slot always carries its own id and icon. Only the label and the
+    // pill id depend on what currently fits the slot.
+    return {
+      slotId: s.id, icon: s.icon, pillId: it ? it.id : null,
+      name: it ? it.name : s.fallback, type: s.type,
+    };
   });
 }
 
@@ -994,13 +998,11 @@ function renderInventory() {
     const it = iid && ITEM_BY_ID[iid];
     const n = iid ? (p.inventory[iid] || 0) : 0;
     const slot = slots[i];
-    // Empty slot: show the named pill's own art. Only a slot with no pill
-    // behind it (the neutral "Elixir I/II/III" fallback) uses the bottle.
-    const named = slot.id && ITEM_BY_ID[slot.id];
-    return `<div class="slot elixir${it ? " filled" : ""}" data-elixir="${i}"${it ? ` data-tip="${iid}"` : ` data-slot-name="${esc(slot.name)}" data-slot-type="${esc(slot.type)}"`}>` +
+    // Empty slot draws its own art from assets/icons -- one per slot id, so
+    // the three read apart at a glance. A filled slot shows the item instead.
+    return `<div class="slot elixir${it ? " filled" : ""}" data-elixir="${i}" data-elixir-slot="${esc(slot.slotId)}"${it ? ` data-tip="${iid}"` : ` data-slot-name="${esc(slot.name)}" data-slot-type="${esc(slot.type)}"`}>` +
       (it ? iconHtml(it.img, it.glyph, artCls(it, "art-slot"))
-          : named ? iconHtml(named.img, named.glyph, artCls(named, "art-slot"))
-          : iconImg(ELIXIR_ICON, "slot-icon")) +
+          : iconImg(slot.icon, "slot-icon")) +
       (it ? `<span class="count">${n}x</span>` : "") + `</div>`;
   }).join("") + `</div>`;
   const tabs = BAG_TABS
@@ -1277,8 +1279,6 @@ const SLOT_ICONS = {
   necklace: "jade_pendant_icon",
   headpiece: "crown_artifact_icon",
 };
-
-const ELIXIR_ICON = "elixir_icon";
 
 async function fetchIcons() {
   try {

@@ -11,6 +11,25 @@ and push to `main` on https://github.com/itzRealEzra/ashen-fantasy.
 
 ## [Unreleased]
 
+## [0.9.2] - 2026-10-18
+### Changed
+- The three consumable slots are now identified by what they hold rather than
+  by what the pill does, and each carries its id in the markup
+  (`data-elixir-slot`):
+  - `elixir_slot` — Minor Vitality Elixir, heal only, bottle art
+  - `pill_slot` — Minor Qi Pill, Qi only, pill art
+  - `meal_slot` — Roasted Wild Rat Meat, heal + Qi, meal art
+- An empty consumable slot draws its own art from `assets/icons/` instead of
+  borrowing the equipped pill's art from `assets/items/`. Previously all three
+  empty slots showed the same generic bottle, and the per-slot icons in the
+  icons folder went unused. A filled slot still shows the item it holds, so
+  the icon and the item are never competing for the same cell.
+- `ELIXIR_ICON` is gone; the icon now travels with the slot. Slot matching is
+  still by shape (`heal` / `qi` / `both`) -- only the identifier changed -- so
+  which pill fits which slot is unchanged.
+
+399 tests passing (142 API + 220 client + 37 admin).
+
 ## [0.9.1] - 2026-10-18
 ### Changed
 - Cloth Headband moved from the `head` slot to `headpiece` -- the Immortal

@@ -573,7 +573,7 @@ state.player = basePlayer();
   // Slot art only ever shows on an EMPTY slot; a filled slot keeps the item.
   ok(/\(it \? iconHtml\(it\.img, it\.glyph, artCls\(it, "art-slot"\)\) : slotIconHtml\(s\)\)/.test(SRC),
      "doll slots show the slot icon only when empty");
-  ok(/iconImg\(ELIXIR_ICON, "slot-icon"\)/.test(SRC), "empty elixir slots use the elixir icon");
+  ok(/iconImg\([^)]*ELIXIR_ICON/.test(SRC) === false, "no slot icon hardcodes ELIXIR_ICON");
   // All five tabs and all thirteen slots must be mapped.
   for (const t of ["character", "cultivate", "battle", "inventory", "mail"]) {
     ok(new RegExp(`${t}: "${t}_icon"`).test(SRC), `${t} tab has an icon mapping`);
@@ -593,17 +593,30 @@ state.player = basePlayer();
   ok(/headpiece: "cultivation_artifact_icon"/.test(SRC) === false,
      "Immortal Crown no longer wears the spirit-core art");
 
-  // An empty elixir slot named after a real pill must show THAT pill's art,
-  // not the generic bottle. Only a slot with no pill behind it uses the bottle.
-  ok(/const named = slot\.id && ITEM_BY_ID\[slot\.id\];/.test(SRC),
-     "empty elixir slot resolves the pill behind its label");
-  ok(/: named \? iconHtml\(named\.img, named\.glyph, artCls\(named, "art-slot"\)\)\s*\n\s*: iconImg\(ELIXIR_ICON, "slot-icon"\)\)/.test(SRC),
-     "empty elixir slot prefers the named pill's art, bottle only as fallback");
-  ok(/return it\s*\n\s*\? \{ id: it\.id, name: it\.name, type: s\.type \}\s*\n\s*: \{ id: null, name: s\.fallback, type: s\.type \};/.test(SRC),
-     "elixirSlots carries the pill id alongside its label");
-  ok(/iconImg\(ELIXIR_ICON/.test(SRC), "the neutral elixir bottle is still used somewhere");
-    ok(/iconImg\(ELIXER_ICON, "slot-icon"\)\)\s*\+\s*`\s*\n\s*`<span class="slot-name">\$\{it \? esc\(it\.name\) : esc\(slot\.name\)\}/.test(SRC) === false,
-     "the bottle is not applied unconditionally to a named slot");
+  // The three consumable slots are identified by what they hold, and each
+  // draws its own art from assets/icons.
+  ok(/const ELIXIR_SHAPES = \[[\s\S]*?id: "elixir_slot"[\s\S]*?\];/.test(SRC),
+     "ELIXIR_SHAPES declares an elixir_slot");
+  ok(/id: "pill_slot"/.test(SRC), "ELIXIR_SHAPES declares a pill_slot");
+  ok(/id: "meal_slot"/.test(SRC), "ELIXIR_SHAPES declares a meal_slot");
+  ok((SRC.match(/id: "(elixir_slot|pill_slot|meal_slot)"/g) || []).length === 3,
+     "exactly three slot ids exist");
+  ok(/shape: "heal", icon: "elixir_icon"/.test(SRC), "elixir_slot takes the bottle art");
+  ok(/shape: "qi", icon: "qi_pill_icon"/.test(SRC), "pill_slot takes the pill art");
+  ok(/shape: "both", icon: "spirit_meal_icon"/.test(SRC), "meal_slot takes the meal art");
+  ok(/const i = ELIXIR_SHAPES\.findIndex\(s => s\.shape === pillShape/.test(SRC),
+     "slot matching goes by shape, not by the slot id");
+  ok(/ELIXIR_SHAPES\.findIndex\(s => s\.key ===/.test(SRC) === false,
+     "the old key-based lookup is gone");
+  ok(/ELIXIR_ICON/.test(SRC) === false, "the single ELIXIR_ICON constant is gone");
+  ok(/slotId: s\.id, icon: s\.icon, pillId: it \? it\.id : null/.test(SRC),
+     "elixirSlots carries the slot id, icon and current pill id");
+  ok(/: iconImg\(slot\.icon, "slot-icon"\)\)/.test(SRC),
+     "an empty slot draws its own icon-folder art");
+  ok(/data-elixir-slot="\$\{esc\(slot\.slotId\)\}"/.test(SRC),
+     "each slot carries its id in the markup");
+  ok(/iconHtml\(it\.img, it\.glyph, artCls\(it, "art-slot"\)\)\s*\n\s*: iconImg\(slot\.icon/.test(SRC),
+     "a filled slot still shows the equipped pill's own art");
 
   // ---- render-level check ----------------------------------------------------
   // The assertions above are source-level, and they passed while BOTH of these
@@ -633,14 +646,18 @@ state.player = basePlayer();
     const sb = {
       console,
       ITEM_BY_ID: JSON.parse(JSON.stringify(ITEM_FIXTURE)),
-      ICON: { elixir_icon: "/assets/icons/elixir_icon.png" },
+      ICON: {
+        elixir_icon: "/assets/icons/elixir_icon.png",
+        qi_pill_icon: "/assets/icons/qi_pill_icon.png",
+        spirit_meal_icon: "/assets/icons/spirit_meal_icon.png",
+      },
       ELIXIR_ICON: "elixir_icon",
       SLOT_TYPE_LABELS: { core: "Cultivation Artifact", headpiece: "Artifact", ring: "Accessory" },
       SLOT_ICONS: {},
       ELIXIR_SHAPES: [
-        { key: "heal", fallback: "Elixir I", type: "Recovery Consumable" },
-        { key: "qi", fallback: "Elixir II", type: "Cultivation Consumable" },
-        { key: "both", fallback: "Elixir III", type: "Restorative Consumable" },
+        { id: "elixir_slot", shape: "heal", icon: "elixir_icon", fallback: "Elixir I", type: "Recovery Consumable" },
+        { id: "pill_slot", shape: "qi", icon: "qi_pill_icon", fallback: "Elixir II", type: "Cultivation Consumable" },
+        { id: "meal_slot", shape: "both", icon: "spirit_meal_icon", fallback: "Elixir III", type: "Restorative Consumable" },
       ],
       DOLL_ROWS: [[{ s: "core", label: "Spirit Core" }, { s: "headpiece", label: "Immortal Crown" }]],
       BAG_TABS: [["all", "All"]],
@@ -682,12 +699,26 @@ state.player = basePlayer();
   ok(/data-slot-name="Roasted Wild Rat Meat"/.test(empty),
      "slot III is named Roasted Wild Rat Meat");
   ok(!empty.includes("Elixir I"), "no elixir slot falls back to a neutral name");
-  ok(!empty.includes("/assets/icons/elixir_icon.png"),
-     "the generic bottle is unused while every slot has a real pill");
-  ok(elixirSrcs[1] === "/assets/items/minor_qi_pill.png",
-     "empty slot II shows the Minor Qi Pill's own art");
-  ok(elixirSrcs[2] === "/assets/items/roasted_wild_rat_meat.png",
-     "empty slot III shows the Roasted Wild Rat Meat's own art");
+  // Each empty slot draws its own icon-folder art, so the three read apart.
+  ok(elixirSrcs[0] === "/assets/icons/elixir_icon.png",
+     "elixir_slot draws the bottle from assets/icons");
+  ok(elixirSrcs[1] === "/assets/icons/qi_pill_icon.png",
+     "pill_slot draws the pill art from assets/icons");
+  ok(elixirSrcs[2] === "/assets/icons/spirit_meal_icon.png",
+     "meal_slot draws the meal art from assets/icons");
+  ok(/data-elixir-slot="elixir_slot"/.test(empty), "slot I carries the id elixir_slot");
+  ok(/data-elixir-slot="pill_slot"/.test(empty), "slot II carries the id pill_slot");
+  ok(/data-elixir-slot="meal_slot"/.test(empty), "slot III carries the id meal_slot");
+  ok((empty.match(/data-elixir-slot="/g) || []).length === 3,
+     "all three slots carry an id");
+  // A filled slot shows the equipped pill's own colour art instead.
+  const filled = renderInventorySrc({ state: { player: { username: "t", equipment: {}, elixirs: ["minor_qi_pill", null, null], inventory: { minor_qi_pill: 2 } } } });
+  const filledSrcs = [...filled.matchAll(/data-elixir="(\d)"[^>]*>.*?src="([^"]+)"/gs)].map(m => m[2]);
+  ok(filledSrcs[0] === "/assets/items/minor_qi_pill.png",
+     "a filled slot shows the pill's own art, not the slot icon");
+  ok(filledSrcs[1] === "/assets/icons/qi_pill_icon.png",
+     "its empty neighbours still draw their own slot art");
+  ok(/class="[^"]*filled[^"]*" data-elixir="0"/.test(filled), "a filled slot keeps the filled class");
   // Equipment slots are icon-only now: no name element is emitted at all,
   // filled or empty. The label still rides along in data-slot-name and still
   // shows in the tooltip.
@@ -706,10 +737,15 @@ state.player = basePlayer();
   ok(/function artCls\(it, base\)/.test(SRC), "artCls exists");
   ok(/return base \+ \(it && it\.lineArt \? " line-art" : ""\);/.test(SRC),
      "artCls appends line-art only for items the server flagged");
-  const lineArted = renderInventorySrc({}, { minor_qi_pill: true, roasted_wild_rat_meat: true });
-  ok(/data-elixir="1"[^>]*>[\s\S]{0,200}class="art art-slot line-art"/.test(lineArted),
-     "a flagged pill renders with the line-art class");
-  const plainArt = renderInventorySrc();
+  // The pill must actually be on screen for the flag to show, so render with it
+  // loaded into a slot.
+  const lineArted = renderInventorySrc(
+    { state: { player: { username: "t", equipment: {}, elixirs: ["minor_qi_pill", null, null], inventory: { minor_qi_pill: 1 } } } },
+    { minor_qi_pill: true });
+  ok(/class="art art-slot line-art"/.test(lineArted),
+     "a flagged item renders with the line-art class");
+  const plainArt = renderInventorySrc(
+    { state: { player: { username: "t", equipment: {}, elixirs: ["minor_qi_pill", null, null], inventory: { minor_qi_pill: 1 } } } });
   ok(!/line-art/.test(plainArt), "no line-art class when the server flagged nothing");
 
   ok(/\.tab-icon \{ width: 22px/.test(CSS), "tab icons are sized for the sidebar");
