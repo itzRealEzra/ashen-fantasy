@@ -906,8 +906,8 @@ function itemTipHtml(itemId, ctx) {
   if (it.kind === "gear" && !ctx.unequip) {
     const p = state.player;
     const targets = it.slot === "ring" ? ["ring1", "ring2"] : [it.slot];
-    // Preview the same slot equipItem will choose: a free ring slot first,
-    // otherwise ring1. Never compare a new ring against the wrong finger.
+    // Preview the same slot equipItem will choose: free first, then a slot
+    // not already wearing this item, then the first slot as a final fallback.
     const targetSlot = p && p.equipment
       ? (targets.find(s => !p.equipment[s])
           || targets.find(s => p.equipment[s] !== itemId)
@@ -1156,8 +1156,9 @@ function afterGearChange(before) {
 function equipItem(itemId) {
   const p = state.player, it = ITEM_BY_ID[itemId];
   if (!it || it.kind !== "gear" || (p.inventory[itemId] || 0) <= 0) return;
-  const before = derivedStats(p);
   const targets = equipTargets(it);
+  if (targets.every(s => p.equipment[s] === itemId)) return;
+  const before = derivedStats(p);
   // Fill a free slot first. If both rings are occupied, replace a different
   // ring before ever swapping a duplicate with itself.
   const slot = targets.find(s => !p.equipment[s])
@@ -1354,7 +1355,7 @@ function slotIconHtml(slot) {
 function gearBonus(p) {
   const b = Object.fromEntries(GEAR_STAT_KEYS.map(k => [k, 0]));
   if (!p.equipment) return b;
-  for (const slot of Object.keys(p.equipment)) {
+  for (const slot of EQUIP_SLOT_LIST) {
     const it = ITEM_BY_ID[p.equipment[slot]];
     if (!it || it.kind !== "gear" || !it.stats) continue;
     for (const k of GEAR_STAT_KEYS) b[k] += Number(it.stats[k]) || 0;
