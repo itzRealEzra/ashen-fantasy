@@ -220,6 +220,7 @@ input { background: #0e0e14; border: 1px solid var(--line); color: var(--ink); p
 .craft-card { border: 1px solid var(--line); background: var(--panel2); padding: 12px; display: flex; flex-direction: column; gap: 8px; }
 .craft-card:hover { border-color: var(--gold); }
 .craft-out { display: flex; gap: 10px; align-items: center; }
+.craft-xp { margin-left: auto; font-size: 11px; color: var(--gold); letter-spacing: 1px; white-space: nowrap; }
 .craft-out b { color: var(--gold2); font-size: 15px; }
 .craft-out-name { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .craft-way { border-top: 1px dashed var(--line); margin-top: 10px; padding-top: 10px; }

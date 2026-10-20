@@ -11,6 +11,19 @@ and push to `main` on https://github.com/itzRealEzra/ashen-fantasy.
 
 ## [Unreleased]
 
+## [0.9.16] - 2026-10-20
+### Changed
+- **Battle mastery hardens the body.** Every level past the first adds 1% to
+  HP, Attack and Defense, and the Character panel says so. The bonus rides the
+  same numbers the combat uses, so gear still sits flat on top of it.
+- **The stronger the beast, the more it teaches.** A kill is worth more
+  mastery XP the higher the enemy stands: a Spectral Rat teaches 5 XP, a
+  Frostmane Wereboar 20, the Corrupted Alpha Wolf 45.
+- **The rarer the work, the more it teaches.** Crafting, brewing and cooking
+  scale their XP with the rarity of what you make -- Common 10 XP,
+  Uncommon 20, Rare 40, Epic 80, Legendary 160 -- and every recipe card now
+  says how much it will teach before you commit the materials.
+
 ## [0.9.15] - 2026-10-20
 ### Added
 - **Mastery system.** Four tracks -- cooking, alchemy, crafting and battle --

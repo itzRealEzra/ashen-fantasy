@@ -134,7 +134,8 @@ const parts = [
   grab(/function masteryRank\(level\) \{[\s\S]*?\n\}/, "masteryRank"),
   grab(/function masteryNumeral\(level\) \{[^\n]*\}/, "masteryNumeral"),
   grab(/function masteryTitle\(track, level\) \{[\s\S]*?\n\}/, "masteryTitle"),
-  grab(/function masteryXp\(track\) \{[\s\S]*?\n\}/, "masteryXp"),
+  grab(/function masteryXp\(track, p\) \{[\s\S]*?\n\}/, "masteryXp"),
+  grab(/function masteryKillXp\(m\) \{[\s\S]*?\n\}/, "masteryKillXp"),
   grab(/function applyMasteryXp\(track, xp\) \{[\s\S]*?\n\}/, "applyMasteryXp"),
   grab(/function masteryPopup\(track, fromLevel, toLevel\) \{[\s\S]*?\n\}/, "masteryPopup"),
   grab(/function masteryPanel\(p\) \{[\s\S]*?\n\}/, "masteryPanel"),
@@ -202,7 +203,7 @@ const lib = new Function("__", prelude + parts + `
     loadElixirSlot, unloadElixir, elixirPreferredSlot, leaveActiveHunt,
     showBattleAreas, showBattleEnemiesCard, battleTick, derivedStats, playerMaxHp, addInv, takeInv,
     craftReady, craftMax, toast, renderWork, craftRecipe, fetchRecipes,
-    masteryLevel, masteryRank, masteryNumeral, masteryTitle, masteryXp,
+    masteryLevel, masteryRank, masteryNumeral, masteryTitle, masteryXp, masteryKillXp,
     applyMasteryXp, masteryPopup, masteryPanel, masteryTotalXp, MASTERY_TRACKS,
     closeSidebar,
     setRecipes: r => { RECIPES = r; },
@@ -620,6 +621,26 @@ state.player = basePlayer();
   ok(/Cooking Artisan I/.test(charHtml) && /Battle Beginner I/.test(charHtml),
      "every track is on the character panel");
   ok(/mastery-fill/.test(charHtml), "the panel shows the road to the next level");
+
+  // ============ 6f. battle mastery feeds the body ============
+  const bare = basePlayer();
+  const plain = lib.derivedStats(bare);
+  const taught = basePlayer();
+  taught.mastery = { battle: 5500 };   // level 11
+  const buffed = lib.derivedStats(taught);
+  ok(buffed.atk > plain.atk && buffed.hp > plain.hp && buffed.def > plain.def,
+     "battle mastery raises attack, hp and defense");
+  const atkPct = (buffed.atk - plain.atk) / plain.atk;
+  ok(atkPct > 0.05 && atkPct < 0.15,
+     "the battle bonus is about ten percent at level 11");
+  ok(buffed.crit === plain.crit, "the battle bonus does not touch crit");
+
+  // ============ 6g. the stronger the beast, the more it teaches ============
+  ok(lib.masteryKillXp({ qi: 3 }) === 5, "a rat teaches 5 XP");
+  ok(lib.masteryKillXp({ qi: 18 }) > lib.masteryKillXp({ qi: 3 }),
+     "a stronger beast teaches more than a weak one");
+  ok(lib.masteryKillXp({ qi: 50 }) > lib.masteryKillXp({ qi: 18 }),
+     "the boss teaches more than the wereboar");
 
   // ============ 7. leaving the hunt persists HP, stops fight, clears log ============
   state.player = basePlayer();

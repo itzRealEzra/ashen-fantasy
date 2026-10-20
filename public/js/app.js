@@ -1,6 +1,6 @@
 /* Ashen Fantasy — vanilla JS state machine: username -> roots -> main */
 const $ = (id) => document.getElementById(id);
-const CLIENT_VERSION = "0.9.15"; // must match server.py server_version + footer
+const CLIENT_VERSION = "0.9.16"; // must match server.py server_version + footer
 const state = {
   username: localStorage.getItem("af_user") || "",
   rollId: null,
@@ -462,10 +462,13 @@ function masteryPanel(p) {
 function derivedStats(p) {
   const s = p.stats, r = p.realm_idx | 0;
   const g = gearBonus(p);
+  // Battle mastery hardens the body: every level past the first adds a
+  // percent to the flesh, the swing and the guard. Gear stays flat on top.
+  const b = 1 + 0.01 * Math.max(0, masteryLevel(masteryXp("battle", p)) - 1);
   return {
-    hp: Math.round((100 + s.physique * 25) * (1 + r * 0.1)) + g.hp,
-    atk: Math.round(10 + (s.physique * 2 + s.comprehension * 1.5) * (1 + r * 0.08)) + g.atk,
-    def: Math.round(5 + s.physique * 1.2 + r * 2) + g.def,
+    hp: Math.round((100 + s.physique * 25) * (1 + r * 0.1) * b) + g.hp,
+    atk: Math.round((10 + (s.physique * 2 + s.comprehension * 1.5) * (1 + r * 0.08)) * b) + g.atk,
+    def: Math.round((5 + s.physique * 1.2 + r * 2) * b) + g.def,
     crit: Math.min(60, Math.round(5 + s.comprehension * 1.2 + s.fortune * 0.5 + g.crit)),
     critDmg: Math.round(150 + s.fortune * 4 + s.comprehension * 1.5) + g.critDmg,
     qi_rate_pct: g.qi_rate_pct,
@@ -1321,10 +1324,10 @@ const MASTERY_NUMERALS = ["I", "II", "III", "IV", "V", "VI", "VII", "VIII", "IX"
 const MASTERY_MAX_LEVEL = 99;
 const MASTERY_XP_PER_KILL = 5;
 const MASTERY_BONUS_TEXT = {
-  cooking: lvl => `${lvl}% chance to duplicate the meal`,
-  alchemy: lvl => `${lvl}% chance to duplicate the brew`,
-  crafting: lvl => `${lvl}% chance to duplicate the work`,
-  battle: lvl => `${lvl * 2}% chance of an extra drop`,
+  cooking: lvl => `${Math.max(0, lvl - 1)}% chance to duplicate the meal`,
+  alchemy: lvl => `${Math.max(0, lvl - 1)}% chance to duplicate the brew`,
+  crafting: lvl => `${Math.max(0, lvl - 1)}% chance to duplicate the work`,
+  battle: lvl => `${(lvl - 1) * 2}% chance of an extra drop · +${lvl - 1}% HP, Attack, Defense`,
 };
 
 function masteryTotalXp(level) { return 50 * level * (level - 1); }
@@ -1347,9 +1350,16 @@ function masteryTitle(track, level) {
   return `${name} ${masteryRank(level)} ${masteryNumeral(level)}`;
 }
 
-function masteryXp(track) {
-  const m = (state.player && state.player.mastery) || {};
+function masteryXp(track, p) {
+  const pl = p || (state && state.player);
+  const m = (pl && pl.mastery) || {};
   return Math.max(0, m[track] | 0);
+}
+
+// How much a kill teaches: the stronger the beast, the more it teaches.
+function masteryKillXp(m) {
+  const qi = Math.max(0, (m && m.qi) | 0);
+  return MASTERY_XP_PER_KILL * (1 + Math.floor(qi / 6));
 }
 
 // Take the new XP, and if it carried a level, say so.
@@ -1481,7 +1491,7 @@ function renderWork(rootId, kind) {
         </div>`;
       }).join("");
       return `<div class="craft-card">
-        <div class="craft-out">${iconHtml(first.out_img, first.out_glyph, "art-craft-out")}<div class="craft-out-text"><div class="craft-out-name"><b>${esc(first.out_name)}</b></div><small class="muted">${esc(first.out_rarity)}${first.count > 1 ? ` ×${first.count}` : ""}${g.ways.length > 1 ? ` · ${g.ways.length} ways` : ""}</small></div></div>
+        <div class="craft-out">${iconHtml(first.out_img, first.out_glyph, "art-craft-out")}<div class="craft-out-text"><div class="craft-out-name"><b>${esc(first.out_name)}</b></div><small class="muted">${esc(first.out_rarity)}${first.count > 1 ? ` ×${first.count}` : ""}${g.ways.length > 1 ? ` · ${g.ways.length} ways` : ""}</small></div><span class="craft-xp" title="Mastery XP">+${first.xp || 0} XP</span></div>
         ${ways}
       </div>`;
     }).join("") + `</div>`;
@@ -1911,8 +1921,9 @@ function onMobDeath() {
   // chance of a second roll of the table.
   const bLevel = masteryLevel(masteryXp("battle"));
   if (bLevel > 1 && Math.random() < Math.min(0.5, 0.02 * (bLevel - 1))) rollLoot(m);
-  // The kill itself teaches the hunt.
-  applyMasteryXp("battle", masteryXp("battle") + MASTERY_XP_PER_KILL);
+  // The kill itself teaches the hunt, and the stronger the beast the more
+  // it teaches.
+  applyMasteryXp("battle", masteryXp("battle") + masteryKillXp(m));
   accrue(p, m.qi);
   // Guaranteed drop on every kill, logged like any other loot. The count
   // scales with the enemy: the server publishes stones per mob from its qi,

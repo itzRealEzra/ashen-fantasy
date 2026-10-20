@@ -502,6 +502,17 @@ try:
     ok(st == 200 and j["player"]["mastery"]["battle"] == 40, "battle mastery is stored")
     st, j = sync("master_hunter", mastery_battle=10)
     ok(j["player"]["mastery"]["battle"] == 40, "battle mastery never rolls back")
+    # The rarer the work, the more it teaches: Common is 10, Uncommon is 20.
+    common_xp = server.MASTERY_XP_PER_CRAFT
+    uncommon_xp = server.MASTERY_XP_PER_CRAFT * 2
+    fresh("rarity_crafter", inventory={"corrupted_fang": 1, "wolf_fang": 2, "beast_blood": 1})
+    st, j = req("/api/craft", {"username": "rarity_crafter", "recipe_id": "forge_jade_ring", "count": 1})
+    ok(st == 200 and j["player"]["mastery"]["crafting"] == uncommon_xp,
+       "a rarer craft teaches more than a common one")
+    st, j = req("/api/recipes")
+    xp_by_id = {r["id"]: r.get("xp") for r in j["recipes"]}
+    ok(xp_by_id.get("roast_meat") == common_xp and xp_by_id.get("forge_jade_ring") == uncommon_xp,
+       "every recipe says how much it teaches")
 
     # each bench spends materials and hands over its own goods
     fresh("bench_tester", inventory={"boar_fat": 2, "bloodied_tusk": 1, "raw_meat": 2,

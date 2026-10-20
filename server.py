@@ -17,8 +17,8 @@ import mimetypes
 # Single source of truth for the build number. Must match CLIENT_VERSION in
 # public/js/app.js and the footer in public/index.html. A player whose saved
 # patch_version differs gets one patch-note mail when they next check mail.
-SERVER_VERSION = "0.9.15"
-CLIENT_VERSION = "0.9.15"  # for /status only; the client keeps its own copy
+SERVER_VERSION = "0.9.16"
+CLIENT_VERSION = "0.9.16"  # for /status only; the client keeps its own copy
 STARTED_AT = time.time()
 RESTARTED_AT = 0
 RESTART_SEQ = 0
@@ -1169,6 +1169,8 @@ class Handler(BaseHTTPRequestHandler):
             recipes = []
             for r in RECIPES:
                 out_it = ITEM_BY_ID.get(r["out"]) or {}
+                out_rarity = out_it.get("rarity", "Common")
+                out_tier = ITEM_RARITY_ORDER.index(out_rarity) if out_rarity in ITEM_RARITY_ORDER else 0
                 cost = []
                 for mid, need in r["cost"].items():
                     it = ITEM_BY_ID.get(mid)
@@ -1182,8 +1184,9 @@ class Handler(BaseHTTPRequestHandler):
                     "note": r["note"], "cost": cost,
                     "kind": _recipe_kind(r["out"]),
                     "max_count": CRAFT_MAX_COUNT,
+                    "xp": MASTERY_XP_PER_CRAFT * (2 ** out_tier),
                     "out_name": out_it.get("name", r["out"]),
-                    "out_rarity": out_it.get("rarity", "Common"),
+                    "out_rarity": out_rarity,
                     "out_img": out_it.get("img", ""),
                     "out_glyph": out_it.get("glyph", "✦"),
                 })
@@ -1440,10 +1443,13 @@ class Handler(BaseHTTPRequestHandler):
                 return self._send_json({"error": "Recipe output is unknown"}, status=500)
             made = recipe["count"] * count
             # The trade you work teaches its mastery, and every level of it
-            # buys a chance to duplicate what you made.
+            # buys a chance to duplicate what you made. The rarer the work,
+            # the more it teaches.
             bench = _recipe_kind(out_id)
             track = MASTERY_TRACK_FOR_BENCH[bench]
-            _grant_mastery(stored, track, MASTERY_XP_PER_CRAFT * made)
+            rarity = (ITEM_BY_ID.get(out_id) or {}).get("rarity", "Common")
+            tier = ITEM_RARITY_ORDER.index(rarity) if rarity in ITEM_RARITY_ORDER else 0
+            _grant_mastery(stored, track, MASTERY_XP_PER_CRAFT * (2 ** tier))
             chance = min(MASTERY_DUPLICATE_CAP, 0.01 * max(0, mastery_level(_mastery_xp(stored, track)) - 1))
             duplicated = chance > 0 and random.random() < chance
             inv[out_id] = max(0, min(int(inv.get(out_id, 0) or 0) + made * (2 if duplicated else 1), 9999))
