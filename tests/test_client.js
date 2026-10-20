@@ -476,7 +476,13 @@ state.player = basePlayer();
     cost: [{ id: "small_beast_bone", need: 1, name: "Small Beast Bone", rarity: "Uncommon", color: "#7cb342", img: "", glyph: "✦" }],
     out_name: "Minor Qi Pill", out_rarity: "Common", out_img: "", out_glyph: "🔹",
   };
-  lib.setRecipes([recipe, gearRecipe, pillRecipe]);
+  const pillRecipe2 = {
+    id: "grind_alpha_fang", out: "minor_qi_pill", count: 1, note: "Fang and essence.", kind: "alchemy",
+    label: "Alpha Fang",
+    cost: [{ id: "corrupted_fang", need: 1, name: "Corrupted Fang", rarity: "Legendary", color: "#ffb300", img: "", glyph: "✦" }],
+    out_name: "Minor Qi Pill", out_rarity: "Common", out_img: "", out_glyph: "🔹",
+  };
+  lib.setRecipes([recipe, gearRecipe, pillRecipe, pillRecipe2]);
   state.player = basePlayer();
   state.player.inventory = { rat_tail: 3, raw_meat: 1, boar_hide: 4, small_beast_bone: 1 };
   lib.renderWork("craft-root", "craft");
@@ -488,10 +494,11 @@ state.player = basePlayer();
   const alchHtml = els["alchemy-root"].innerHTML;
   ok(/Minor Qi Pill/.test(alchHtml) && !/Leather Chest/.test(alchHtml),
      "the alchemy bench shows pills only");
-  ok(/craft-variant/.test(alchHtml) && /Bone &amp; Blood/.test(alchHtml),
-     "a recipe with more than one way is named, so no two cards read the same");
-  ok(!/craft-variant/.test(craftHtml),
-     "a recipe with only one way carries no variant name");
+  ok((alchHtml.match(/Minor Qi Pill/g) || []).length === 1,
+     "one pill entry, however many ways there are to brew it");
+  ok(/craft-way/.test(alchHtml) && /Bone &amp; Blood/.test(alchHtml),
+     "the ways to brew it are folded into that one entry");
+  ok(!/craft-variant/.test(craftHtml), "a single-way recipe carries no way name");
   lib.renderWork("cook-root", "cook");
   const cookHtml = els["cook-root"].innerHTML;
   ok(/Roasted Wild Rat Meat/.test(cookHtml) && !/Leather Chest/.test(cookHtml),
@@ -944,8 +951,8 @@ state.player = basePlayer();
      "each tab opens its own bench");
   ok(/\.craft-list \{ display: grid/.test(CSS) && /\.craft-cost\.short/.test(CSS),
      "the forge panel is styled, and a missing material reads as short");
-  ok(/\.craft-out-name \{ display: flex/.test(CSS) && /\.craft-variant \{ display: inline-block/.test(CSS),
-     "the variant name sits beside the item, never glued to it");
+  ok(/\.craft-out-name \{ display: flex/.test(CSS) && /\.craft-way \{ border-top/.test(CSS),
+     "the item name sits above its ways, never glued to them");
   ok(/\.stone-glyph \{ width: 14px/.test(CSS), "the stone glyph is sized for inline use");
   ok(/\.slot \.slot-icon \{ width: 42px/.test(CSS), "slot icons are sized for the doll");
   ok(/\.slot \.art-slot \{ width: 46px/.test(CSS), "equipped slot art fills the now-label-free slot");

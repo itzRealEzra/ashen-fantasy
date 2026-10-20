@@ -11,6 +11,17 @@ and push to `main` on https://github.com/itzRealEzra/ashen-fantasy.
 
 ## [Unreleased]
 
+## [0.9.12] - 2026-10-20
+### Fixed
+- The benches listed one card per *recipe*, so the same item made three ways
+  filled the panel with three cards reading the same name -- three Minor Qi
+  Pills and three Minor Vitality Elixirs. A bench now lists **one entry per
+  item** (Alchemy: one pill, one elixir; Craft: 14 gear; Cook: 4 foods), and
+  the ways to make it are folded into that entry, each with its own
+  ingredients, its own note and its own buttons. The ways are still named
+  ("Bone & Blood", "Gray Core", "Alpha Fang"), so you can tell them apart and
+  pick the one your materials can pay for.
+
 ## [0.9.11] - 2026-10-20
 ### Fixed
 - The recipe variant name was glued to the item name ("Minor Qi PillBone &

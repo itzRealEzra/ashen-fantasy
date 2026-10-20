@@ -1,6 +1,6 @@
 /* Ashen Fantasy — vanilla JS state machine: username -> roots -> main */
 const $ = (id) => document.getElementById(id);
-const CLIENT_VERSION = "0.9.11"; // must match server.py server_version + footer
+const CLIENT_VERSION = "0.9.12"; // must match server.py server_version + footer
 const state = {
   username: localStorage.getItem("af_user") || "",
   rollId: null,
@@ -1313,31 +1313,47 @@ function renderWork(rootId, kind) {
     return;
   }
   const recipes = RECIPES.filter(r => (r.kind || "craft") === kind);
+  // One entry per item: a pill made three ways is still one pill, so the
+  // ways are folded into a single card instead of stacking three cards
+  // that all read the same thing.
+  const groups = [];
+  for (const r of recipes) {
+    const g = groups.find(x => x.out === r.out);
+    if (g) g.ways.push(r);
+    else groups.push({ out: r.out, ways: [r] });
+  }
   const inv = p.inventory || {};
   root.innerHTML =
     `<h2>${esc(trade.title)}</h2>` +
     `<p class="muted">${esc(trade.sub)} Materials are spent for good.</p>` +
-    `<div class="craft-list">` + recipes.map(r => {
-      const costs = r.cost.map(c => {
-        const have = inv[c.id] || 0;
-        const short = have < c.need;
-        return `<div class="craft-cost${short ? " short" : ""}">
-          <span class="craft-cost-name">${iconHtml(c.img, c.glyph, "art-craft")}<span style="color:${c.color || "inherit"}">${esc(c.name)}</span></span>
-          <span class="craft-cost-qty">${have}/${c.need}</span>
+    `<div class="craft-list">` + groups.map(g => {
+      const first = g.ways[0];
+      const ways = g.ways.map(r => {
+        const costs = r.cost.map(c => {
+          const have = inv[c.id] || 0;
+          const short = have < c.need;
+          return `<div class="craft-cost${short ? " short" : ""}">
+            <span class="craft-cost-name">${iconHtml(c.img, c.glyph, "art-craft")}<span style="color:${c.color || "inherit"}">${esc(c.name)}</span></span>
+            <span class="craft-cost-qty">${have}/${c.need}</span>
+          </div>`;
+        }).join("");
+        return `<div class="craft-way">
+          ${g.ways.length > 1 ? `<div class="craft-way-name">${esc(r.label || r.id)}</div>` : ""}
+          <div class="craft-costs">${costs}</div>
+          <p class="craft-note muted">${esc(r.note || "")}</p>
+          <div class="craft-actions">
+            <button class="btn" data-recipe="${r.id}" data-craft="1"${craftReady(r, 1) ? "" : " disabled"}>${esc(trade.verb)}</button>
+            <button class="btn" data-recipe="${r.id}" data-craft="5"${craftReady(r, 5) ? "" : " disabled"}>${esc(trade.verb)} ×5</button>
+          </div>
         </div>`;
       }).join("");
-      return `<div class="craft-card" data-recipe="${r.id}">
-        <div class="craft-out">${iconHtml(r.out_img, r.out_glyph, "art-craft-out")}<div class="craft-out-text"><div class="craft-out-name"><b>${esc(r.out_name)}</b>${r.label ? `<span class="craft-variant">${esc(r.label)}</span>` : ""}</div><small class="muted">${esc(r.out_rarity)}${r.count > 1 ? ` ×${r.count}` : ""}</small></div></div>
-        <div class="craft-costs">${costs}</div>
-        <p class="craft-note muted">${esc(r.note || "")}</p>
-        <div class="craft-actions">
-          <button class="btn" data-craft="1"${craftReady(r, 1) ? "" : " disabled"}>${esc(trade.verb)}</button>
-          <button class="btn" data-craft="5"${craftReady(r, 5) ? "" : " disabled"}>${esc(trade.verb)} ×5</button>
-        </div>
+      return `<div class="craft-card">
+        <div class="craft-out">${iconHtml(first.out_img, first.out_glyph, "art-craft-out")}<div class="craft-out-text"><div class="craft-out-name"><b>${esc(first.out_name)}</b></div><small class="muted">${esc(first.out_rarity)}${first.count > 1 ? ` ×${first.count}` : ""}${g.ways.length > 1 ? ` · ${g.ways.length} ways` : ""}</small></div></div>
+        ${ways}
       </div>`;
     }).join("") + `</div>`;
   root.querySelectorAll("[data-craft]").forEach(btn => {
-    btn.onclick = () => craftRecipe(btn.closest(".craft-card").dataset.recipe, +btn.dataset.craft);
+    btn.onclick = () => craftRecipe(btn.dataset.recipe, +btn.dataset.craft);
   });
 }
 
