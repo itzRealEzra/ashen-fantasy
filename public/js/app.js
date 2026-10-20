@@ -1,6 +1,6 @@
 /* Ashen Fantasy — vanilla JS state machine: username -> roots -> main */
 const $ = (id) => document.getElementById(id);
-const CLIENT_VERSION = "0.9.10"; // must match server.py server_version + footer
+const CLIENT_VERSION = "0.9.11"; // must match server.py server_version + footer
 const state = {
   username: localStorage.getItem("af_user") || "",
   rollId: null,
@@ -1327,7 +1327,7 @@ function renderWork(rootId, kind) {
         </div>`;
       }).join("");
       return `<div class="craft-card" data-recipe="${r.id}">
-        <div class="craft-out">${iconHtml(r.out_img, r.out_glyph, "art-craft-out")}<div class="craft-out-text"><b>${esc(r.out_name)}</b>${r.label ? `<span class="craft-variant">${esc(r.label)}</span>` : ""}<small class="muted">${esc(r.out_rarity)}${r.count > 1 ? ` ×${r.count}` : ""}</small></div></div>
+        <div class="craft-out">${iconHtml(r.out_img, r.out_glyph, "art-craft-out")}<div class="craft-out-text"><div class="craft-out-name"><b>${esc(r.out_name)}</b>${r.label ? `<span class="craft-variant">${esc(r.label)}</span>` : ""}</div><small class="muted">${esc(r.out_rarity)}${r.count > 1 ? ` ×${r.count}` : ""}</small></div></div>
         <div class="craft-costs">${costs}</div>
         <p class="craft-note muted">${esc(r.note || "")}</p>
         <div class="craft-actions">

@@ -156,6 +156,20 @@ try:
         top_html = f.read()
     ok('id="p-stones"' in top_html, "top bar carries the spirit-stone counter")
 
+    # ============ 2a. the app's own files are never served stale ============
+    # A cached stylesheet or script pairs a new page with old code, which
+    # looks like a game bug rather than a cache. The page, the stylesheet and
+    # the script are always re-fetched, and the page links them by version.
+    for path in ("/", "/index.html", "/css/style.css", "/js/app.js"):
+        r = urllib.request.Request("http://127.0.0.1:%d%s" % (PORT, path))
+        st, raw, headers = _send(r)
+        ok(st == 200 and headers.get("Cache-Control") == "no-store",
+           "%s is never served from a stale cache" % path)
+    ok(re.search(r'href="/css/style\.css\?v=[^"]+"', top_html) is not None,
+       "the stylesheet is linked by version")
+    ok(re.search(r'src="/js/app\.js\?v=[^"]+"', top_html) is not None,
+       "the script is linked by version")
+
     # ============ 2b. art is resolved by id, live, with an emoji fallback ============
     # Adding a PNG must show up on the next request without a server restart.
     st, j = req("/api/areas")

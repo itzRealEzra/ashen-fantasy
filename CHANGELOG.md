@@ -11,6 +11,20 @@ and push to `main` on https://github.com/itzRealEzra/ashen-fantasy.
 
 ## [Unreleased]
 
+## [0.9.11] - 2026-10-20
+### Fixed
+- The recipe variant name was glued to the item name ("Minor Qi PillBone &
+  Blood") and had no chip around it. The name and the variant now sit in a
+  flex row with a real gap, and the variant is drawn as a bordered chip.
+
+### Changed
+- **The app's own files are never served stale.** The page, the stylesheet and
+  the script are served with `Cache-Control: no-store` instead of a one-hour
+  `max-age`, and the stylesheet is now linked by version like the script. A
+  cached stylesheet paired a new page with old CSS — which looked like a game
+  bug, not a cache. The page, the stylesheet and the script are always
+  re-fetched; the versioned URLs stay as a second line of defence.
+
 ## [0.9.10] - 2026-10-20
 ### Fixed
 - The Alchemy bench showed three cards all reading "Minor Qi Pill" and three

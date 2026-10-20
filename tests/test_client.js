@@ -944,6 +944,8 @@ state.player = basePlayer();
      "each tab opens its own bench");
   ok(/\.craft-list \{ display: grid/.test(CSS) && /\.craft-cost\.short/.test(CSS),
      "the forge panel is styled, and a missing material reads as short");
+  ok(/\.craft-out-name \{ display: flex/.test(CSS) && /\.craft-variant \{ display: inline-block/.test(CSS),
+     "the variant name sits beside the item, never glued to it");
   ok(/\.stone-glyph \{ width: 14px/.test(CSS), "the stone glyph is sized for inline use");
   ok(/\.slot \.slot-icon \{ width: 42px/.test(CSS), "slot icons are sized for the doll");
   ok(/\.slot \.art-slot \{ width: 46px/.test(CSS), "equipped slot art fills the now-label-free slot");
