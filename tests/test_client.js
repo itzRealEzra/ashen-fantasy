@@ -29,7 +29,7 @@ const els = {
   "breakthrough-btn": mkEl(), "p-name": mkEl(), "qi-bar": mkEl(),
   "char-sheet": mkEl(), "p-realm": mkEl(), "cult-rate": mkEl(),
   "battle-root": mkEl(), "char-hp": mkEl(), "char-qi": mkEl(),
-  "p-stones": mkEl(), "enemy-back": mkEl(),
+  "p-stones": mkEl(), "enemy-back": mkEl(), "craft-root": mkEl(),
 };
 const calls = { cEvents: [], saves: [], enemies: [], notices: [], renderInv: 0, timeouts: [], fetch: null };
 const state = { username: "tester", player: null };
@@ -116,6 +116,11 @@ const parts = [
   grab(/function persistBattleHp\(fainted\) \{[\s\S]*?\n\}/, "persistBattleHp"),
   grab(/function leaveActiveHunt\(\) \{[\s\S]*?\n\}/, "leaveActiveHunt"),
   grab(/function showBattleAreas\(\) \{[\s\S]*?\n\}/, "showBattleAreas"),
+  grab(/let RECIPES = \[\];/, "RECIPES"),
+  grab(/async function fetchRecipes\(\) \{[\s\S]*?\n\}/, "fetchRecipes"),
+  grab(/function craftReady\(r, count\) \{[\s\S]*?\n\}/, "craftReady"),
+  grab(/function renderCraft\(\) \{[\s\S]*?\n\}/, "renderCraft"),
+  grab(/async function craftRecipe\(recipeId, count\) \{[\s\S]*?\n\}/, "craftRecipe"),
   // The real card painter is renamed on extraction: the prelude already has
   // a showBattleEnemies stub (the defeat message sink).
   grab(/function showBattleEnemies\(notice\) \{[\s\S]*?\n\}/, "showBattleEnemiesCard")
@@ -127,6 +132,7 @@ const parts = [
   grab(/function strikeDmg\(atk, crit, critDmg, dfn\) \{[\s\S]*?\n\}/, "strikeDmg"),
   grab(/function battleTick\(\) \{[\s\S]*?\n\}/, "battleTick"),
   grab(/function mobStones\(m\) \{[\s\S]*?\n\}/, "mobStones"),
+  grab(/function rollStones\(m\) \{[\s\S]*?\n\}/, "rollStones"),
   grab(/function onMobDeath\(\) \{[\s\S]*?\n\}/, "onMobDeath"),
   grab(/function onPlayerDeath\(\) \{[\s\S]*?\n\}/, "onPlayerDeath"),
   grab(/function addInv\(id, n\) \{[\s\S]*?\n\}/, "addInv"),
@@ -163,7 +169,9 @@ const lib = new Function("__", prelude + parts + `
     advanceRealm, accrue, equipItem, unequipSlot, bagGearAction, useConsumable,
     loadElixirSlot, unloadElixir, elixirPreferredSlot, leaveActiveHunt,
     showBattleAreas, showBattleEnemiesCard, battleTick, derivedStats, playerMaxHp, addInv, takeInv,
-    mobStones, onMobDeath,
+    craftReady, renderCraft, craftRecipe, fetchRecipes,
+    setRecipes: r => { RECIPES = r; },
+    mobStones, rollStones, onMobDeath,
     itemTipHtml, itemTypeLabel, bagTabOf, dropsFor, iconHtml, artCls, BAG_TABS, slotTypeLabel,
     ITEM_BY_ID, gearBonus, derivedStats,
     ITEM_RARITY_COLORS,
@@ -320,7 +328,8 @@ state.player = basePlayer();
   lib.setRealms(REALMS_FIXTURE);
   state.player = basePlayer();
   const mob = { id: "wild_rat", name: "Wild Rat", hp: 35, atk: 4, def: 0, crit: 5, crit_dmg: 150,
-    speed: 0.9, qi: 3, loot: [{ item: "Rat Fur", rarity: "Common", chance: 1, min: 1, max: 1 }] };
+    speed: 0.9, qi: 3, stones: { min: 10, max: 20 },
+    loot: [{ item: "Rat Fur", rarity: "Common", chance: 1, min: 1, max: 1 }] };
   lib.battle.view = "combat";
   lib.battle.area = { id: "origin_village", name: "Origin Village", mobs: [mob], req_idx: 0, req: "Mortal", difficulty: "Beginner", desc: "" };
   lib.battle.mob = mob;
@@ -344,9 +353,11 @@ state.player = basePlayer();
   ok(state.player.hp === lib.battle.php && state.player.hp < MAXHP, "combat damage mirrored into the save every strike");
   ok(calls.timeouts.length >= 1, "respawn timer scheduled");
   ok(lib.battle.lastQi === 3, "qi reward staged for combat feedback");
-  ok(state.player.spirit_stones === 1, "kill granted the mob's stone reward");
-  ok(lib.battle.lastStones === 1, "stone reward staged for combat feedback");
-  ok(lib.battle.loot["Spirit Stone"] === 1, "the stone drop is logged in the hunt loot panel");
+  ok(state.player.spirit_stones >= 10 && state.player.spirit_stones <= 20,
+    "kill paid the mob's stone range");
+  ok(lib.battle.lastStones === state.player.spirit_stones, "stone reward staged for combat feedback");
+  ok(lib.battle.loot["Spirit Stone"] === state.player.spirit_stones,
+    "the stone drop is logged in the hunt loot panel");
 
   // stale respawn must not heal a fresh fight
   const stale = calls.timeouts[calls.timeouts.length - 1];
@@ -396,11 +407,14 @@ state.player = basePlayer();
   state.player.spirit_stones = 1234;
   lib.updateQi(state.player);
   ok(els["p-stones"].textContent === "1234", "top bar updates as stones are earned");
-  ok(lib.mobStones({ qi: 3 }) === 1, "stones fall back to qi/3 for older area payloads");
-  ok(lib.mobStones({ qi: 50, stones: 16 }) === 16, "the server-published stones reward wins");
-  ok(lib.mobStones({ qi: 50, stones: 16 }) > lib.mobStones({ qi: 3, stones: 1 }),
+  ok(lib.mobStones({ qi: 3 }) && lib.mobStones({ qi: 3 }).min === 10 && lib.mobStones({ qi: 3 }).max === 20,
+     "stones fall back to the server curve for older area payloads");
+  ok(lib.mobStones({ qi: 50, stones: { min: 151, max: 302 } }).max === 302,
+     "the server-published stone range wins");
+  ok(lib.mobStones({ qi: 50, stones: { min: 151, max: 302 } }).min >
+     lib.mobStones({ qi: 3 }).min,
      "the higher the enemy the higher the stone drop");
-  ok(lib.mobStones(null) === 0, "no mob means no stones");
+  ok(lib.mobStones(null).max === 0, "no mob means no stones");
 
   let sentBody = null;
   state.player = basePlayer();
@@ -419,7 +433,7 @@ state.player = basePlayer();
   // ============ 6c. the boss card: flagged, gated, richer drop ============
   const bossMob = { id: "corrupted_alpha_wolf", name: "Corrupted Alpha Wolf", realm: "Qi Refinement I",
     difficulty: "Nightmare", desc: "d", glyph: "🐺", hp: 800, atk: 50, def: 30, crit: 5, crit_dmg: 150,
-    speed: 0.8, qi: 50, stones: 16, req_idx: 1, boss: true,
+    speed: 0.8, qi: 50, stones: { min: 151, max: 302 }, req_idx: 1, boss: true,
     loot: [{ item: "Corrupted Beast Core", rarity: "Epic", chance: 1, min: 1, max: 1 }] };
   const ratMob = { id: "spectral_rat", name: "Spectral Rat", realm: "Mortal",
     difficulty: "Very Easy", desc: "d", glyph: "🐀", hp: 40, atk: 6, def: 0, crit: 5, crit_dmg: 150,
@@ -432,13 +446,64 @@ state.player = basePlayer();
   ok(/boss-tag/.test(cardHtml), "the boss card is flagged as a boss");
   ok(/enemy-card boss locked/.test(cardHtml), "the boss is locked below Qi Refinement I");
   ok(/Locked — needs Qi Refinement I/.test(cardHtml), "the lock names the realm required");
-  ok(/16x/.test(cardHtml), "the boss card previews its bigger stone drop");
+  ok(/151-302x/.test(cardHtml), "the boss card previews its bigger stone drop");
   state.player.realm_idx = 1;           // Qi Refinement I reached
   lib.showBattleEnemiesCard("");
   cardHtml = els["battle-root"].innerHTML;
   ok(!/enemy-card boss locked/.test(cardHtml), "the boss unlocks once the realm is deep enough");
   ok(/enemy-card boss"/.test(cardHtml) && !/locked-tag/.test(cardHtml),
      "the boss card stays flagged once unlocked");
+
+  // ============ 6d. the forge: recipes, gating, the craft call ============
+  const recipe = {
+    id: "roast_meat", out: "roasted_wild_rat_meat", count: 1, note: "Skewer it.",
+    cost: [
+      { id: "rat_tail", need: 1, name: "Rat Tail", rarity: "Uncommon", color: "#7cb342", img: "", glyph: "✦" },
+      { id: "raw_meat", need: 2, name: "Raw Meat", rarity: "Common", color: "#9aa0a6", img: "", glyph: "✦" },
+    ],
+    out_name: "Roasted Wild Rat Meat", out_rarity: "Common", out_img: "", out_glyph: "🍖",
+  };
+  lib.setRecipes([recipe]);
+  state.player = basePlayer();
+  state.player.inventory = { rat_tail: 3, raw_meat: 1 };
+  lib.renderCraft();
+  let craftHtml = els["craft-root"].innerHTML;
+  ok(/Rat Tail/.test(craftHtml) && /3\/1/.test(craftHtml),
+     "the recipe shows what you have against what it costs");
+  ok(/craft-cost short/.test(craftHtml), "a material you lack is marked short");
+  ok(/data-craft="1" disabled/.test(craftHtml),
+     "crafting is disabled while a material is missing");
+  ok(/data-craft="5" disabled/.test(craftHtml),
+     "bulk crafting stays locked until five sets are in hand");
+  state.player.inventory = { rat_tail: 3, raw_meat: 2 };
+  lib.renderCraft();
+  craftHtml = els["craft-root"].innerHTML;
+  ok(!/data-craft="1" disabled/.test(craftHtml),
+     "crafting unlocks once the materials are there");
+  ok(/data-craft="5" disabled/.test(craftHtml),
+     "five crafts still need five sets of materials");
+  ok(lib.craftReady(recipe, 1) === true && lib.craftReady(recipe, 5) === false,
+     "the gate follows the recipe cost");
+
+  calls.cEvents.length = 0;
+  calls.fetch = async (url, opts) => {
+    const body = JSON.parse(opts.body);
+    ok(body.recipe_id === "roast_meat" && body.count === 1,
+       "the forge is asked for the right recipe");
+    return { ok: true, json: async () => ({ ok: true, crafted: "roasted_wild_rat_meat", count: 1,
+      player: { ...state.player, inventory: { rat_tail: 2, raw_meat: 1, roasted_wild_rat_meat: 1 } } }) };
+  };
+  await lib.craftRecipe("roast_meat", 1);
+  ok(state.player.inventory.roasted_wild_rat_meat === 1, "the crafted item lands in the bag");
+  ok(state.player.inventory.rat_tail === 2, "the server's inventory replaces the local one");
+  ok(calls.cEvents.some(m => /Forged/.test(m)), "the forge reports what it made");
+  calls.fetch = null;
+
+  calls.cEvents.length = 0;
+  calls.fetch = async () => ({ ok: false, json: async () => ({ error: "Not enough Raw Meat" }) });
+  await lib.craftRecipe("roast_meat", 1);
+  ok(calls.cEvents.some(m => /refuses/.test(m)), "a refused craft is reported, not swallowed");
+  calls.fetch = null;
 
   // ============ 7. leaving the hunt persists HP, stops fight, clears log ============
   state.player = basePlayer();
@@ -603,6 +668,8 @@ state.player = basePlayer();
   ok(/loot-guaranteed/.test(SRC) && /guaranteed/.test(SRC),
      "enemy cards preview the drop as guaranteed");
   ok(/stone-glyph/.test(SRC), "the spirit stone is drawn with its own art, not an emoji");
+  ok(/fetch\("\/api\/recipes"/.test(SRC), "recipes are fetched from the server");
+  ok(/fetch\("\/api\/craft"/.test(SRC), "crafting is a server call, not a local mint");
 
   // ============ 14. scrollbars hidden, scrolling kept ============
   const CSS = fs.readFileSync(path.join(__dirname, "..", "public", "css", "style.css"), "utf8").replace(/\r\n/g, "\n");
@@ -836,6 +903,10 @@ state.player = basePlayer();
   ok(/\.tab-icon \{ width: 22px/.test(CSS), "tab icons are sized for the sidebar");
   ok(/stone-icon/.test(HTML) && /spirit_stone\.png/.test(HTML),
      "the top bar draws the spirit stone art");
+  ok(/data-tab="craft" class="side-btn">Craft/.test(HTML), "the sidebar carries a Craft tab");
+  ok(/id="craft-root"/.test(HTML), "the craft panel has a home in the page");
+  ok(/\.craft-list \{ display: grid/.test(CSS) && /\.craft-cost\.short/.test(CSS),
+     "the forge panel is styled, and a missing material reads as short");
   ok(/\.stone-glyph \{ width: 14px/.test(CSS), "the stone glyph is sized for inline use");
   ok(/\.slot \.slot-icon \{ width: 42px/.test(CSS), "slot icons are sized for the doll");
   ok(/\.slot \.art-slot \{ width: 46px/.test(CSS), "equipped slot art fills the now-label-free slot");

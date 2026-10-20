@@ -17,8 +17,8 @@ import mimetypes
 # Single source of truth for the build number. Must match CLIENT_VERSION in
 # public/js/app.js and the footer in public/index.html. A player whose saved
 # patch_version differs gets one patch-note mail when they next check mail.
-SERVER_VERSION = "0.9.6"
-CLIENT_VERSION = "0.9.6"  # for /status only; the client keeps its own copy
+SERVER_VERSION = "0.9.7"
+CLIENT_VERSION = "0.9.7"  # for /status only; the client keeps its own copy
 STARTED_AT = time.time()
 RESTARTED_AT = 0
 RESTART_SEQ = 0
@@ -30,7 +30,7 @@ MAINTENANCE = {"on": False, "message": "", "since": None}
 ANNOUNCEMENT = {"text": "", "at": 0}
 
 # Paths refused while maintenance is on: anything that changes a save.
-MAINTENANCE_BLOCKED = ("/api/sync", "/api/roll", "/api/create")
+MAINTENANCE_BLOCKED = ("/api/sync", "/api/roll", "/api/create", "/api/craft")
 
 # Optional shared secret for the admin endpoint. Unset means the admin API is
 # reachable from localhost only, which is where the server binds by default.
@@ -173,6 +173,8 @@ MANUAL_ALLOW_MULT = 6.0  # headroom per second: meditate clicks + battle Qi rewa
 # sync clamp only rejects absurd forgeries (there is no spend path yet; a
 # shop must price and deduct server-side when it arrives).
 SPIRIT_STONE_CAP = 1_000_000_000
+# Crafting is capped per request so a fat finger cannot mint a mountain.
+CRAFT_MAX_COUNT = 20
 
 # ----------------------------------------------------------------------------
 # Hunting areas (single source of truth; served via GET /api/areas)
@@ -185,10 +187,14 @@ def _mob(id, name, realm, difficulty, desc, glyph, hp, atk, dfn, speed, qi, loot
     # req_idx: realm the player must have reached before this beast can be
     # faced (a boss can demand more than the area around it). boss: marks the
     # card as a boss encounter.
+    # stones: a currency, so a kill pays a real purse. The range scales with
+    # the beast -- a Spectral Rat pays 10-20, the alpha wolf 151-302.
+    s_lo = qi * 3 + 1
     return {"id": id, "name": name, "realm": realm, "difficulty": difficulty,
             "desc": desc, "glyph": glyph,
             "hp": hp, "atk": atk, "def": dfn, "crit": 5, "crit_dmg": 150,
-            "speed": speed, "qi": qi, "stones": max(1, qi // 3), "loot": loot,
+            "speed": speed, "qi": qi,
+            "stones": {"min": s_lo, "max": s_lo * 2}, "loot": loot,
             "req_idx": req_idx, "boss": boss}
 
 # A mob's loot list, written as (item, rarity, chance%, min, max).
@@ -433,7 +439,7 @@ _MATERIAL_RARITY = _material_rarities()
 MATERIALS = [{"id": _slug(name), "name": name, "kind": "material", "slot": None,
               "glyph": "✦", "rarity": _MATERIAL_RARITY.get(name, "Common"),
               "color": ITEM_RARITY_COLORS[_MATERIAL_RARITY.get(name, "Common")],
-              "desc": "Battle loot. Crafting is deferred — no recipe system yet.",
+              "desc": "Battle loot. Spent at the forge to craft gear and pills.",
               "stats": dict(_ZERO)}
              for name in sorted({l["item"] for a in AREAS for m in a["mobs"] for l in m["loot"]})]
 
@@ -457,6 +463,68 @@ def slot_accepts(item_slot, equip_slot):
     if item_slot == equip_slot:
         return True
     return equip_slot in SLOT_GROUPS.get(item_slot, ())
+
+
+# ----------------------------------------------------------------------------
+# Crafting recipes (single source of truth; served via GET /api/recipes)
+#
+# A recipe turns beast parts into an item. The server owns the rule: it
+# checks the materials, spends them and hands over the result, so a client
+# cannot craft for free. The client only renders this table.
+# ----------------------------------------------------------------------------
+def _recipe(id, out, cost, count=1, note=""):
+    return {"id": id, "out": out, "count": count, "cost": cost, "note": note}
+
+RECIPES = [
+    # ---- pills and broth, from the parts of a kill
+    _recipe("roast_meat", "roasted_wild_rat_meat", {"rat_tail": 1, "raw_meat": 1},
+            note="Skewer the tail, sear the meat. It feeds the body and warms the meridians."),
+    _recipe("grind_qi_pill", "minor_qi_pill", {"small_beast_bone": 1, "weak_beast_blood": 1},
+            note="Bone ground to powder, blood to bind it into a pellet."),
+    _recipe("steep_elixir", "minor_vitality_elixir", {"beast_core_fragment": 1, "raw_meat": 2},
+            note="A core's warmth steeped overnight in meat broth."),
+    _recipe("brew_alpha_blood", "minor_vitality_elixir",
+            {"corrupted_alpha_blood": 1, "beast_core_fragment": 2, "raw_meat": 2},
+            note="The alpha's own blood, boiled slow. It closes wounds it should not close."),
+    _recipe("grind_alpha_fang", "minor_qi_pill", {"corrupted_fang": 1, "gray_wolf_essence": 2},
+            note="Fang dust and wolf essence, rolled into a pill that bites the dantian."),
+
+    # ---- hide and bone gear
+    _recipe("cure_leather_chest", "leather_chest", {"boar_hide": 4, "boar_fat": 2},
+            note="Boar hide, cured with its own fat and sewn close."),
+    _recipe("cure_leather_helmet", "leather_helmet", {"boar_hide": 2, "boar_tusk": 1},
+            note="Hide boiled soft, a tusk split for the brow."),
+    _recipe("cure_leather_boots", "leather_boots", {"boar_hide": 2, "wolf_pelt": 1},
+            note="Soles thick enough to outlast a wolf's sprint."),
+    _recipe("bind_leather_bracers", "leather_bracers", {"wolf_pelt": 2, "broken_claw": 2},
+            note="Thin hide guards. A little defence, a little grip."),
+    _recipe("pad_leather_leggings", "leather_leggings", {"wolf_pelt": 2, "boar_hide": 1},
+            note="Reinforced at the knees, where the beast's claws land first."),
+    _recipe("sew_leather_cape", "leather_cape", {"wolf_pelt": 3, "rat_fur": 2},
+            note="Travel-worn, ash-stained. It hides nothing, but it catches the wind."),
+    _recipe("carve_wooden_sword", "wooden_sword", {"boar_tusk": 2, "boar_fat": 1},
+            note="A tusk ground down to a practice blade. Every master kept one."),
+    _recipe("lash_wooden_shield", "wooden_shield", {"boar_hide": 3, "boar_tusk": 1},
+            note="Planks and a tusk rim. Heavy, honest, and better than an open hand."),
+    _recipe("knot_cloth_headband", "cloth_headband", {"wolf_pelt": 2, "raw_meat": 1},
+            note="A knotted strip of dyed hide, worn at the brow."),
+
+    # ---- spirit gear, from the parts that still hum
+    _recipe("split_qi_stone", "cracked_qi_stone", {"beast_core_fragment": 2, "beast_bone": 2},
+            note="A stone split by a thin seam of living qi. It hums when you breathe."),
+    _recipe("chip_jade_pendant", "chipped_jade_pendant", {"gray_wolf_essence": 1, "beast_bone": 2},
+            note="Jade with a corner broken off. Still cool against the sternum."),
+    _recipe("draw_copper_ring", "copper_spirit_ring", {"wolf_fang": 2, "broken_claw": 3},
+            note="A plain copper band that sharpens the wearer's critical strikes."),
+    _recipe("weave_qi_ring", "qi_gathering_ring", {"beast_core_fragment": 1, "gray_wolf_essence": 1},
+            note="A spirit-threaded ring that helps draw ambient Qi into the dantian."),
+    _recipe("forge_jade_ring", "jade_guard_ring", {"corrupted_fang": 1, "wolf_fang": 2, "beast_blood": 1},
+            note="Dense green jade that steadies the body and turns aside blows."),
+    _recipe("temper_alpha_ring", "jade_guard_ring",
+            {"corrupted_alpha_wolf_core": 1, "gray_wolf_essence": 2, "wolf_fang": 2},
+            note="The alpha's core tempered into the ring. Nothing breaks through it."),
+]
+RECIPE_BY_ID = {r["id"]: r for r in RECIPES}
 
 # ----------------------------------------------------------------------------
 # Art assets. A mob or item draws its picture from a file named after its id
@@ -977,6 +1045,31 @@ class Handler(BaseHTTPRequestHandler):
             _apply_art(_asset_cache())
             return self._send_json({"items": ITEMS}, cache="no-store")
 
+        if path == "/api/recipes":
+            # The recipe table is static, but the art on it is resolved live
+            # like every other picture, so a new PNG shows up on refresh.
+            _apply_art(_asset_cache())
+            recipes = []
+            for r in RECIPES:
+                out_it = ITEM_BY_ID.get(r["out"]) or {}
+                cost = []
+                for mid, need in r["cost"].items():
+                    it = ITEM_BY_ID.get(mid)
+                    if not it:
+                        continue
+                    cost.append({"id": mid, "need": need, "name": it["name"],
+                                 "rarity": it["rarity"], "color": it.get("color", ""),
+                                 "img": it.get("img", ""), "glyph": it.get("glyph", "✦")})
+                recipes.append({
+                    "id": r["id"], "out": r["out"], "count": r["count"],
+                    "note": r["note"], "cost": cost,
+                    "out_name": out_it.get("name", r["out"]),
+                    "out_rarity": out_it.get("rarity", "Common"),
+                    "out_img": out_it.get("img", ""),
+                    "out_glyph": out_it.get("glyph", "✦"),
+                })
+            return self._send_json({"ok": True, "recipes": recipes}, cache="no-store")
+
         if path == "/api/icons":
             # UI chrome art (tabs, doll slots). Resolved per request so a new
             # PNG shows up on refresh, like item and enemy art.
@@ -1183,6 +1276,54 @@ class Handler(BaseHTTPRequestHandler):
             return self._send_json({
                 "ok": True, "mail": m, "unread": _mail_unread(stored),
                 "granted": granted, "inventory": inv,
+            }, cache="no-store")
+
+        if path == "/api/craft":
+            # The forge is server-side on purpose: the client asks for a
+            # recipe, the server checks the materials, spends them and hands
+            # over the result. A client cannot craft for itself.
+            data = self._read_json()
+            username = str(data.get("username") or "").strip()
+            if not USERNAME_RE.match(username):
+                return self._send_json({"error": "Bad username"}, status=400)
+            stored = PLAYERS.get(username)
+            if not stored:
+                return self._send_json({"error": "Unknown cultivator"}, status=404)
+            recipe = RECIPE_BY_ID.get(str(data.get("recipe_id") or ""))
+            if not recipe:
+                return self._send_json({"error": "No such recipe"}, status=404)
+            try:
+                count = int(data.get("count", 1))
+            except (TypeError, ValueError):
+                count = 1
+            count = max(1, min(count, CRAFT_MAX_COUNT))
+            inv = dict(stored.get("inventory") or {})
+            # Every material must be on hand before anything is spent.
+            for mid, need in recipe["cost"].items():
+                have = int(inv.get(mid, 0) or 0)
+                if have < need * count:
+                    it = ITEM_BY_ID.get(mid) or {}
+                    return self._send_json(
+                        {"error": "Not enough %s (need %d, have %d)"
+                                  % (it.get("name", mid), need * count, have)},
+                        status=400)
+            for mid, need in recipe["cost"].items():
+                left = int(inv.get(mid, 0) or 0) - need * count
+                if left > 0:
+                    inv[mid] = left
+                else:
+                    inv.pop(mid, None)
+            out_id = recipe["out"]
+            if out_id not in ITEM_BY_ID:
+                return self._send_json({"error": "Recipe output is unknown"}, status=500)
+            made = recipe["count"] * count
+            inv[out_id] = max(0, min(int(inv.get(out_id, 0) or 0) + made, 9999))
+            stored["inventory"] = inv
+            stored["last_seen"] = time.time()
+            save_players()
+            return self._send_json({
+                "ok": True, "crafted": out_id, "count": made,
+                "player": {k: v for k, v in stored.items() if k != "hp"},
             }, cache="no-store")
 
         if path == "/api/mail/maintenance":

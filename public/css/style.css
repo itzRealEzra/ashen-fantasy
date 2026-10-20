@@ -207,6 +207,23 @@ input { background: #0e0e14; border: 1px solid var(--line); color: var(--ink); p
 .inv-grid .inv-slot { border-color: var(--rc, var(--line)); }
 .inv-grid .inv-slot:hover { border-color: var(--gold); box-shadow: 0 0 6px rgba(240, 212, 154, .3); }
 .inv-grid .inv-empty { border-style: dashed; border-color: #2b251c; background: #0a0a10; cursor: default; pointer-events: none; }
+
+/* crafting panel */
+.craft-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 10px; }
+.craft-card { border: 1px solid var(--line); background: var(--panel2); padding: 12px; display: flex; flex-direction: column; gap: 8px; }
+.craft-card:hover { border-color: var(--gold); }
+.craft-out { display: flex; gap: 10px; align-items: center; }
+.craft-out b { color: var(--gold2); font-size: 15px; }
+.craft-out-text small { display: block; font-size: 11px; letter-spacing: 1px; }
+.craft-costs { display: flex; flex-direction: column; gap: 3px; }
+.craft-cost { display: flex; justify-content: space-between; align-items: center; gap: 8px; font-size: 12px; color: var(--muted); }
+.craft-cost.short { color: var(--red); }
+.craft-cost-name { display: flex; align-items: center; gap: 6px; }
+.craft-cost-qty { white-space: nowrap; }
+.craft-note { font-size: 12px; line-height: 1.5; margin: 0; }
+.craft-actions { display: flex; gap: 8px; margin-top: auto; }
+.art-craft { width: 20px; height: 20px; }
+.art-craft-out { width: 40px; height: 40px; }
 .inv-stats { color: var(--gold2); font-size: 13px; }
 /* ---------- mail ---------- */
 .mail-badge { display: inline-block; margin-left: 8px; min-width: 20px; padding: 1px 6px; border-radius: 10px;

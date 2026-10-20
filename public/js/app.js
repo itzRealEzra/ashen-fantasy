@@ -1,6 +1,6 @@
 /* Ashen Fantasy — vanilla JS state machine: username -> roots -> main */
 const $ = (id) => document.getElementById(id);
-const CLIENT_VERSION = "0.9.6"; // must match server.py server_version + footer
+const CLIENT_VERSION = "0.9.7"; // must match server.py server_version + footer
 const state = {
   username: localStorage.getItem("af_user") || "",
   rollId: null,
@@ -697,6 +697,7 @@ document.querySelectorAll(".side-btn").forEach(b => b.onclick = () => {
     showBattleAreas(); // refresh realm locks after breakthroughs
   }
   if (b.dataset.tab === "inventory") renderInventory();
+  if (b.dataset.tab === "craft") renderCraft();
   if (b.dataset.tab === "mail") loadMail();
   pollServerState(); // a fresh panel should never show stale admin state
   document.querySelectorAll(".side-btn").forEach(x => x.classList.remove("active"));
@@ -1273,6 +1274,90 @@ async function fetchAreas() {
   return [];
 }
 
+// ---------- crafting ----------
+// The forge lives on the server: it checks the materials, spends them and
+// hands back the item. The client only draws the recipe table.
+let RECIPES = [];
+
+async function fetchRecipes() {
+  try {
+    const r = await fetch("/api/recipes", { cache: "no-store" });
+    const j = await r.json();
+    if (j.recipes) RECIPES = j.recipes;
+  } catch {}
+  return RECIPES;
+}
+
+function craftReady(r, count) {
+  const inv = (state.player && state.player.inventory) || {};
+  return r.cost.every(c => (inv[c.id] || 0) >= c.need * count);
+}
+
+function renderCraft() {
+  const root = $("craft-root");
+  const p = state.player;
+  if (!root || !p) return;
+  if (!RECIPES.length) {
+    root.innerHTML = `<p class="muted">Consulting the forge…</p>`;
+    fetchRecipes().then(() => renderCraft());
+    return;
+  }
+  const inv = p.inventory || {};
+  root.innerHTML =
+    `<h2>Crafting</h2>` +
+    `<p class="muted">Beast parts become gear and pills. Materials are spent for good.</p>` +
+    `<div class="craft-list">` + RECIPES.map(r => {
+      const costs = r.cost.map(c => {
+        const have = inv[c.id] || 0;
+        const short = have < c.need;
+        return `<div class="craft-cost${short ? " short" : ""}">
+          <span class="craft-cost-name">${iconHtml(c.img, c.glyph, "art-craft")}<span style="color:${c.color || "inherit"}">${esc(c.name)}</span></span>
+          <span class="craft-cost-qty">${have}/${c.need}</span>
+        </div>`;
+      }).join("");
+      return `<div class="craft-card" data-recipe="${r.id}">
+        <div class="craft-out">${iconHtml(r.out_img, r.out_glyph, "art-craft-out")}<div class="craft-out-text"><b>${esc(r.out_name)}</b><small class="muted">${esc(r.out_rarity)}${r.count > 1 ? ` ×${r.count}` : ""}</small></div></div>
+        <div class="craft-costs">${costs}</div>
+        <p class="craft-note muted">${esc(r.note || "")}</p>
+        <div class="craft-actions">
+          <button class="btn" data-craft="1"${craftReady(r, 1) ? "" : " disabled"}>Craft</button>
+          <button class="btn" data-craft="5"${craftReady(r, 5) ? "" : " disabled"}>Craft ×5</button>
+        </div>
+      </div>`;
+    }).join("") + `</div>`;
+  root.querySelectorAll("[data-craft]").forEach(btn => {
+    btn.onclick = () => craftRecipe(btn.closest(".craft-card").dataset.recipe, +btn.dataset.craft);
+  });
+}
+
+async function craftRecipe(recipeId, count) {
+  const p = state.player;
+  if (!p) return;
+  let j = null;
+  try {
+    const r = await fetch("/api/craft", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ username: p.username, recipe_id: recipeId, count }),
+    });
+    j = await r.json();
+  } catch {
+    cEvent("The forge stays cold — the server did not answer.");
+    return;
+  }
+  if (!j || j.error) {
+    cEvent("The forge refuses: " + (j && j.error ? j.error : "unknown reason"));
+    return;
+  }
+  if (j.ok && j.player) {
+    p.inventory = j.player.inventory;
+    const it = ITEM_BY_ID[j.crafted] || {};
+    cEvent(`Forged ${it.name || j.crafted}${j.count > 1 ? ` ×${j.count}` : ""}.`);
+    saveLocal(p);
+    renderCraft();
+    renderInventory();
+  }
+}
+
 let ITEM_BY_ID = {};
 let NAME_TO_ID = {};
 const EQUIP_SLOT_LIST = ["head", "sec_weapon", "chest", "main_weapon", "core",
@@ -1432,6 +1517,8 @@ function showBattleEnemies(notice) {
     `<div class="enemy-grid">` + a.mobs.map(m => {
       // A boss can demand more than the area around it, so the lock is per beast.
       const locked = (p.realm_idx | 0) < (m.req_idx || 0);
+      const st = mobStones(m);
+      const stQty = st.min === st.max ? `${st.min}x` : `${st.min}-${st.max}x`;
       return `<div class="enemy-card${m.boss ? " boss" : ""}${locked ? " locked" : ""}" data-mob="${m.id}" data-locked="${locked ? "1" : "0"}">
         <b>${esc(m.name)}</b>
         ${m.boss ? `<div class="boss-tag">Boss</div>` : ""}
@@ -1443,7 +1530,7 @@ function showBattleEnemies(notice) {
         <div class="enemy-loot">Loot list<div class="loot-row loot-guaranteed">
             <span class="loot-name"><img class="stone-glyph" src="/assets/icons/spirit_stone.png" alt="" /> Spirit Stone</span>
             <span class="loot-rar">guaranteed</span>
-            <span class="loot-qty">${mobStones(m)}x</span>
+            <span class="loot-qty">${stQty}</span>
             <span class="loot-pct">100%</span>
           </div>${m.loot.map(l => {
           const c = ITEM_RARITY_COLORS[l.rarity] || "";
@@ -1604,11 +1691,25 @@ function battleTick() {
   paintBars();
 }
 
-// Spirit stones ride with the kill: the server publishes stones per mob
-// (derived from its qi); an older area payload falls back to qi/3.
+// Spirit stones ride with the kill: the server publishes a range per mob
+// (it scales with the beast). An older area payload falls back to the same
+// curve the server uses.
 function mobStones(m) {
-  if (!m) return 0;
-  return Math.max(0, Math.floor(m.stones != null ? m.stones : (m.qi || 0) / 3));
+  if (!m) return { min: 0, max: 0 };
+  const s = m.stones;
+  if (s && typeof s === "object") {
+    const lo = Math.max(0, s.min | 0);
+    return { min: lo, max: Math.max(lo, s.max | 0) };
+  }
+  const lo = Math.max(1, (m.qi || 0) * 3 + 1);
+  return { min: lo, max: lo * 2 };
+}
+
+// The purse one kill pays out.
+function rollStones(m) {
+  const s = mobStones(m);
+  if (s.max <= 0) return 0;
+  return s.min + Math.floor(Math.random() * (s.max - s.min + 1));
 }
 
 function onMobDeath() {
@@ -1626,7 +1727,7 @@ function onMobDeath() {
   // Guaranteed drop on every kill, logged like any other loot. The count
   // scales with the enemy: the server publishes stones per mob from its qi,
   // so stronger prey pays far better than rats.
-  const stones = mobStones(m);
+  const stones = rollStones(m);
   if (stones > 0) {
     p.spirit_stones = (p.spirit_stones | 0) + stones;
     battle.lastStones = stones;

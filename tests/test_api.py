@@ -324,11 +324,13 @@ try:
     # ============ 10b. spirit stones: monotonic, capped, back-filled ============
     st, j = req("/api/areas")
     mobs = [m for a in j["areas"] for m in a["mobs"]]
-    ok(all(m.get("stones") == max(1, m["qi"] // 3) for m in mobs),
-       "every mob publishes a stones reward derived from its qi")
+    ok(all(isinstance(m.get("stones"), dict) and m["stones"]["min"] <= m["stones"]["max"]
+           for m in mobs), "every mob publishes a stone range")
     village = next(a for a in j["areas"] if a["id"] == "origin_village")
+    rat = next(m for m in village["mobs"] if m["id"] == "spectral_rat")
+    ok(rat["stones"] == {"min": 10, "max": 20}, "a Spectral Rat pays 10-20 stones")
     boss = next(m for m in village["mobs"] if m["id"] == "corrupted_alpha_wolf")
-    ok(boss["stones"] > max(m["stones"] for m in village["mobs"] if m["id"] != boss["id"]),
+    ok(boss["stones"]["min"] > max(m["stones"]["min"] for m in village["mobs"] if m["id"] != boss["id"]),
        "the higher the enemy the higher the stone drop")
     # ============ 10c. the boss lives in the village, gated and loot-clean ====
     ok(all(a["id"] != "corrupted_den" for a in j["areas"]),
@@ -361,6 +363,47 @@ try:
                      "corrupted_alpha_wolf_core", "corrupted_alpha_wolf_pelt",
                      "qi_gathering_ring")),
        "the new art lands on the items it belongs to")
+
+    # ============ 10d. crafting: the server owns the rule ============
+    st, j = req("/api/recipes")
+    ok(st == 200 and len(j.get("recipes", [])) > 0, "recipes are served")
+    recipes = j.get("recipes") or []
+    ok(all(r["cost"] for r in recipes), "every recipe names its materials")
+    ok(all(c["id"] in server.ITEM_BY_ID for r in recipes for c in r["cost"]),
+       "recipe materials are real items")
+    ok(all(r["out"] in server.ITEM_BY_ID for r in recipes),
+       "recipe outputs are real items")
+    ok(len({r["id"] for r in recipes}) == len(recipes), "recipe ids are unique")
+
+    fresh("crafter", inventory={"rat_tail": 4, "raw_meat": 2})
+    st, j = req("/api/craft", {"username": "crafter", "recipe_id": "roast_meat", "count": 1})
+    ok(st == 200 and j.get("ok") is True, "a craft with the right materials succeeds")
+    inv = j["player"]["inventory"]
+    ok(inv.get("roasted_wild_rat_meat") == 1, "the crafted item is granted")
+    ok(inv.get("rat_tail") == 3 and inv.get("raw_meat") == 1, "the materials are spent")
+
+    st, j = req("/api/craft", {"username": "crafter", "recipe_id": "roast_meat", "count": 5})
+    ok(st == 400 and j.get("error"), "a craft without the materials is refused")
+    ok(server.PLAYERS["crafter"]["inventory"].get("rat_tail") == 3,
+       "a refused craft spends nothing")
+
+    st, j = req("/api/craft", {"username": "crafter", "recipe_id": "no_such_recipe"})
+    ok(st == 404, "an unknown recipe is refused")
+
+    fresh("crafter2", inventory={"rat_tail": 8, "raw_meat": 4})
+    st, j = req("/api/craft", {"username": "crafter2", "recipe_id": "roast_meat", "count": 4})
+    inv = j["player"]["inventory"]
+    ok(inv.get("roasted_wild_rat_meat") == 4 and inv.get("rat_tail") == 4,
+       "crafting in bulk spends materials in bulk")
+
+    st, j = req("/api/craft", {"username": "crafter2", "recipe_id": "roast_meat", "count": 9999})
+    ok(st == 400, "a runaway count cannot be crafted")
+    st, j = req("/api/craft", {"username": "nobody_at_all", "recipe_id": "roast_meat"})
+    ok(st == 404, "an unknown cultivator cannot craft")
+    server.PLAYERS["crafter2"]["inventory"] = {"rat_tail": 4, "raw_meat": 4}
+    st, j = req("/api/craft", {"username": "crafter2", "recipe_id": "roast_meat", "count": "many"})
+    ok(st == 200 and j["player"]["inventory"].get("roasted_wild_rat_meat") == 1,
+       "a bad count falls back to a single craft instead of crashing the forge")
     fresh("stone_collector", spirit_stones=50)
     st, j = sync("stone_collector", spirit_stones=70)
     ok(st == 200 and j["player"]["spirit_stones"] == 70, "earned stones are accepted")

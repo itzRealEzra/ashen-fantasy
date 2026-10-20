@@ -11,6 +11,27 @@ and push to `main` on https://github.com/itzRealEzra/ashen-fantasy.
 
 ## [Unreleased]
 
+## [0.9.7] - 2026-10-20
+### Added
+- **Crafting system.** A new `Craft` tab in the sidebar opens the forge:
+  every recipe shows what it makes, what it costs and what you are holding,
+  with the materials you are short of marked red. Recipes are served by
+  `GET /api/recipes` and crafted through `POST /api/craft` — the server owns
+  the rule: it checks the materials, spends them and hands back the item, so
+  a client cannot craft for itself. 19 recipes cover pills, broth, hide and
+  bone gear, spirit gear and two ways to forge a Jade Guard Ring (one from
+  the alpha's fang, one from its core). Materials are spent for good, and a
+  craft is capped at 20 at a time.
+- **Spirit stones are a currency now.** Every kill pays a purse instead of a
+  couple of pebbles: the server publishes a range per mob, scaled with the
+  beast — a Spectral Rat pays 10-20 stones, a Tusked War Boar 43-86, the
+  Corrupted Alpha Wolf 151-302. The amount is rolled per kill and logged in
+  the hunt loot panel; the enemy card previews the range.
+
+### Changed
+- Materials are no longer "crafting deferred" loot: their description now
+  says they are spent at the forge to craft gear and pills.
+
 ## [0.9.6] - 2026-10-20
 ### Changed
 - The Corrupted Alpha Wolf is now a boss of **Origin Village** instead of
