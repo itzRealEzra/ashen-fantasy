@@ -374,6 +374,32 @@ try:
     ok(all(r["out"] in server.ITEM_BY_ID for r in recipes),
        "recipe outputs are real items")
     ok(len({r["id"] for r in recipes}) == len(recipes), "recipe ids are unique")
+    # Each recipe belongs to a bench, and the bench follows what it makes:
+    # gear on the craft bench, pills and elixirs in alchemy, food on the stove.
+    ok(all(r["kind"] in ("craft", "alchemy", "cook") for r in recipes),
+       "every recipe names its bench")
+    def bench_of(out_id):
+        it = server.ITEM_BY_ID[out_id]
+        if it["kind"] != "consumable":
+            return "craft"
+        u = it.get("use") or {}
+        return "cook" if (u.get("heal_pct") and u.get("qi_pct")) else "alchemy"
+    ok(all(r["kind"] == bench_of(r["out"]) for r in recipes),
+       "the bench matches what the recipe makes")
+    by_bench = {b: [r for r in recipes if r["kind"] == b] for b in ("craft", "alchemy", "cook")}
+    ok(len(by_bench["craft"]) > 0 and len(by_bench["alchemy"]) > 0 and len(by_bench["cook"]) > 0,
+       "all three benches have recipes of their own")
+    ok(all(server.ITEM_BY_ID[r["out"]]["kind"] == "gear" for r in by_bench["craft"]),
+       "the craft bench makes gear only")
+    ok(all(server.ITEM_BY_ID[r["out"]]["kind"] == "consumable" for r in by_bench["alchemy"]),
+       "the alchemy bench makes pills and elixirs only")
+    ok(all(server.ITEM_BY_ID[r["out"]]["kind"] == "consumable" for r in by_bench["cook"]),
+       "the cook bench makes food only")
+    # A pill and a meal never share a bench.
+    ok("roasted_wild_rat_meat" not in {r["out"] for r in by_bench["alchemy"]},
+       "food is not sold as alchemy")
+    ok("minor_qi_pill" not in {r["out"] for r in by_bench["cook"]},
+       "pills are not sold as food")
 
     fresh("crafter", inventory={"rat_tail": 4, "raw_meat": 2})
     st, j = req("/api/craft", {"username": "crafter", "recipe_id": "roast_meat", "count": 1})
@@ -404,6 +430,18 @@ try:
     st, j = req("/api/craft", {"username": "crafter2", "recipe_id": "roast_meat", "count": "many"})
     ok(st == 200 and j["player"]["inventory"].get("roasted_wild_rat_meat") == 1,
        "a bad count falls back to a single craft instead of crashing the forge")
+
+    # each bench spends materials and hands over its own goods
+    fresh("bench_tester", inventory={"boar_fat": 2, "bloodied_tusk": 1, "raw_meat": 2,
+                                     "small_beast_bone": 1, "weak_beast_blood": 1})
+    st, j = req("/api/craft", {"username": "bench_tester", "recipe_id": "boar_roast", "count": 1})
+    ok(st == 200 and j.get("kind") == "cook", "a food recipe is served by the cook bench")
+    ok(j["player"]["inventory"].get("boar_roast") == 1, "the cooked meal is granted")
+    st, j = req("/api/craft", {"username": "bench_tester", "recipe_id": "grind_qi_pill", "count": 1})
+    ok(st == 200 and j.get("kind") == "alchemy", "a pill recipe is served by the alchemy bench")
+    ok(j["player"]["inventory"].get("minor_qi_pill") == 1, "the pill is granted")
+    st, j = req("/api/craft", {"username": "bench_tester", "recipe_id": "cure_leather_chest", "count": 1})
+    ok(st == 400, "gear cannot be crafted without its hide")
     fresh("stone_collector", spirit_stones=50)
     st, j = sync("stone_collector", spirit_stones=70)
     ok(st == 200 and j["player"]["spirit_stones"] == 70, "earned stones are accepted")

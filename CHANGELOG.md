@@ -11,6 +11,27 @@ and push to `main` on https://github.com/itzRealEzra/ashen-fantasy.
 
 ## [Unreleased]
 
+## [0.9.8] - 2026-10-20
+### Changed
+- **The forge is split into three benches.** Food, pills and elixirs no longer
+  sit on the same bench as gear:
+  - **Craft** — gear only (hide, bone and spirit gear, 15 recipes)
+  - **Alchemy** — pills and elixirs (6 recipes, cores, blood and bone)
+  - **Cook** — food (4 recipes, raw parts, fat and bloodied tusk)
+  The bench a recipe belongs to is derived from what it makes, so it can never
+  drift from the item it hands over. `GET /api/recipes` serves the bench with
+  each recipe, and `POST /api/craft` answers with the bench it ran on.
+- The sidebar gains **Alchemy** and **Cook** tabs beside Craft, each with its
+  own panel and its own verb (Forged / Brewed / Cooked). The sidebar scrolls
+  now, so the longer list is never clipped on a short screen.
+
+### Added
+- Three cooked foods to cook: **Boar Roast** (heal 25% / qi 5%), **Wolf Stew**
+  (heal 15% / qi 10%) and **Spirit Dumpling** (heal 30% / qi 15%). They are
+  appended after the three slot seeds on purpose: the elixir slot labels take
+  the first consumable of their shape, so a new meal never steals the meal
+  slot's name.
+
 ## [0.9.7] - 2026-10-20
 ### Added
 - **Crafting system.** A new `Craft` tab in the sidebar opens the forge:

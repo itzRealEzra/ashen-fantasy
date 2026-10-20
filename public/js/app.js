@@ -1,6 +1,6 @@
 /* Ashen Fantasy — vanilla JS state machine: username -> roots -> main */
 const $ = (id) => document.getElementById(id);
-const CLIENT_VERSION = "0.9.7"; // must match server.py server_version + footer
+const CLIENT_VERSION = "0.9.8"; // must match server.py server_version + footer
 const state = {
   username: localStorage.getItem("af_user") || "",
   rollId: null,
@@ -697,7 +697,9 @@ document.querySelectorAll(".side-btn").forEach(b => b.onclick = () => {
     showBattleAreas(); // refresh realm locks after breakthroughs
   }
   if (b.dataset.tab === "inventory") renderInventory();
-  if (b.dataset.tab === "craft") renderCraft();
+  if (b.dataset.tab === "craft") renderWork("craft-root", "craft");
+  if (b.dataset.tab === "alchemy") renderWork("alchemy-root", "alchemy");
+  if (b.dataset.tab === "cook") renderWork("cook-root", "cook");
   if (b.dataset.tab === "mail") loadMail();
   pollServerState(); // a fresh panel should never show stale admin state
   document.querySelectorAll(".side-btn").forEach(x => x.classList.remove("active"));
@@ -1274,10 +1276,17 @@ async function fetchAreas() {
   return [];
 }
 
-// ---------- crafting ----------
-// The forge lives on the server: it checks the materials, spends them and
-// hands back the item. The client only draws the recipe table.
+// ---------- the three trades ----------
+// The forge owns the rule: it checks the materials, spends them and hands
+// back the item. The client only draws the recipe table. Gear, pills and
+// food each have their own bench, so they never share a panel.
 let RECIPES = [];
+
+const TRADES = {
+  craft: { title: "Crafting", sub: "Hide, bone and spirit worked into gear.", verb: "Forged" },
+  alchemy: { title: "Alchemy", sub: "Cores, blood and bone ground into pills and elixirs.", verb: "Brewed" },
+  cook: { title: "Cooking", sub: "Raw parts turned into a hot meal.", verb: "Cooked" },
+};
 
 async function fetchRecipes() {
   try {
@@ -1293,20 +1302,22 @@ function craftReady(r, count) {
   return r.cost.every(c => (inv[c.id] || 0) >= c.need * count);
 }
 
-function renderCraft() {
-  const root = $("craft-root");
+function renderWork(rootId, kind) {
+  const root = $(rootId);
   const p = state.player;
   if (!root || !p) return;
+  const trade = TRADES[kind] || TRADES.craft;
   if (!RECIPES.length) {
     root.innerHTML = `<p class="muted">Consulting the forge…</p>`;
-    fetchRecipes().then(() => renderCraft());
+    fetchRecipes().then(() => renderWork(rootId, kind));
     return;
   }
+  const recipes = RECIPES.filter(r => (r.kind || "craft") === kind);
   const inv = p.inventory || {};
   root.innerHTML =
-    `<h2>Crafting</h2>` +
-    `<p class="muted">Beast parts become gear and pills. Materials are spent for good.</p>` +
-    `<div class="craft-list">` + RECIPES.map(r => {
+    `<h2>${esc(trade.title)}</h2>` +
+    `<p class="muted">${esc(trade.sub)} Materials are spent for good.</p>` +
+    `<div class="craft-list">` + recipes.map(r => {
       const costs = r.cost.map(c => {
         const have = inv[c.id] || 0;
         const short = have < c.need;
@@ -1320,8 +1331,8 @@ function renderCraft() {
         <div class="craft-costs">${costs}</div>
         <p class="craft-note muted">${esc(r.note || "")}</p>
         <div class="craft-actions">
-          <button class="btn" data-craft="1"${craftReady(r, 1) ? "" : " disabled"}>Craft</button>
-          <button class="btn" data-craft="5"${craftReady(r, 5) ? "" : " disabled"}>Craft ×5</button>
+          <button class="btn" data-craft="1"${craftReady(r, 1) ? "" : " disabled"}>${esc(trade.verb)}</button>
+          <button class="btn" data-craft="5"${craftReady(r, 5) ? "" : " disabled"}>${esc(trade.verb)} ×5</button>
         </div>
       </div>`;
     }).join("") + `</div>`;
@@ -1351,9 +1362,12 @@ async function craftRecipe(recipeId, count) {
   if (j.ok && j.player) {
     p.inventory = j.player.inventory;
     const it = ITEM_BY_ID[j.crafted] || {};
-    cEvent(`Forged ${it.name || j.crafted}${j.count > 1 ? ` ×${j.count}` : ""}.`);
+    const trade = TRADES[j.kind] || TRADES.craft;
+    cEvent(`${trade.verb} ${it.name || j.crafted}${j.count > 1 ? ` ×${j.count}` : ""}.`);
     saveLocal(p);
-    renderCraft();
+    // repaint the bench the player is standing at, with the new counts
+    const kind = j.kind || "craft";
+    renderWork({ craft: "craft-root", alchemy: "alchemy-root", cook: "cook-root" }[kind] || "craft-root", kind);
     renderInventory();
   }
 }

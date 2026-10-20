@@ -30,6 +30,7 @@ const els = {
   "char-sheet": mkEl(), "p-realm": mkEl(), "cult-rate": mkEl(),
   "battle-root": mkEl(), "char-hp": mkEl(), "char-qi": mkEl(),
   "p-stones": mkEl(), "enemy-back": mkEl(), "craft-root": mkEl(),
+  "alchemy-root": mkEl(), "cook-root": mkEl(),
 };
 const calls = { cEvents: [], saves: [], enemies: [], notices: [], renderInv: 0, timeouts: [], fetch: null };
 const state = { username: "tester", player: null };
@@ -117,9 +118,10 @@ const parts = [
   grab(/function leaveActiveHunt\(\) \{[\s\S]*?\n\}/, "leaveActiveHunt"),
   grab(/function showBattleAreas\(\) \{[\s\S]*?\n\}/, "showBattleAreas"),
   grab(/let RECIPES = \[\];/, "RECIPES"),
+  grab(/const TRADES = \{[\s\S]*?\n\};/, "TRADES"),
   grab(/async function fetchRecipes\(\) \{[\s\S]*?\n\}/, "fetchRecipes"),
   grab(/function craftReady\(r, count\) \{[\s\S]*?\n\}/, "craftReady"),
-  grab(/function renderCraft\(\) \{[\s\S]*?\n\}/, "renderCraft"),
+  grab(/function renderWork\(rootId, kind\) \{[\s\S]*?\n\}/, "renderWork"),
   grab(/async function craftRecipe\(recipeId, count\) \{[\s\S]*?\n\}/, "craftRecipe"),
   // The real card painter is renamed on extraction: the prelude already has
   // a showBattleEnemies stub (the defeat message sink).
@@ -169,7 +171,7 @@ const lib = new Function("__", prelude + parts + `
     advanceRealm, accrue, equipItem, unequipSlot, bagGearAction, useConsumable,
     loadElixirSlot, unloadElixir, elixirPreferredSlot, leaveActiveHunt,
     showBattleAreas, showBattleEnemiesCard, battleTick, derivedStats, playerMaxHp, addInv, takeInv,
-    craftReady, renderCraft, craftRecipe, fetchRecipes,
+    craftReady, renderWork, craftRecipe, fetchRecipes,
     setRecipes: r => { RECIPES = r; },
     mobStones, rollStones, onMobDeath,
     itemTipHtml, itemTypeLabel, bagTabOf, dropsFor, iconHtml, artCls, BAG_TABS, slotTypeLabel,
@@ -456,18 +458,42 @@ state.player = basePlayer();
 
   // ============ 6d. the forge: recipes, gating, the craft call ============
   const recipe = {
-    id: "roast_meat", out: "roasted_wild_rat_meat", count: 1, note: "Skewer it.",
+    id: "roast_meat", out: "roasted_wild_rat_meat", count: 1, note: "Skewer it.", kind: "cook",
     cost: [
       { id: "rat_tail", need: 1, name: "Rat Tail", rarity: "Uncommon", color: "#7cb342", img: "", glyph: "✦" },
       { id: "raw_meat", need: 2, name: "Raw Meat", rarity: "Common", color: "#9aa0a6", img: "", glyph: "✦" },
     ],
     out_name: "Roasted Wild Rat Meat", out_rarity: "Common", out_img: "", out_glyph: "🍖",
   };
-  lib.setRecipes([recipe]);
+  const gearRecipe = {
+    id: "cure_leather_chest", out: "leather_chest", count: 1, note: "Hide and fat.", kind: "craft",
+    cost: [{ id: "boar_hide", need: 4, name: "Boar Hide", rarity: "Uncommon", color: "#7cb342", img: "", glyph: "✦" }],
+    out_name: "Leather Chest", out_rarity: "Common", out_img: "", out_glyph: "🦺",
+  };
+  const pillRecipe = {
+    id: "grind_qi_pill", out: "minor_qi_pill", count: 1, note: "Bone and blood.", kind: "alchemy",
+    cost: [{ id: "small_beast_bone", need: 1, name: "Small Beast Bone", rarity: "Uncommon", color: "#7cb342", img: "", glyph: "✦" }],
+    out_name: "Minor Qi Pill", out_rarity: "Common", out_img: "", out_glyph: "🔹",
+  };
+  lib.setRecipes([recipe, gearRecipe, pillRecipe]);
   state.player = basePlayer();
-  state.player.inventory = { rat_tail: 3, raw_meat: 1 };
-  lib.renderCraft();
+  state.player.inventory = { rat_tail: 3, raw_meat: 1, boar_hide: 4, small_beast_bone: 1 };
+  lib.renderWork("craft-root", "craft");
   let craftHtml = els["craft-root"].innerHTML;
+  ok(/Leather Chest/.test(craftHtml) && !/Roasted Wild Rat Meat/.test(craftHtml),
+     "the craft bench shows gear only");
+  ok(/Minor Qi Pill/.test(craftHtml) === false, "pills never sit on the craft bench");
+  lib.renderWork("alchemy-root", "alchemy");
+  const alchHtml = els["alchemy-root"].innerHTML;
+  ok(/Minor Qi Pill/.test(alchHtml) && !/Leather Chest/.test(alchHtml),
+     "the alchemy bench shows pills only");
+  lib.renderWork("cook-root", "cook");
+  const cookHtml = els["cook-root"].innerHTML;
+  ok(/Roasted Wild Rat Meat/.test(cookHtml) && !/Leather Chest/.test(cookHtml),
+     "the cooking bench shows food only");
+
+  lib.renderWork("cook-root", "cook");
+  craftHtml = els["cook-root"].innerHTML;
   ok(/Rat Tail/.test(craftHtml) && /3\/1/.test(craftHtml),
      "the recipe shows what you have against what it costs");
   ok(/craft-cost short/.test(craftHtml), "a material you lack is marked short");
@@ -476,8 +502,8 @@ state.player = basePlayer();
   ok(/data-craft="5" disabled/.test(craftHtml),
      "bulk crafting stays locked until five sets are in hand");
   state.player.inventory = { rat_tail: 3, raw_meat: 2 };
-  lib.renderCraft();
-  craftHtml = els["craft-root"].innerHTML;
+  lib.renderWork("cook-root", "cook");
+  craftHtml = els["cook-root"].innerHTML;
   ok(!/data-craft="1" disabled/.test(craftHtml),
      "crafting unlocks once the materials are there");
   ok(/data-craft="5" disabled/.test(craftHtml),
@@ -491,12 +517,12 @@ state.player = basePlayer();
     ok(body.recipe_id === "roast_meat" && body.count === 1,
        "the forge is asked for the right recipe");
     return { ok: true, json: async () => ({ ok: true, crafted: "roasted_wild_rat_meat", count: 1,
-      player: { ...state.player, inventory: { rat_tail: 2, raw_meat: 1, roasted_wild_rat_meat: 1 } } }) };
+      kind: "cook", player: { ...state.player, inventory: { rat_tail: 2, raw_meat: 1, roasted_wild_rat_meat: 1 } } }) };
   };
   await lib.craftRecipe("roast_meat", 1);
   ok(state.player.inventory.roasted_wild_rat_meat === 1, "the crafted item lands in the bag");
   ok(state.player.inventory.rat_tail === 2, "the server's inventory replaces the local one");
-  ok(calls.cEvents.some(m => /Forged/.test(m)), "the forge reports what it made");
+  ok(calls.cEvents.some(m => /Cooked/.test(m)), "the cook bench reports what it made");
   calls.fetch = null;
 
   calls.cEvents.length = 0;
@@ -904,7 +930,13 @@ state.player = basePlayer();
   ok(/stone-icon/.test(HTML) && /spirit_stone\.png/.test(HTML),
      "the top bar draws the spirit stone art");
   ok(/data-tab="craft" class="side-btn">Craft/.test(HTML), "the sidebar carries a Craft tab");
-  ok(/id="craft-root"/.test(HTML), "the craft panel has a home in the page");
+  ok(/data-tab="alchemy" class="side-btn">Alchemy/.test(HTML), "the sidebar carries an Alchemy tab");
+  ok(/data-tab="cook" class="side-btn">Cook/.test(HTML), "the sidebar carries a Cook tab");
+  ok(/id="craft-root"/.test(HTML) && /id="alchemy-root"/.test(HTML) && /id="cook-root"/.test(HTML),
+     "each bench has its own panel in the page");
+  ok(/renderWork\("craft-root", "craft"\)/.test(SRC) && /renderWork\("alchemy-root", "alchemy"\)/.test(SRC)
+     && /renderWork\("cook-root", "cook"\)/.test(SRC),
+     "each tab opens its own bench");
   ok(/\.craft-list \{ display: grid/.test(CSS) && /\.craft-cost\.short/.test(CSS),
      "the forge panel is styled, and a missing material reads as short");
   ok(/\.stone-glyph \{ width: 14px/.test(CSS), "the stone glyph is sized for inline use");

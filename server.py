@@ -17,8 +17,8 @@ import mimetypes
 # Single source of truth for the build number. Must match CLIENT_VERSION in
 # public/js/app.js and the footer in public/index.html. A player whose saved
 # patch_version differs gets one patch-note mail when they next check mail.
-SERVER_VERSION = "0.9.7"
-CLIENT_VERSION = "0.9.7"  # for /status only; the client keeps its own copy
+SERVER_VERSION = "0.9.8"
+CLIENT_VERSION = "0.9.8"  # for /status only; the client keeps its own copy
 STARTED_AT = time.time()
 RESTARTED_AT = 0
 RESTART_SEQ = 0
@@ -410,6 +410,18 @@ CONSUMABLES = [
     _con("roasted_wild_rat_meat", "Roasted Wild Rat Meat", "🍖",
          "Hot, salted, and better than it looks. Feeds the body and warms "
          "the meridians at once.", heal_pct=15, qi_pct=5),
+    # ---- cooked food. These come after the three slot seeds on purpose:
+    # the slot labels take the first consumable of their shape, so a new
+    # meal must never steal the meal slot's name.
+    _con("boar_roast", "Boar Roast", "🍖",
+         "Fat rendered slow over a bloodied tusk. It sits heavy and warm.",
+         heal_pct=25, qi_pct=5),
+    _con("wolf_stew", "Wolf Stew", "🥘",
+         "Marrow and a little wolf essence, simmered down. Sharp, and it "
+         "warms you through.", heal_pct=15, qi_pct=10),
+    _con("spirit_dumpling", "Spirit Dumpling", "🥟",
+         "Dough folded around a core fragment. It tastes of qi, not flour.",
+         heal_pct=30, qi_pct=15),
 ]
 for _c in CONSUMABLES:
     _c["rarity"] = "Common"
@@ -471,23 +483,52 @@ def slot_accepts(item_slot, equip_slot):
 # A recipe turns beast parts into an item. The server owns the rule: it
 # checks the materials, spends them and hands over the result, so a client
 # cannot craft for free. The client only renders this table.
+#
+# Recipes are split into three trades by what they make, so gear, pills and
+# food never share a bench:
+#   craft   -- gear (the smith's bench)
+#   alchemy -- pills and elixirs (the mortar)
+#   cook    -- food (the pot)
+# The trade is derived from the output item, so it can never drift from
+# what the recipe actually hands over.
 # ----------------------------------------------------------------------------
 def _recipe(id, out, cost, count=1, note=""):
     return {"id": id, "out": out, "count": count, "cost": cost, "note": note}
 
+def _recipe_kind(out_id):
+    """Which trade a recipe belongs to, decided by what it makes."""
+    it = ITEM_BY_ID.get(out_id) or {}
+    if it.get("kind") == "consumable":
+        u = it.get("use") or {}
+        # a meal heals and warms at once; a pill or elixir does one of the two
+        return "cook" if (u.get("heal_pct") and u.get("qi_pct")) else "alchemy"
+    return "craft"
+
 RECIPES = [
-    # ---- pills and broth, from the parts of a kill
+    # ---- the pot: food
     _recipe("roast_meat", "roasted_wild_rat_meat", {"rat_tail": 1, "raw_meat": 1},
             note="Skewer the tail, sear the meat. It feeds the body and warms the meridians."),
+    _recipe("boar_roast", "boar_roast", {"boar_fat": 2, "bloodied_tusk": 1, "raw_meat": 2},
+            note="Fat rendered slow over a bloodied tusk. It sits heavy and warm."),
+    _recipe("wolf_stew", "wolf_stew", {"wolf_fang": 2, "raw_meat": 2, "gray_wolf_essence": 1},
+            note="Marrow and a little wolf essence, simmered down. Sharp, and it warms you through."),
+    _recipe("spirit_dumpling", "spirit_dumpling", {"beast_core_fragment": 1, "raw_meat": 2, "beast_blood": 1},
+            note="Dough folded around a core fragment. It tastes of qi, not flour."),
+
+    # ---- the mortar: pills and elixirs
     _recipe("grind_qi_pill", "minor_qi_pill", {"small_beast_bone": 1, "weak_beast_blood": 1},
             note="Bone ground to powder, blood to bind it into a pellet."),
-    _recipe("steep_elixir", "minor_vitality_elixir", {"beast_core_fragment": 1, "raw_meat": 2},
-            note="A core's warmth steeped overnight in meat broth."),
-    _recipe("brew_alpha_blood", "minor_vitality_elixir",
-            {"corrupted_alpha_blood": 1, "beast_core_fragment": 2, "raw_meat": 2},
-            note="The alpha's own blood, boiled slow. It closes wounds it should not close."),
+    _recipe("distill_gray_pill", "minor_qi_pill", {"weak_beast_core": 1, "gray_wolf_essence": 1, "small_beast_bone": 1},
+            note="A weak core distilled with essence, rolled into a clean pill."),
     _recipe("grind_alpha_fang", "minor_qi_pill", {"corrupted_fang": 1, "gray_wolf_essence": 2},
             note="Fang dust and wolf essence, rolled into a pill that bites the dantian."),
+    _recipe("steep_elixir", "minor_vitality_elixir", {"beast_core_fragment": 1, "beast_blood": 1},
+            note="A core steeped in beast blood until it glows dull red."),
+    _recipe("distill_wolf_elixir", "minor_vitality_elixir", {"weak_beast_core": 1, "beast_blood": 2, "gray_wolf_essence": 1},
+            note="Essence drawn off the marrow and kept in a vial. It burns going down."),
+    _recipe("brew_alpha_blood", "minor_vitality_elixir",
+            {"corrupted_alpha_blood": 1, "beast_core_fragment": 2, "beast_blood": 1},
+            note="The alpha's own blood, boiled slow. It closes wounds it should not close."),
 
     # ---- hide and bone gear
     _recipe("cure_leather_chest", "leather_chest", {"boar_hide": 4, "boar_fat": 2},
@@ -1063,6 +1104,7 @@ class Handler(BaseHTTPRequestHandler):
                 recipes.append({
                     "id": r["id"], "out": r["out"], "count": r["count"],
                     "note": r["note"], "cost": cost,
+                    "kind": _recipe_kind(r["out"]),
                     "out_name": out_it.get("name", r["out"]),
                     "out_rarity": out_it.get("rarity", "Common"),
                     "out_img": out_it.get("img", ""),
@@ -1323,6 +1365,7 @@ class Handler(BaseHTTPRequestHandler):
             save_players()
             return self._send_json({
                 "ok": True, "crafted": out_id, "count": made,
+                "kind": _recipe_kind(out_id),
                 "player": {k: v for k, v in stored.items() if k != "hp"},
             }, cache="no-store")
 
