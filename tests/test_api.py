@@ -168,18 +168,30 @@ try:
     with_art = [i for i in j["items"] if i.get("img")]
     ok(len(with_art) > 0, "items resolve art files")
     # Art comes from assets/items/<id>.png, or from a declared icons/ override
-    # for the handful of items whose picture lives with the UI icons.
+    # for the handful of items whose picture lives with the UI icons. An item
+    # with no picture of its own is drawn with the holder.
+    holder = server._asset_cache().get("items/" + server._PLACEHOLDER_ITEM)
+    ok(holder is not None, "the holder picture is on disk")
     def art_ok(i):
         if i["img"] == "/assets/items/%s.png" % i["id"]:
             return True
         over = server._ITEM_ICON_FILES.get(i["id"])
-        return bool(over) and i["img"] == "/assets/icons/%s.png" % over
+        if over and i["img"] == "/assets/icons/%s.png" % over:
+            return True
+        return bool(holder) and i["img"] == holder
     ok(all(art_ok(i) for i in with_art),
-       "item art path comes from the item id or a declared icons/ override")
+       "item art path comes from the item id, an icons override, or the holder")
     ok(all(i["img"].startswith("/assets/") and ".." not in i["img"] for i in with_art),
        "art paths stay inside the assets folder")
-    no_art = [i for i in j["items"] if not i.get("img")]
-    ok(all(i.get("glyph") for i in no_art), "every item without art still has an emoji glyph")
+    ok(all(i.get("img") for i in j["items"]),
+       "every item is drawn with a picture, never a blank square")
+    ok(all(i.get("glyph") for i in j["items"]),
+       "every item still carries an emoji fallback")
+    by_id = {i["id"]: i for i in j["items"]}
+    ok(by_id["boar_roast"].get("img") == holder,
+       "an item with no picture of its own is drawn with the holder")
+    ok(by_id["rat_fur"].get("img") == "/assets/items/rat_fur.png",
+       "an item with a picture of its own keeps it")
 
     # Live pickup: a file dropped in after startup must be picked up.
     probe_dir = os.path.join(server.PUBLIC_DIR, "assets", "items")
@@ -792,18 +804,26 @@ try:
         ok(iid in by_id and by_id[iid].get("img") == "/assets/icons/%s.png" % icon,
            "%s draws its art from icons/%s" % (iid, icon))
     # Fallback contract, stated so it does not depend on which art files happen
-    # to exist on disk: an item with no matching file carries no img key at
-    # all, and the client then renders the item's emoji glyph. Probed with a
+    # to exist on disk: an item with no picture of its own is drawn with the
+    # holder, and if the holder is gone too the item carries no img key at
+    # all, so the client renders the item's emoji glyph. Probed with a
     # synthetic id rather than a real item, since art gets added over time.
     probe = dict(server.ITEM_BY_ID["wooden_sword"])
     probe["id"] = "no_such_art_file"
     server.ITEMS.append(probe)
     try:
-        server._apply_art(server._asset_cache())
-        ok("img" not in probe, "an item with no art file carries no img key (glyph fallback)")
-        have = [i["id"] for i in server.ITEMS if i.get("img")]
-        ok(all("img" in server.ITEM_BY_ID[i] for i in have),
+        art = server._asset_cache()
+        server._apply_art(art)
+        ok(probe.get("img") == art.get("items/" + server._PLACEHOLDER_ITEM),
+           "an item with no art file is drawn with the holder")
+        have = [i for i in server.ITEMS if i.get("img")]
+        ok(have and all(i["img"].startswith("/assets/") for i in have),
            "every item that resolved art really has an img key")
+        # With no art on disk at all -- holder included -- the item is left
+        # without an img key and the client falls back to the glyph.
+        server._apply_art({})
+        ok("img" not in probe, "with no holder either, the item falls back to its glyph")
+        server._apply_art(art)
     finally:
         server.ITEMS.remove(probe)
 

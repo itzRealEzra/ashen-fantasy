@@ -11,6 +11,16 @@ and push to `main` on https://github.com/itzRealEzra/ashen-fantasy.
 
 ## [Unreleased]
 
+## [0.9.9] - 2026-10-20
+### Changed
+- **Every item now has a picture.** An item with no art of its own is drawn
+  with the holder (`public/assets/items/place_holder.jpg`, a copy of the file
+  in `public/assets/do not remove/`), so nothing in the bag, the tooltip or a
+  recipe is ever a blank square or a bare glyph. The holder is resolved live:
+  delete the file and the emoji glyph comes back.
+- The asset cache picks up JPEG art as well as PNG, so pictures can be dropped
+  into `public/assets/` in either format.
+
 ## [0.9.8] - 2026-10-20
 ### Changed
 - **The forge is split into three benches.** Food, pills and elixirs no longer

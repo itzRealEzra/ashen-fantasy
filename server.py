@@ -17,8 +17,8 @@ import mimetypes
 # Single source of truth for the build number. Must match CLIENT_VERSION in
 # public/js/app.js and the footer in public/index.html. A player whose saved
 # patch_version differs gets one patch-note mail when they next check mail.
-SERVER_VERSION = "0.9.8"
-CLIENT_VERSION = "0.9.8"  # for /status only; the client keeps its own copy
+SERVER_VERSION = "0.9.9"
+CLIENT_VERSION = "0.9.9"  # for /status only; the client keeps its own copy
 STARTED_AT = time.time()
 RESTARTED_AT = 0
 RESTART_SEQ = 0
@@ -570,13 +570,22 @@ RECIPE_BY_ID = {r["id"]: r for r in RECIPES}
 # ----------------------------------------------------------------------------
 # Art assets. A mob or item draws its picture from a file named after its id
 # (public/assets/enemies/wild_rat.png, public/assets/items/rat_fur.png). Any id
-# with no matching file simply has no "img" key and the client falls back to
-# the item's emoji glyph, so art is added one file at a time.
+# with no matching file falls back to the holder picture below, and if that is
+# missing too the client falls back to the item's emoji glyph, so art is added
+# one file at a time.
 #
-# Resolved per request, not at import: dropping a new PNG into the folder must
-# show up on refresh without restarting the server.
+# Resolved per request, not at import: dropping a new picture into the folder
+# must show up on refresh without restarting the server.
 # ----------------------------------------------------------------------------
 _ASSET_DIRS = ("enemies", "items", "icons")
+# Pictures the client can show. Both PNG and JPEG are picked up, so art can be
+# dropped in either format.
+_ASSET_EXTS = (".png", ".jpg", ".jpeg")
+
+# The holder: what every item without a picture of its own is drawn with
+# (public/assets/items/place_holder.jpg). Resolved live, so removing the file
+# puts the emoji glyph back.
+_PLACEHOLDER_ITEM = "place_holder"
 
 # Items whose art lives in public/assets/icons rather than assets/items.
 # An item with no entry here is looked up in assets/items by its own id.
@@ -594,8 +603,9 @@ def _asset_cache():
         except OSError:
             continue
         for fn in names:
-            if fn.lower().endswith(".png"):
-                out["%s/%s" % (kind, fn[:-4])] = "/assets/%s/%s" % (kind, fn)
+            low = fn.lower()
+            if any(low.endswith(ext) for ext in _ASSET_EXTS):
+                out["%s/%s" % (kind, fn.rsplit(".", 1)[0])] = "/assets/%s/%s" % (kind, fn)
     return out
 
 def _apply_art(art):
@@ -618,6 +628,13 @@ def _apply_art(art):
             p = art.get("icons/" + over)
             if p:
                 it["lineArt"] = True
+        if not p:
+            # No picture of its own: draw it with the holder instead, so an
+            # item is never a blank square. The glyph stays on the item as
+            # the last resort if the holder is gone too.
+            p = art.get("items/" + _PLACEHOLDER_ITEM)
+            if p:
+                it.pop("lineArt", None)
         if p:
             it["img"] = p
             if not it.get("lineArt"):
