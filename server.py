@@ -17,8 +17,8 @@ import mimetypes
 # Single source of truth for the build number. Must match CLIENT_VERSION in
 # public/js/app.js and the footer in public/index.html. A player whose saved
 # patch_version differs gets one patch-note mail when they next check mail.
-SERVER_VERSION = "0.9.17"
-CLIENT_VERSION = "0.9.17"  # for /status only; the client keeps its own copy
+SERVER_VERSION = "0.9.18"
+CLIENT_VERSION = "0.9.18"  # for /status only; the client keeps its own copy
 STARTED_AT = time.time()
 RESTARTED_AT = 0
 RESTART_SEQ = 0
@@ -927,19 +927,31 @@ def weighted_roll_9():
         picked.append(random.choice(candidates))
     return picked
 
-def build_player(username, picks):
-    roots = [ROOT_BY_ID[pid] for pid in picks]
-    avg_qi = round(sum(r["qi_mult"] for r in roots) / len(roots), 2)
-    # synergy: same element bonus
-    elems = [r["element"] for r in roots]
+def root_stats(roots):
+    """The stats a set of roots grants.
+
+    One place, so a fresh build and a re-apply always agree. Every stat here
+    does something: qi_mult is the cultivation speed, comprehension and
+    physique and fortune feed the combat numbers, and synergy_bonus is the
+    reward for taking two roots of the same element.
+    """
+    roots = roots or []
+    if not roots:
+        return {"qi_mult": 1.0, "comprehension": 0, "physique": 0,
+                "fortune": 0, "synergy_bonus": 0}
+    avg_qi = round(sum(r.get("qi_mult", 1) for r in roots) / len(roots), 2)
+    elems = [r.get("element") for r in roots]
     bonus = 0.2 if len(set(elems)) < len(elems) else 0.0
-    stats = {
+    return {
         "qi_mult": round(avg_qi + bonus, 2),
-        "comprehension": sum(r["comprehension"] for r in roots),
-        "physique": sum(r["physique"] for r in roots),
-        "fortune": sum(r["fortune"] for r in roots),
+        "comprehension": sum(r.get("comprehension", 0) for r in roots),
+        "physique": sum(r.get("physique", 0) for r in roots),
+        "fortune": sum(r.get("fortune", 0) for r in roots),
         "synergy_bonus": bonus,
     }
+
+def build_player(username, picks):
+    roots = [ROOT_BY_ID[pid] for pid in picks]
     return {
         "username": username,
         "realm": "Mortal",
@@ -961,7 +973,7 @@ def build_player(username, picks):
         "hp": None,  # client-tracked; full on first load
         "last_seen": time.time(),
         "roots": roots,
-        "stats": stats,
+        "stats": root_stats(roots),
     }
 
 
@@ -1507,6 +1519,10 @@ class Handler(BaseHTTPRequestHandler):
             if not stored:
                 return self._send_json({"error": "Unknown cultivator. Create first."}, status=400)
             now = time.time()
+            # Roots grant stats. A save that lost them (an old save, a
+            # restore) gets them back from the roots it already carries.
+            if not (stored.get("stats") or {}).get("qi_mult"):
+                stored["stats"] = root_stats(stored.get("roots") or [])
             try:
                 idx = int(data.get("realm_idx", stored.get("realm_idx", 0)))
             except (TypeError, ValueError):

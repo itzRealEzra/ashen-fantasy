@@ -75,6 +75,7 @@ const parts = [
   grab(/function renderChar\(p\) \{[\s\S]*?\n\}/, "renderChar"),
   grab(/function advanceRealm\(p, msg\) \{[\s\S]*?\n\}/, "advanceRealm"),
   grab(/function normalizePlayer\(p\) \{[\s\S]*?\n\}/, "normalizePlayer"),
+  grab(/function rootStats\(roots\) \{[\s\S]*?\n\}/, "rootStats"),
   grab(/function clampHp\(p\) \{[\s\S]*?\n\}/, "clampHp"),
   grab(/function lootKey\(\) \{[^}]*\}/, "lootKey"),
   grab(/function saveLoot\(\) \{[\s\S]*?\n\}/, "saveLoot"),
@@ -201,7 +202,8 @@ const lib = new Function("__", prelude + parts + `
     setRealms: t => { REALM_TABLE = t; },
     ITEM_BY_ID, PAIRED_SLOTS, GEAR_STAT_KEYS, STAT_DISPLAY_NAMES, PERCENT_STAT_KEYS,
     formatStatEntry, formatStatValue, gearBonus,
-    syncPlayer, fetchServerPlayer, normalizePlayer, breakthroughReady, updateQi,
+    syncPlayer, fetchServerPlayer, normalizePlayer, rootStats, breakthroughReady, updateQi,
+    cultRate,
     advanceRealm, accrue, equipItem, unequipSlot, bagGearAction, useConsumable,
     renderChar,
     loadElixirSlot, unloadElixir, elixirPreferredSlot, leaveActiveHunt,
@@ -645,6 +647,44 @@ state.player = basePlayer();
      "a stronger beast teaches more than a weak one");
   ok(lib.masteryKillXp({ qi: 50 }) > lib.masteryKillXp({ qi: 18 }),
      "the boss teaches more than the wereboar");
+
+  // ============ 6h. root stats: re-applied, and none of them dead ============
+  const threeRoots = [
+    { qi_mult: 1.0, comprehension: 2, physique: 3, fortune: 2, element: "Fire" },
+    { qi_mult: 1.2, comprehension: 3, physique: 5, fortune: 3, element: "Fire" },
+    { qi_mult: 1.4, comprehension: 5, physique: 3, fortune: 4, element: "Water" },
+  ];
+  const rStats = lib.rootStats(threeRoots);
+  ok(rStats.qi_mult === 1.4, "the qi multiplier averages the roots, plus the synergy");
+  ok(rStats.synergy_bonus === 0.2, "two roots of one element earn the synergy");
+  ok(rStats.comprehension === 10 && rStats.physique === 11 && rStats.fortune === 9,
+     "the root stats add up");
+  const lost = basePlayer();
+  delete lost.stats;
+  lost.roots = threeRoots;
+  lib.normalizePlayer(lost);
+  ok(lost.stats.qi_mult === 1.4 && lost.stats.physique === 11,
+     "a save that lost its stats is re-applied from the roots");
+
+  // No dead stats: every one of them has to move something.
+  const plainP = basePlayer();
+  const plainD = lib.derivedStats(plainP);
+  const bump = (key, val) => {
+    const p = basePlayer();
+    p.stats = { ...plainP.stats, [key]: val };
+    return lib.derivedStats(p);
+  };
+  ok(bump("physique", plainP.stats.physique + 3).hp > plainD.hp,
+     "physique is not dead: it raises hp");
+  ok(bump("comprehension", plainP.stats.comprehension + 3).atk > plainD.atk,
+     "comprehension is not dead: it raises attack");
+  ok(bump("fortune", plainP.stats.fortune + 3).crit > plainD.crit,
+     "fortune is not dead: it raises crit");
+  ok(bump("synergy_bonus", 0.2).hp > plainD.hp,
+     "the synergy bonus is not dead: it raises the body");
+  ok(lib.cultRate({ ...plainP, stats: { ...plainP.stats, qi_mult: plainP.stats.qi_mult + 1 } })
+       > lib.cultRate(plainP),
+     "qi_mult is not dead: it raises the cultivation rate");
 
   // ============ 7. leaving the hunt persists HP, stops fight, clears log ============
   state.player = basePlayer();

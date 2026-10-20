@@ -267,6 +267,17 @@ try:
     ok(p["realm_idx"] == 0 and len(p["roots"]) == 3, "create builds a fresh cultivator")
     ok(p.get("hp") is None, "created player hp is null (client-tracked)")
     ok(p.get("spirit_stones") == 0, "created player starts with 0 spirit stones")
+    # Roots grant stats, and the save says exactly what they granted.
+    ok(server.root_stats(p["roots"]) == p["stats"],
+       "a new cultivator's stats are the ones their roots grant")
+    ok(p["stats"].get("qi_mult", 0) > 0 and p["stats"].get("physique", 0) > 0,
+       "no stat is dead: the roots hand out real numbers")
+    fresh("stat_less", stats={})
+    st, j = sync("stat_less")
+    ok(st == 200 and j["player"]["stats"].get("qi_mult", 0) > 0,
+       "a save that lost its stats is re-applied from the roots")
+    ok(j["player"]["stats"].get("physique", 0) > 0,
+       "the re-applied stats carry the root numbers")
     server.LAST_ROLL_BY_IP.clear()
     _, r2 = roll()
     st, j = req("/api/create", {"username": "sage_one", "roll_id": r2["roll_id"],

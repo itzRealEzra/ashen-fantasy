@@ -1,6 +1,6 @@
 /* Ashen Fantasy — vanilla JS state machine: username -> roots -> main */
 const $ = (id) => document.getElementById(id);
-const CLIENT_VERSION = "0.9.17"; // must match server.py server_version + footer
+const CLIENT_VERSION = "0.9.18"; // must match server.py server_version + footer
 const state = {
   username: localStorage.getItem("af_user") || "",
   rollId: null,
@@ -264,10 +264,29 @@ function cultRate(p) {
     * Math.max(0, 1 + gear.qi_rate_pct / 100);
 }
 
+// The stats a set of roots grants. One place, so a fresh build and a
+// re-apply always agree. Every stat does something: qi_mult is the
+// cultivation speed, comprehension and physique and fortune feed the combat
+// numbers, and synergy_bonus is the reward for two roots of one element.
+function rootStats(roots) {
+  if (!roots || !roots.length)
+    return { qi_mult: 1, comprehension: 0, physique: 0, fortune: 0, synergy_bonus: 0 };
+  const avgQi = Math.round(roots.reduce((a, r) => a + (+r.qi_mult || 1), 0) / roots.length * 100) / 100;
+  const elems = roots.map(r => r.element);
+  const bonus = new Set(elems).size < elems.length ? 0.2 : 0;
+  return {
+    qi_mult: Math.round((avgQi + bonus) * 100) / 100,
+    comprehension: roots.reduce((a, r) => a + (+r.comprehension || 0), 0),
+    physique: roots.reduce((a, r) => a + (+r.physique || 0), 0),
+    fortune: roots.reduce((a, r) => a + (+r.fortune || 0), 0),
+    synergy_bonus: bonus,
+  };
+}
+
 function normalizePlayer(p) {
   // restore-safe defaults: a server copy can arrive missing fields
-  if (!p.stats || typeof p.stats !== "object")
-    p.stats = { qi_mult: 1, comprehension: 0, physique: 0, fortune: 0, synergy_bonus: 0 };
+  if (!p.stats || typeof p.stats !== "object" || !p.stats.qi_mult)
+    p.stats = rootStats(p.roots);
   if (!Array.isArray(p.roots)) p.roots = [];
   // Keep numeric progress across ladder changes (clamped); else match by name.
   let idx = Number.isFinite(+p.realm_idx) ? Math.floor(+p.realm_idx) : -1;
@@ -432,6 +451,9 @@ function renderChar(p) {
     `<div><span>Qi Rate Bonus</span><b>${d.qi_rate_pct}%</b></div>` +
     `</div>` +
     `<p class="muted">💠 Dao Insight ×${p.dao_insight} · ${esc(st.flavor)}</p>` +
+    (p.stats.synergy_bonus
+      ? `<p class="muted">✦ Synergy · two roots of one element · +${Math.round(p.stats.synergy_bonus * 100)}% HP, Attack, Defense</p>`
+      : "") +
     masteryPanel(p) +
     p.roots.map(r => `<div class="char-card" style="border-left-color:${r.color}"><b style="color:${r.color}">${esc(r.name)}</b> <small>${esc(r.rarity)} · ${esc(r.element)}</small><br/>${esc(r.desc)}</div>`).join("");
 }
@@ -465,10 +487,12 @@ function derivedStats(p) {
   // Battle mastery hardens the body: every level past the first adds a
   // percent to the flesh, the swing and the guard. Gear stays flat on top.
   const b = 1 + 0.01 * Math.max(0, masteryLevel(masteryXp("battle", p)) - 1);
+  // Synergy: two roots of one element make the whole body worth more.
+  const syn = 1 + (s.synergy_bonus || 0);
   return {
-    hp: Math.round((100 + s.physique * 25) * (1 + r * 0.1) * b) + g.hp,
-    atk: Math.round((10 + (s.physique * 2 + s.comprehension * 1.5) * (1 + r * 0.08)) * b) + g.atk,
-    def: Math.round((5 + s.physique * 1.2 + r * 2) * b) + g.def,
+    hp: Math.round((100 + s.physique * 25) * (1 + r * 0.1) * b * syn) + g.hp,
+    atk: Math.round((10 + (s.physique * 2 + s.comprehension * 1.5) * (1 + r * 0.08)) * b * syn) + g.atk,
+    def: Math.round((5 + s.physique * 1.2 + r * 2) * b * syn) + g.def,
     crit: Math.min(60, Math.round(5 + s.comprehension * 1.2 + s.fortune * 0.5 + g.crit)),
     critDmg: Math.round(150 + s.fortune * 4 + s.comprehension * 1.5) + g.critDmg,
     qi_rate_pct: g.qi_rate_pct,

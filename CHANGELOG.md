@@ -11,6 +11,24 @@ and push to `main` on https://github.com/itzRealEzra/ashen-fantasy.
 
 ## [Unreleased]
 
+## [0.9.18] - 2026-10-20
+### Fixed
+- **`synergy_bonus` was a dead stat.** It was stored with every player and
+  read by nothing: the two-roots-of-one-element reward only ever reached the
+  cultivation speed. It now also raises HP, Attack and Defense by 20%, and
+  the Character panel says so.
+- **Root stats are re-applied.** A save that lost its stats -- an old save, or
+  one restored by hand -- left the roots granting nothing at all. The server
+  now rebuilds the stats from the roots the player already carries, and the
+  client does the same on load. One helper (`root_stats` / `rootStats`) is
+  the only place that knows what a set of roots is worth, so a fresh build
+  and a re-apply can never disagree.
+
+### Changed
+- No stat is dead: `qi_mult` drives the cultivation rate, `comprehension`
+  the attack and crit, `physique` the body, `fortune` the crit, and
+  `synergy_bonus` the whole frame.
+
 ## [0.9.17] - 2026-10-20
 ### Changed
 - **The mastery level-up notice moved to the bottom-right corner** and fades
