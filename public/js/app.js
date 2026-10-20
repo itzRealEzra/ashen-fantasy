@@ -1,6 +1,6 @@
 /* Ashen Fantasy — vanilla JS state machine: username -> roots -> main */
 const $ = (id) => document.getElementById(id);
-const CLIENT_VERSION = "0.9.16"; // must match server.py server_version + footer
+const CLIENT_VERSION = "0.9.17"; // must match server.py server_version + footer
 const state = {
   username: localStorage.getItem("af_user") || "",
   rollId: null,
@@ -1375,18 +1375,21 @@ function applyMasteryXp(track, xp) {
 }
 
 // The level-up notice: "Cooking Mastery 9 -> 10", and when the rank turns
-// over, the old name and the new one.
+// over, the old name and the new one. It joins the bottom-right stack and
+// fades away on its own.
 function masteryPopup(track, fromLevel, toLevel) {
   const name = track[0].toUpperCase() + track.slice(1);
-  const box = document.createElement("div");
-  box.className = "mastery-popup";
+  const el = document.createElement("div");
+  el.className = "toast mastery-toast";
   const rankLine = masteryRank(fromLevel) !== masteryRank(toLevel)
     ? `<p class="mastery-rank">${esc(masteryTitle(track, fromLevel))} -> ${esc(masteryTitle(track, toLevel))}</p>`
     : "";
-  box.innerHTML = `<div class="mastery-popup-inner"><h3>${esc(name)} Mastery ${fromLevel} -> ${toLevel}</h3>${rankLine}</div>`;
-  document.body.appendChild(box);
-  if (box.addEventListener) box.addEventListener("click", () => box.remove());
-  setTimeout(() => box.remove(), 7000);
+  el.innerHTML = `<b>${esc(name)} Mastery ${fromLevel} -> ${toLevel}</b>${rankLine}`;
+  toastBox().appendChild(el);
+  setTimeout(() => {
+    el.classList.add("toast-out");
+    setTimeout(() => { if (el.remove) el.remove(); }, 400);
+  }, 3600);
 }
 
 // The three trades ----------
@@ -1426,19 +1429,24 @@ function craftMax(r) {
   return Math.max(0, max);
 }
 
-// Bottom-right notice: the forge reports faster than the eye can follow the
-// event log, and the bag changes under the cursor.
-function toast(msg) {
+// The bottom-right notice stack. Everything that shouts at you goes here.
+function toastBox() {
   let box = document.getElementById("toast-box");
   if (!box) {
     box = document.createElement("div");
     box.id = "toast-box";
     document.body.appendChild(box);
   }
+  return box;
+}
+
+// Bottom-right notice: the forge reports faster than the eye can follow the
+// event log, and the bag changes under the cursor.
+function toast(msg) {
   const el = document.createElement("div");
   el.className = "toast";
   el.textContent = msg;
-  box.appendChild(el);
+  toastBox().appendChild(el);
   setTimeout(() => {
     el.classList.add("toast-out");
     setTimeout(() => { if (el.remove) el.remove(); }, 400);

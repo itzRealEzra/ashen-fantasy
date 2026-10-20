@@ -245,10 +245,9 @@ input { background: #0e0e14; border: 1px solid var(--line); color: var(--ink); p
 .mastery-fill { height: 100%; background: linear-gradient(90deg, var(--gold), var(--gold2)); transition: width .3s; }
 .mastery-xp { font-size: 11px; letter-spacing: 1px; }
 .mastery-bonus { font-size: 12px; }
-.mastery-popup { position: fixed; inset: 0; z-index: 10001; display: flex; align-items: center; justify-content: center; background: rgba(0,0,0,.55); cursor: pointer; }
-.mastery-popup-inner { background: #0e0e15; border: 1px solid var(--gold); padding: 22px 34px; text-align: center; box-shadow: 0 0 40px rgba(201,168,106,.25); animation: toast-in .25s ease; }
-.mastery-popup-inner h3 { font-family: var(--font-brush); color: var(--gold2); font-size: 26px; letter-spacing: 2px; margin: 0 0 6px; }
-.mastery-rank { font-family: var(--font-brush); color: var(--gold); font-size: 17px; letter-spacing: 2px; margin: 0; }
+.mastery-toast { border-color: var(--gold2); padding: 12px 20px; text-align: left; }
+.mastery-toast b { display: block; font-size: 18px; color: var(--gold2); }
+.mastery-rank { font-family: var(--font-brush); color: var(--gold); font-size: 15px; letter-spacing: 2px; margin: 4px 0 0; }
 
 /* bottom-right notices (the forge and friends) */
 #toast-box { position: fixed; right: 18px; bottom: 18px; z-index: 10000; display: flex; flex-direction: column; align-items: flex-end; gap: 8px; pointer-events: none; }

@@ -11,6 +11,14 @@ and push to `main` on https://github.com/itzRealEzra/ashen-fantasy.
 
 ## [Unreleased]
 
+## [0.9.17] - 2026-10-20
+### Changed
+- **The mastery level-up notice moved to the bottom-right corner** and fades
+  out on its own, joining the forge's notice stack instead of covering the
+  screen. It still says "Cooking Mastery 9 -> 10", and still names the old
+  rank and the new one when the rank turns over ("Cooking Beginner X ->
+  Cooking Artisan I").
+
 ## [0.9.16] - 2026-10-20
 ### Changed
 - **Battle mastery hardens the body.** Every level past the first adds 1% to

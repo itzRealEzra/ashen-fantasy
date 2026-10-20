@@ -122,6 +122,7 @@ const parts = [
   grab(/async function fetchRecipes\(\) \{[\s\S]*?\n\}/, "fetchRecipes"),
   grab(/function craftReady\(r, count\) \{[\s\S]*?\n\}/, "craftReady"),
   grab(/function craftMax\(r\) \{[\s\S]*?\n\}/, "craftMax"),
+  grab(/function toastBox\(\) \{[\s\S]*?\n\}/, "toastBox"),
   grab(/function toast\(msg\) \{[\s\S]*?\n\}/, "toast"),
   grab(/const MASTERY_TRACKS = \[[^\]]*\];/, "MASTERY_TRACKS"),
   grab(/const MASTERY_RANKS = \[[^\]]*\];/, "MASTERY_RANKS"),
@@ -183,9 +184,12 @@ const prelude = `
       className: "", textContent: "", innerHTML: "", style: {},
       classList: { add() {}, remove() {} }, remove() {},
       addEventListener() {},
-      appendChild(child) { if (child.textContent) calls.toasts.push(child.textContent); },
+      appendChild(child) {
+        if (child.textContent) calls.toasts.push(child.textContent);
+        else if (child.innerHTML) calls.popups.push(child.innerHTML);
+      },
     }),
-    body: { appendChild(el) { calls.popups.push(el.innerHTML); } },
+    body: { appendChild(el) { if (el.innerHTML) calls.popups.push(el.innerHTML); } },
   };
   const setTimeout = (fn, ms) => { calls.timeouts.push({ fn, ms }); return calls.timeouts.length; };
   const fetch = (...a) => (calls.fetch ? calls.fetch(...a) : Promise.resolve({ ok: false, json: async () => ({ ok: false }) }));
@@ -202,7 +206,7 @@ const lib = new Function("__", prelude + parts + `
     renderChar,
     loadElixirSlot, unloadElixir, elixirPreferredSlot, leaveActiveHunt,
     showBattleAreas, showBattleEnemiesCard, battleTick, derivedStats, playerMaxHp, addInv, takeInv,
-    craftReady, craftMax, toast, renderWork, craftRecipe, fetchRecipes,
+    craftReady, craftMax, toast, toastBox, renderWork, craftRecipe, fetchRecipes,
     masteryLevel, masteryRank, masteryNumeral, masteryTitle, masteryXp, masteryKillXp,
     applyMasteryXp, masteryPopup, masteryPanel, masteryTotalXp, MASTERY_TRACKS,
     closeSidebar,
@@ -1069,6 +1073,10 @@ state.player = basePlayer();
      "the font never waits on a CDN");
   ok(/#toast-box \{ position: fixed; right:/.test(CSS),
      "notices sit in the bottom-right corner");
+  ok(/toast mastery-toast/.test(SRC) && /toastBox\(\)\.appendChild\(el\)/.test(SRC),
+     "the level-up notice joins the bottom-right stack and fades with it");
+  ok(/\.mastery-toast \{/.test(CSS) && /\.toast-out \{ opacity: 0/.test(CSS),
+     "the level-up notice is styled as a fading notice");
 
   // ============ 20. the bag holds only what you carry ============
   ok(/Currently no Item Stored/.test(SRC), "an empty bag says so instead of showing blanks");
