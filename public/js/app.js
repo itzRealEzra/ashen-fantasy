@@ -1,6 +1,6 @@
 /* Ashen Fantasy — vanilla JS state machine: username -> roots -> main */
 const $ = (id) => document.getElementById(id);
-const CLIENT_VERSION = "0.9.14"; // must match server.py server_version + footer
+const CLIENT_VERSION = "0.9.15"; // must match server.py server_version + footer
 const state = {
   username: localStorage.getItem("af_user") || "",
   rollId: null,
@@ -283,6 +283,8 @@ function normalizePlayer(p) {
   p.bottleneck = Math.max(0, Math.min(p.bottleneck | 0, st.bottleneck_req));
   p.dao_insight = p.dao_insight | 0;
   p.spirit_stones = Math.max(0, Math.floor(+p.spirit_stones || 0));
+  if (!p.mastery || typeof p.mastery !== "object") p.mastery = {};
+  for (const t of MASTERY_TRACKS) p.mastery[t] = Math.max(0, p.mastery[t] | 0);
   p.seclusion = false; // seclusion retired in v0.4.1 (pure idle)
   if (!p.equipment || typeof p.equipment !== "object") p.equipment = {};
   for (const s of EQUIP_SLOT_LIST) if (!(s in p.equipment)) p.equipment[s] = null;
@@ -430,7 +432,29 @@ function renderChar(p) {
     `<div><span>Qi Rate Bonus</span><b>${d.qi_rate_pct}%</b></div>` +
     `</div>` +
     `<p class="muted">💠 Dao Insight ×${p.dao_insight} · ${esc(st.flavor)}</p>` +
+    masteryPanel(p) +
     p.roots.map(r => `<div class="char-card" style="border-left-color:${r.color}"><b style="color:${r.color}">${esc(r.name)}</b> <small>${esc(r.rarity)} · ${esc(r.element)}</small><br/>${esc(r.desc)}</div>`).join("");
+}
+
+// The four mastery tracks, on the character panel: rank, level, the road to
+// the next level and what that level buys.
+function masteryPanel(p) {
+  const m = (p && p.mastery) || {};
+  const rows = MASTERY_TRACKS.map(t => {
+    const xp = Math.max(0, m[t] | 0);
+    const lvl = masteryLevel(xp);
+    const base = masteryTotalXp(lvl);
+    const need = Math.max(1, masteryTotalXp(lvl + 1) - base);
+    const into = Math.max(0, xp - base);
+    const pct = Math.max(0, Math.min(100, into / need * 100));
+    return `<div class="mastery-row">
+      <div class="mastery-top"><b>${esc(masteryTitle(t, lvl))}</b><span class="muted">${lvl}/${MASTERY_MAX_LEVEL}</span></div>
+      <div class="mastery-bar"><div class="mastery-fill" style="width:${pct}%"></div></div>
+      <div class="mastery-xp muted">${into} / ${need} XP</div>
+      <div class="mastery-bonus muted">${esc(MASTERY_BONUS_TEXT[t](lvl))}</div>
+    </div>`;
+  }).join("");
+  return `<h3 class="mastery-title">Mastery</h3><div class="mastery-list">${rows}</div>`;
 }
 
 // Combat stats derived from spiritual-root foundation + realm + gear.
@@ -545,6 +569,7 @@ async function syncPlayer(initial) {
         bottleneck: p.bottleneck, dao_insight: p.dao_insight, seclusion: p.seclusion,
         equipment: p.equipment, inventory: p.inventory, elixirs: p.elixirs,
         spirit_stones: p.spirit_stones | 0,
+        mastery_battle: masteryXp("battle"),
       }),
     });
     const j = await r.json();
@@ -715,6 +740,15 @@ $("hamburger").onclick = () => {
   sb.classList.toggle("open");
   $("hamburger").classList.toggle("collapsed", !sb.classList.contains("open"));
 };
+
+// The sidebar floats over the canvas, so clicking the canvas puts it away.
+function closeSidebar() {
+  const sb = $("sidebar");
+  if (!sb || !sb.classList.contains("open")) return;
+  sb.classList.remove("open");
+  $("hamburger").classList.add("collapsed");
+}
+document.querySelector(".content").addEventListener("click", closeSidebar);
 
 // ---------- inventory + equipment (v0.7.0) ----------
 let invTab = "all";
@@ -897,7 +931,7 @@ function itemTipHtml(itemId, ctx) {
   if (!it) return "";
   ctx = ctx || {};
   const col = ITEM_RARITY_COLORS[it.rarity] || ITEM_RARITY_COLORS[ITEM_DEFAULT_RARITY];
-  let h = `<div class="tip-title"><b>${iconHtml(it.img, it.glyph, artCls(it, "art-tip"))} ${esc(it.name)}</b><span style="color:${col}">${esc(it.rarity || ITEM_DEFAULT_RARITY)}</span></div>` +
+  let h = `<div class="tip-title"><b>${iconHtml(it.img, it.glyph, artCls(it, "art-tip"))} ${esc(it.name)}</b><span class="tip-rarity" style="color:${col}">${esc(it.rarity || ITEM_DEFAULT_RARITY)}</span></div>` +
     `<div><small class="muted">${esc(itemTypeLabel(it))}</small></div>` +
     `<div class="muted">${esc(it.desc)}</div>`;
   const st = Object.entries(it.stats || {}).filter(([, v]) => v)
@@ -990,7 +1024,7 @@ function showTip(itemId, x, y, ctx) {
 // Custom tooltip for empty slots — name, category, and how to fill it
 // (replaces the slow native title).
 function showSlotTip(name, type, hint, x, y, key) {
-  const html = `<div class="tip-title"><b>${esc(name)}</b><span style="color:var(--muted)">${esc(type)}</span></div>` +
+  const html = `<div class="tip-title"><b>${esc(name)}</b><span class="tip-rarity" style="color:var(--muted)">${esc(type)}</span></div>` +
     `<div class="muted">Empty slot.</div><div class="muted">${esc(hint)}</div>`;
   showTipHtml(html, x, y, "slot|" + key, null);
 }
@@ -1072,13 +1106,14 @@ function renderInventory() {
     return `<div class="slot inv-slot" data-item="${id}" data-tip="${id}"${rc ? ` style="--rc:${rc}"` : ""}>` +
       `${iconHtml(it.img, it.glyph, artCls(it, "art-slot"))}<span class="count">${p.inventory[id]}x</span></div>`;
   }).join("");
-  // Empty cells so the bag always reads as a real 48-slot RPG grid.
-  const emptyCells = entries.length < 48
-    ? Array.from({ length: 48 - entries.length }, () => `<div class="slot inv-empty" aria-hidden="true"></div>`).join("")
-    : "";
+  // The bag holds what you carry and no more: there are no empty slots, and
+  // an empty bag says so instead of showing a grid of blanks.
+  const bag = entries.length
+    ? `<div class="inv-grid">${grid}</div>`
+    : `<div class="inv-empty-msg">Currently no Item Stored</div>`;
   root.innerHTML = `<div class="inv-layout"><div class="inv-doll"><h2>Equipment</h2>${doll}${elix}</div>` +
     `<div class="inv-bag"><h2>Bag</h2><div class="inv-tabs">${tabs}</div>` +
-    `<div class="inv-grid">${grid}${emptyCells}</div></div></div>`;
+    `${bag}</div></div>`;
   root.querySelectorAll(".slot[data-slot]").forEach(el => {
     // Clicking an equipped slot deliberately does nothing. It used to
     // unequip, which meant a stray click silently sent gear back to the bag
@@ -1276,7 +1311,75 @@ async function fetchAreas() {
   return [];
 }
 
-// ---------- the three trades ----------
+// ---------- mastery ----------
+// Four tracks, each levelling to 99. Every ten levels the track changes rank
+// ("Cooking Beginner X" becomes "Cooking Artisan I"), and every level of a
+// trade buys a chance to duplicate what you made.
+const MASTERY_TRACKS = ["cooking", "alchemy", "crafting", "battle"];
+const MASTERY_RANKS = ["Beginner", "Artisan", "Master", "Grandmaster", "Sage", "Elder", "Immortal", "Legendary", "Mythic", "Transcendent"];
+const MASTERY_NUMERALS = ["I", "II", "III", "IV", "V", "VI", "VII", "VIII", "IX", "X"];
+const MASTERY_MAX_LEVEL = 99;
+const MASTERY_XP_PER_KILL = 5;
+const MASTERY_BONUS_TEXT = {
+  cooking: lvl => `${lvl}% chance to duplicate the meal`,
+  alchemy: lvl => `${lvl}% chance to duplicate the brew`,
+  crafting: lvl => `${lvl}% chance to duplicate the work`,
+  battle: lvl => `${lvl * 2}% chance of an extra drop`,
+};
+
+function masteryTotalXp(level) { return 50 * level * (level - 1); }
+
+function masteryLevel(xp) {
+  let lvl = 1;
+  xp = Math.max(0, xp | 0);
+  while (lvl < MASTERY_MAX_LEVEL && masteryTotalXp(lvl + 1) <= xp) lvl++;
+  return lvl;
+}
+
+function masteryRank(level) {
+  return MASTERY_RANKS[Math.min(MASTERY_RANKS.length - 1, Math.floor((level - 1) / 10))];
+}
+
+function masteryNumeral(level) { return MASTERY_NUMERALS[(level - 1) % 10]; }
+
+function masteryTitle(track, level) {
+  const name = track[0].toUpperCase() + track.slice(1);
+  return `${name} ${masteryRank(level)} ${masteryNumeral(level)}`;
+}
+
+function masteryXp(track) {
+  const m = (state.player && state.player.mastery) || {};
+  return Math.max(0, m[track] | 0);
+}
+
+// Take the new XP, and if it carried a level, say so.
+function applyMasteryXp(track, xp) {
+  const p = state.player;
+  if (!p) return 1;
+  const before = masteryLevel(masteryXp(track));
+  p.mastery = p.mastery || {};
+  p.mastery[track] = Math.max(0, xp | 0);
+  const after = masteryLevel(p.mastery[track]);
+  if (after > before) masteryPopup(track, before, after);
+  return after;
+}
+
+// The level-up notice: "Cooking Mastery 9 -> 10", and when the rank turns
+// over, the old name and the new one.
+function masteryPopup(track, fromLevel, toLevel) {
+  const name = track[0].toUpperCase() + track.slice(1);
+  const box = document.createElement("div");
+  box.className = "mastery-popup";
+  const rankLine = masteryRank(fromLevel) !== masteryRank(toLevel)
+    ? `<p class="mastery-rank">${esc(masteryTitle(track, fromLevel))} -> ${esc(masteryTitle(track, toLevel))}</p>`
+    : "";
+  box.innerHTML = `<div class="mastery-popup-inner"><h3>${esc(name)} Mastery ${fromLevel} -> ${toLevel}</h3>${rankLine}</div>`;
+  document.body.appendChild(box);
+  if (box.addEventListener) box.addEventListener("click", () => box.remove());
+  setTimeout(() => box.remove(), 7000);
+}
+
+// The three trades ----------
 // The forge owns the rule: it checks the materials, spends them and hands
 // back the item. The client only draws the recipe table. Gear, pills and
 // food each have their own bench, so they never share a panel.
@@ -1414,9 +1517,15 @@ async function craftRecipe(recipeId, count) {
     p.inventory = j.player.inventory;
     const it = ITEM_BY_ID[j.crafted] || {};
     const trade = TRADES[j.kind] || TRADES.craft;
-    const made = `${trade.done} ${it.name || j.crafted} x${j.count}`;
+    const n = j.count * (j.duplicated ? 2 : 1);
+    const made = `${trade.done} ${it.name || j.crafted} x${n}` +
+      (j.duplicated ? " — mastery bonus" : "");
     cEvent(made + ".");
     toast(made);
+    // the trade taught its own mastery
+    const track = { craft: "crafting", alchemy: "alchemy", cook: "cooking" }[j.kind];
+    if (track && j.mastery && typeof j.mastery[track] === "number")
+      applyMasteryXp(track, j.mastery[track]);
     saveLocal(p);
     // repaint the bench the player is standing at, with the new counts
     const kind = j.kind || "craft";
@@ -1458,6 +1567,9 @@ const TAB_ICONS = {
   cultivate: "cultivate_icon",
   battle: "battle_icon",
   inventory: "inventory_icon",
+  craft: "craft_icon",
+  alchemy: "alchemy_icon",
+  cook: "cook_icon",
   mail: "mail_icon",
 };
 
@@ -1779,9 +1891,8 @@ function rollStones(m) {
   return s.min + Math.floor(Math.random() * (s.max - s.min + 1));
 }
 
-function onMobDeath() {
-  const p = state.player, m = battle.mob;
-  battle.kills++;
+// One roll of a mob's loot table. The drops land in the hunt log and in the bag.
+function rollLoot(m) {
   for (const l of m.loot) {
     if (Math.random() < l.chance) {
       const n = l.min + Math.floor(Math.random() * (l.max - l.min + 1));
@@ -1790,6 +1901,18 @@ function onMobDeath() {
       if (iid) addInv(iid, n); // drops also land in the bag
     }
   }
+}
+
+function onMobDeath() {
+  const p = state.player, m = battle.mob;
+  battle.kills++;
+  rollLoot(m);
+  // A practised hunter finds more: every level of battle mastery adds a
+  // chance of a second roll of the table.
+  const bLevel = masteryLevel(masteryXp("battle"));
+  if (bLevel > 1 && Math.random() < Math.min(0.5, 0.02 * (bLevel - 1))) rollLoot(m);
+  // The kill itself teaches the hunt.
+  applyMasteryXp("battle", masteryXp("battle") + MASTERY_XP_PER_KILL);
   accrue(p, m.qi);
   // Guaranteed drop on every kill, logged like any other loot. The count
   // scales with the enemy: the server publishes stones per mob from its qi,

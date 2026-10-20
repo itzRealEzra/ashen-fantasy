@@ -32,7 +32,7 @@ const els = {
   "p-stones": mkEl(), "enemy-back": mkEl(), "craft-root": mkEl(),
   "alchemy-root": mkEl(), "cook-root": mkEl(),
 };
-const calls = { cEvents: [], saves: [], enemies: [], notices: [], renderInv: 0, timeouts: [], fetch: null, toasts: [] };
+const calls = { cEvents: [], saves: [], enemies: [], notices: [], renderInv: 0, timeouts: [], fetch: null, toasts: [], popups: [] };
 const state = { username: "tester", player: null };
 
 const ZERO_STATS = { atk: 0, def: 0, hp: 0, crit: 0, critDmg: 0 };
@@ -123,6 +123,22 @@ const parts = [
   grab(/function craftReady\(r, count\) \{[\s\S]*?\n\}/, "craftReady"),
   grab(/function craftMax\(r\) \{[\s\S]*?\n\}/, "craftMax"),
   grab(/function toast\(msg\) \{[\s\S]*?\n\}/, "toast"),
+  grab(/const MASTERY_TRACKS = \[[^\]]*\];/, "MASTERY_TRACKS"),
+  grab(/const MASTERY_RANKS = \[[^\]]*\];/, "MASTERY_RANKS"),
+  grab(/const MASTERY_NUMERALS = \[[^\]]*\];/, "MASTERY_NUMERALS"),
+  grab(/const MASTERY_MAX_LEVEL = \d+;/, "MASTERY_MAX_LEVEL"),
+  grab(/const MASTERY_XP_PER_KILL = \d+;/, "MASTERY_XP_PER_KILL"),
+  grab(/const MASTERY_BONUS_TEXT = \{[\s\S]*?\n\};/, "MASTERY_BONUS_TEXT"),
+  grab(/function masteryTotalXp\(level\) \{[^\n]*\}/, "masteryTotalXp"),
+  grab(/function masteryLevel\(xp\) \{[\s\S]*?\n\}/, "masteryLevel"),
+  grab(/function masteryRank\(level\) \{[\s\S]*?\n\}/, "masteryRank"),
+  grab(/function masteryNumeral\(level\) \{[^\n]*\}/, "masteryNumeral"),
+  grab(/function masteryTitle\(track, level\) \{[\s\S]*?\n\}/, "masteryTitle"),
+  grab(/function masteryXp\(track\) \{[\s\S]*?\n\}/, "masteryXp"),
+  grab(/function applyMasteryXp\(track, xp\) \{[\s\S]*?\n\}/, "applyMasteryXp"),
+  grab(/function masteryPopup\(track, fromLevel, toLevel\) \{[\s\S]*?\n\}/, "masteryPopup"),
+  grab(/function masteryPanel\(p\) \{[\s\S]*?\n\}/, "masteryPanel"),
+  grab(/function closeSidebar\(\) \{[\s\S]*?\n\}/, "closeSidebar"),
   grab(/function renderWork\(rootId, kind\) \{[\s\S]*?\n\}/, "renderWork"),
   grab(/async function craftRecipe\(recipeId, count\) \{[\s\S]*?\n\}/, "craftRecipe"),
   // The real card painter is renamed on extraction: the prelude already has
@@ -137,6 +153,7 @@ const parts = [
   grab(/function battleTick\(\) \{[\s\S]*?\n\}/, "battleTick"),
   grab(/function mobStones\(m\) \{[\s\S]*?\n\}/, "mobStones"),
   grab(/function rollStones\(m\) \{[\s\S]*?\n\}/, "rollStones"),
+  grab(/function rollLoot\(m\) \{[\s\S]*?\n\}/, "rollLoot"),
   grab(/function onMobDeath\(\) \{[\s\S]*?\n\}/, "onMobDeath"),
   grab(/function onPlayerDeath\(\) \{[\s\S]*?\n\}/, "onPlayerDeath"),
   grab(/function addInv\(id, n\) \{[\s\S]*?\n\}/, "addInv"),
@@ -162,11 +179,12 @@ const prelude = `
   const document = {
     getElementById: () => null,
     createElement: () => ({
-      className: "", textContent: "", style: {},
+      className: "", textContent: "", innerHTML: "", style: {},
       classList: { add() {}, remove() {} }, remove() {},
+      addEventListener() {},
       appendChild(child) { if (child.textContent) calls.toasts.push(child.textContent); },
     }),
-    body: { appendChild() {} },
+    body: { appendChild(el) { calls.popups.push(el.innerHTML); } },
   };
   const setTimeout = (fn, ms) => { calls.timeouts.push({ fn, ms }); return calls.timeouts.length; };
   const fetch = (...a) => (calls.fetch ? calls.fetch(...a) : Promise.resolve({ ok: false, json: async () => ({ ok: false }) }));
@@ -180,9 +198,13 @@ const lib = new Function("__", prelude + parts + `
     formatStatEntry, formatStatValue, gearBonus,
     syncPlayer, fetchServerPlayer, normalizePlayer, breakthroughReady, updateQi,
     advanceRealm, accrue, equipItem, unequipSlot, bagGearAction, useConsumable,
+    renderChar,
     loadElixirSlot, unloadElixir, elixirPreferredSlot, leaveActiveHunt,
     showBattleAreas, showBattleEnemiesCard, battleTick, derivedStats, playerMaxHp, addInv, takeInv,
     craftReady, craftMax, toast, renderWork, craftRecipe, fetchRecipes,
+    masteryLevel, masteryRank, masteryNumeral, masteryTitle, masteryXp,
+    applyMasteryXp, masteryPopup, masteryPanel, masteryTotalXp, MASTERY_TRACKS,
+    closeSidebar,
     setRecipes: r => { RECIPES = r; },
     mobStones, rollStones, onMobDeath,
     itemTipHtml, itemTypeLabel, bagTabOf, dropsFor, iconHtml, artCls, BAG_TABS, slotTypeLabel,
@@ -560,6 +582,44 @@ state.player = basePlayer();
   await lib.craftRecipe("roast_meat", 1);
   ok(calls.cEvents.some(m => /refuses/.test(m)), "a refused craft is reported, not swallowed");
   calls.fetch = null;
+
+  // ============ 6e. mastery: levels, ranks, and the level-up notice ============
+  ok(lib.masteryLevel(0) === 1, "mastery starts at level 1");
+  ok(lib.masteryLevel(100) === 2, "100 XP is level 2");
+  ok(lib.masteryLevel(300) === 3, "300 XP is level 3");
+  ok(lib.masteryLevel(485100) === 99, "mastery stops at level 99");
+  ok(lib.masteryTitle("cooking", 10) === "Cooking Beginner X",
+     "level 10 is Cooking Beginner X");
+  ok(lib.masteryTitle("cooking", 11) === "Cooking Artisan I",
+     "level 11 is Cooking Artisan I");
+  ok(lib.masteryTitle("battle", 1) === "Battle Beginner I", "a fresh track is a Beginner I");
+  ok(lib.masteryRank(99) === "Transcendent", "level 99 is the last rank");
+
+  state.player = basePlayer();
+  state.player.mastery = { cooking: 0, alchemy: 0, crafting: 0, battle: 0 };
+  calls.popups.length = 0;
+  lib.applyMasteryXp("cooking", 99);
+  ok(calls.popups.length === 0, "no notice before the level turns over");
+  lib.applyMasteryXp("cooking", 100);
+  ok(calls.popups.length === 1, "a notice appears when the level turns over");
+  ok(/Cooking Mastery 1 -> 2/.test(calls.popups[0]), "the notice names the level change");
+  calls.popups.length = 0;
+  lib.applyMasteryXp("cooking", 4500);   // level 10: the last Beginner
+  ok(calls.popups.length === 1, "a level raises a notice");
+  calls.popups.length = 0;
+  lib.applyMasteryXp("cooking", 5500);   // level 11: the rank turns over
+  ok(calls.popups.length === 1, "a rank turn raises its own notice");
+  ok(/Cooking Mastery 10 -> 11/.test(calls.popups[0]),
+     "the notice names the level change");
+  ok(/Cooking Beginner X -> Cooking Artisan I/.test(calls.popups[0]),
+     "the notice names the old rank and the new one");
+
+  lib.renderChar(state.player);
+  const charHtml = els["char-sheet"].innerHTML;
+  ok(/Mastery/.test(charHtml), "the character panel carries the masteries");
+  ok(/Cooking Artisan I/.test(charHtml) && /Battle Beginner I/.test(charHtml),
+     "every track is on the character panel");
+  ok(/mastery-fill/.test(charHtml), "the panel shows the road to the next level");
 
   // ============ 7. leaving the hunt persists HP, stops fight, clears log ============
   state.player = basePlayer();
@@ -988,6 +1048,32 @@ state.player = basePlayer();
      "the font never waits on a CDN");
   ok(/#toast-box \{ position: fixed; right:/.test(CSS),
      "notices sit in the bottom-right corner");
+
+  // ============ 20. the bag holds only what you carry ============
+  ok(/Currently no Item Stored/.test(SRC), "an empty bag says so instead of showing blanks");
+  ok(/class="slot inv-empty"/.test(SRC) === false, "the bag draws no empty slots any more");
+  ok(/\.inv-empty-msg \{ text-align: center/.test(CSS), "the empty bag reads as a message");
+
+  // ============ 21. the floating sidebar puts itself away ============
+  const sideOps = [];
+  els["sidebar"] = { classList: {
+    contains: c => c === "open", add: c => sideOps.push("add:" + c), remove: c => sideOps.push("remove:" + c),
+  } };
+  els["hamburger"] = { classList: { add: c => sideOps.push("hb-add:" + c), remove() {}, toggle() {} } };
+  lib.closeSidebar();
+  ok(sideOps.includes("remove:open") && sideOps.includes("hb-add:collapsed"),
+     "clicking the canvas closes the floating sidebar");
+  sideOps.length = 0;
+  els["sidebar"].classList.contains = () => false;
+  lib.closeSidebar();
+  ok(sideOps.length === 0, "a closed sidebar is left alone");
+
+  // ============ 22. the new benches carry their own icons ============
+  for (const f of ["craft_icon.png", "alchemy_icon.png", "cook_icon.png"])
+    ok(fs.existsSync(path.join(__dirname, "..", "public", "assets", "icons", f)),
+       "%s is on disk" % f);
+  ok(/craft: "craft_icon"/.test(SRC) && /alchemy: "alchemy_icon"/.test(SRC) && /cook: "cook_icon"/.test(SRC),
+     "each bench tab has its own icon");
   ok(/\.stone-glyph \{ width: 14px/.test(CSS), "the stone glyph is sized for inline use");
   ok(/\.slot \.slot-icon \{ width: 42px/.test(CSS), "slot icons are sized for the doll");
   ok(/\.slot \.art-slot \{ width: 46px/.test(CSS), "equipped slot art fills the now-label-free slot");

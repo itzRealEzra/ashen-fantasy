@@ -220,6 +220,7 @@ def cmd_reset(srv, args):
     p["bottleneck"] = 0
     p["dao_insight"] = 0
     p["spirit_stones"] = 0
+    p["mastery"] = {t: 0 for t in srv.MASTERY_TRACKS}
     p["equipment"] = {s: None for s in srv.EQUIP_SLOTS}
     p["inventory"] = {}
     p["elixirs"] = [None, None, None]

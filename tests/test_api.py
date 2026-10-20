@@ -470,6 +470,39 @@ try:
     ok(st == 200 and j["player"]["inventory"].get("roasted_wild_rat_meat") == 1,
        "a bad count falls back to a single craft instead of crashing the forge")
 
+    # ============ 10e. mastery: levels, ranks, and the trade bonuses ============
+    ok(server.mastery_level(0) == 1, "mastery starts at level 1")
+    ok(server.mastery_level(100) == 2, "100 XP is level 2")
+    ok(server.mastery_level(485100) == server.MASTERY_MAX_LEVEL,
+       "mastery stops at level %d" % server.MASTERY_MAX_LEVEL)
+    ok(server.mastery_rank(10) == "Beginner" and server.mastery_rank(11) == "Artisan",
+       "the rank turns over every ten levels")
+    ok(server.mastery_numeral(10) == "X" and server.mastery_numeral(11) == "I",
+       "the numeral counts inside the rank")
+    ok(server.mastery_total_xp(11) == 5500, "level 11 costs 5500 XP")
+
+    fresh("master_crafter", inventory={"rat_tail": 4, "raw_meat": 4})
+    st, j = req("/api/craft", {"username": "master_crafter", "recipe_id": "roast_meat", "count": 1})
+    ok(st == 200 and j["player"]["mastery"]["cooking"] == server.MASTERY_XP_PER_CRAFT,
+       "a cook teaches the cooking mastery")
+    ok(j["player"]["mastery"]["crafting"] == 0, "a cook does not teach crafting")
+    ok(j.get("mastery", {}).get("cooking", {}).get("level") == 1,
+       "the craft reports the new mastery level")
+    st, j = req("/api/craft", {"username": "master_crafter", "recipe_id": "grind_qi_pill", "count": 1})
+    ok(st == 400, "a pill needs its own materials")
+    fresh("master_alchemist", inventory={"small_beast_bone": 1, "weak_beast_blood": 1})
+    st, j = req("/api/craft", {"username": "master_alchemist", "recipe_id": "grind_qi_pill", "count": 1})
+    ok(st == 200 and j["player"]["mastery"]["alchemy"] == server.MASTERY_XP_PER_CRAFT,
+       "a brew teaches the alchemy mastery")
+    # At level 1 no trade can duplicate yet, so a craft is exactly what it says.
+    ok(j.get("duplicated") is False, "a first craft never duplicates")
+    # Battle mastery is reported with the save and never rolls back.
+    fresh("master_hunter")
+    st, j = sync("master_hunter", mastery_battle=40)
+    ok(st == 200 and j["player"]["mastery"]["battle"] == 40, "battle mastery is stored")
+    st, j = sync("master_hunter", mastery_battle=10)
+    ok(j["player"]["mastery"]["battle"] == 40, "battle mastery never rolls back")
+
     # each bench spends materials and hands over its own goods
     fresh("bench_tester", inventory={"boar_fat": 2, "bloodied_tusk": 1, "raw_meat": 2,
                                      "small_beast_bone": 1, "weak_beast_blood": 1})
@@ -820,7 +853,8 @@ try:
     missing_slots = {s: n for s, n in want_slots.items() if n not in icons}
     ok(not missing_slots, "every equip-slot icon file exists (%s)" % (missing_slots or "none missing"))
     want_tabs = ["character_icon", "cultivate_icon", "battle_icon",
-                 "inventory_icon", "mail_icon", "elixir_icon"]
+                 "inventory_icon", "mail_icon", "elixir_icon",
+                 "craft_icon", "alchemy_icon", "cook_icon"]
     ok(all(t in icons for t in want_tabs),
        "tab and elixir icon files exist (%s)" % [t for t in want_tabs if t not in icons])
 

@@ -17,8 +17,8 @@ import mimetypes
 # Single source of truth for the build number. Must match CLIENT_VERSION in
 # public/js/app.js and the footer in public/index.html. A player whose saved
 # patch_version differs gets one patch-note mail when they next check mail.
-SERVER_VERSION = "0.9.14"
-CLIENT_VERSION = "0.9.14"  # for /status only; the client keeps its own copy
+SERVER_VERSION = "0.9.15"
+CLIENT_VERSION = "0.9.15"  # for /status only; the client keeps its own copy
 STARTED_AT = time.time()
 RESTARTED_AT = 0
 RESTART_SEQ = 0
@@ -563,6 +563,66 @@ RECIPES = [
 RECIPE_BY_ID = {r["id"]: r for r in RECIPES}
 
 # ----------------------------------------------------------------------------
+# Masteries
+#
+# Four tracks, each levelling to 99: cooking, alchemy, crafting and battle.
+# The level comes from the XP and the rank from the level: every ten levels
+# the track changes rank, so a level 10 cooking is "Cooking Beginner X" and
+# a level 11 is "Cooking Artisan I".
+#
+# The three trades grant their own XP where the work happens (on the server),
+# and every level of a trade buys a chance to duplicate what you made. Battle
+# XP is earned on the kill and reported with the save.
+# ----------------------------------------------------------------------------
+MASTERY_TRACKS = ("cooking", "alchemy", "crafting", "battle")
+MASTERY_RANKS = ["Beginner", "Artisan", "Master", "Grandmaster", "Sage",
+                 "Elder", "Immortal", "Legendary", "Mythic", "Transcendent"]
+MASTERY_NUMERALS = ["I", "II", "III", "IV", "V", "VI", "VII", "VIII", "IX", "X"]
+MASTERY_MAX_LEVEL = 99
+MASTERY_XP_CAP = 10 ** 9
+MASTERY_XP_PER_CRAFT = 10   # per item made
+MASTERY_XP_PER_KILL = 5
+MASTERY_DUPLICATE_CAP = 0.5  # a trade never doubles more than half the time
+# Which track each bench feeds.
+MASTERY_TRACK_FOR_BENCH = {"craft": "crafting", "alchemy": "alchemy", "cook": "cooking"}
+
+def mastery_total_xp(level):
+    """Total XP needed to stand at `level` (level 1 is free)."""
+    return 50 * level * (level - 1)
+
+def mastery_level(xp):
+    lvl = 1
+    xp = max(0, int(xp or 0))
+    while lvl < MASTERY_MAX_LEVEL and mastery_total_xp(lvl + 1) <= xp:
+        lvl += 1
+    return lvl
+
+def mastery_rank(level):
+    return MASTERY_RANKS[min(len(MASTERY_RANKS) - 1, (level - 1) // 10)]
+
+def mastery_numeral(level):
+    return MASTERY_NUMERALS[(level - 1) % 10]
+
+def _mastery_xp(stored, track):
+    return int(((stored.get("mastery") or {}).get(track) or 0))
+
+def _grant_mastery(stored, track, xp):
+    m = stored.setdefault("mastery", {})
+    m[track] = min(MASTERY_XP_CAP, _mastery_xp(stored, track) + max(0, int(xp)))
+    return m[track]
+
+def mastery_payload(stored):
+    """What the client shows: xp, level and the rank the level earns."""
+    out = {}
+    for t in MASTERY_TRACKS:
+        xp = _mastery_xp(stored, t)
+        lvl = mastery_level(xp)
+        out[t] = {"xp": xp, "level": lvl, "rank": mastery_rank(lvl),
+                  "numeral": mastery_numeral(lvl),
+                  "next": mastery_total_xp(lvl + 1) - xp}
+    return out
+
+# ----------------------------------------------------------------------------
 # Art assets. A mob or item draws its picture from a file named after its id
 # (public/assets/enemies/wild_rat.png, public/assets/items/rat_fur.png). Any id
 # with no matching file falls back to the holder picture below, and if that is
@@ -840,6 +900,9 @@ def load_players():
             for p in data.values():
                 if isinstance(p, dict):
                     p.setdefault("spirit_stones", 0)
+                    m = p.setdefault("mastery", {})
+                    for t in MASTERY_TRACKS:
+                        m.setdefault(t, 0)
             PLAYERS.update(data)
             return len(data)
     except (OSError, ValueError):
@@ -886,6 +949,7 @@ def build_player(username, picks):
         "bottleneck": 0,
         "dao_insight": 0,
         "spirit_stones": 0,
+        "mastery": {t: 0 for t in MASTERY_TRACKS},
         "seclusion": False,
         "equipment": {s: None for s in EQUIP_SLOTS},
         "inventory": {},
@@ -1375,13 +1439,22 @@ class Handler(BaseHTTPRequestHandler):
             if out_id not in ITEM_BY_ID:
                 return self._send_json({"error": "Recipe output is unknown"}, status=500)
             made = recipe["count"] * count
-            inv[out_id] = max(0, min(int(inv.get(out_id, 0) or 0) + made, 9999))
+            # The trade you work teaches its mastery, and every level of it
+            # buys a chance to duplicate what you made.
+            bench = _recipe_kind(out_id)
+            track = MASTERY_TRACK_FOR_BENCH[bench]
+            _grant_mastery(stored, track, MASTERY_XP_PER_CRAFT * made)
+            chance = min(MASTERY_DUPLICATE_CAP, 0.01 * max(0, mastery_level(_mastery_xp(stored, track)) - 1))
+            duplicated = chance > 0 and random.random() < chance
+            inv[out_id] = max(0, min(int(inv.get(out_id, 0) or 0) + made * (2 if duplicated else 1), 9999))
             stored["inventory"] = inv
             stored["last_seen"] = time.time()
             save_players()
             return self._send_json({
                 "ok": True, "crafted": out_id, "count": made,
                 "kind": _recipe_kind(out_id),
+                "duplicated": duplicated,
+                "mastery": mastery_payload(stored),
                 "player": {k: v for k, v in stored.items() if k != "hp"},
             }, cache="no-store")
 
@@ -1494,6 +1567,18 @@ class Handler(BaseHTTPRequestHandler):
                 stones_claimed = stones_stored
             stones_claimed = max(0, min(stones_claimed, SPIRIT_STONE_CAP))
             spirit_stones = max(stones_stored, stones_claimed)
+            # Battle mastery: the client earns it on the kill and reports it
+            # with the save. Monotonic, like the stones.
+            mastery = stored.setdefault("mastery", {})
+            for t in MASTERY_TRACKS:
+                mastery.setdefault(t, 0)
+            battle_xp = int(mastery.get("battle") or 0)
+            try:
+                claimed_battle = int(data.get("mastery_battle", battle_xp))
+            except (TypeError, ValueError):
+                claimed_battle = battle_xp
+            battle_xp = max(battle_xp, max(0, min(claimed_battle, MASTERY_XP_CAP)))
+            mastery["battle"] = battle_xp
             # equipment / inventory / elixirs: accept only known items in valid slots
             equip_in = data.get("equipment") or {}
             equipment = {s: None for s in EQUIP_SLOTS}
@@ -1530,6 +1615,7 @@ class Handler(BaseHTTPRequestHandler):
                 "bottleneck": bottleneck,
                 "dao_insight": dao_insight,
                 "spirit_stones": spirit_stones,
+                "mastery": mastery,
                 "seclusion": bool(data.get("seclusion", stored.get("seclusion", False))),
                 "equipment": equipment,
                 "inventory": inventory,

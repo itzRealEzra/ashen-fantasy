@@ -140,7 +140,8 @@ input { background: #0e0e14; border: 1px solid var(--line); color: var(--ink); p
 .enemy-card:hover { border-color: var(--gold); }
 .enemy-card b { font-size: 15px; }
 .enemy-card .realm-tag { font-size: 12px; color: var(--gold2); }
-.enemy-card .difficulty-tag { font-size: 12px; color: var(--muted); }
+.enemy-card .difficulty-tag { color: var(--muted); font-family: var(--font-brush); font-size: 14px; letter-spacing: 1px; }
+.tip-rarity { font-family: var(--font-brush); letter-spacing: 1px; }
 .enemy-card.boss { border-color: var(--gold); background: #241d0e; }
 .enemy-card.boss:hover { box-shadow: 0 0 10px rgba(201,168,106,.35); }
 .enemy-card .boss-tag { font-size: 11px; letter-spacing: 2px; color: var(--gold2); text-transform: uppercase; }
@@ -211,7 +212,7 @@ input { background: #0e0e14; border: 1px solid var(--line); color: var(--ink); p
 .inv-grid .slot .art-slot { width: 26px; height: 26px; }
 .inv-grid .inv-slot { border-color: var(--rc, var(--line)); }
 .inv-grid .inv-slot:hover { border-color: var(--gold); box-shadow: 0 0 6px rgba(240, 212, 154, .3); }
-.inv-grid .inv-empty { border-style: dashed; border-color: #2b251c; background: #0a0a10; cursor: default; pointer-events: none; }
+.inv-empty-msg { text-align: center; color: var(--muted); font-family: var(--font-brush); font-size: 20px; letter-spacing: 2px; padding: 48px 20px; }
 
 /* crafting panel */
 .craft-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 10px; }
@@ -232,6 +233,21 @@ input { background: #0e0e14; border: 1px solid var(--line); color: var(--ink); p
 .craft-cost-qty { white-space: nowrap; }
 .craft-note { font-size: 12px; line-height: 1.5; margin: 0; }
 .craft-actions { display: flex; gap: 8px; margin-top: auto; }
+
+/* mastery panel + level-up notice */
+.mastery-title { font-family: var(--font-brush); color: var(--gold2); letter-spacing: 3px; font-size: 20px; margin: 18px 0 8px; }
+.mastery-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 10px; }
+.mastery-row { border: 1px solid var(--line); background: var(--panel2); padding: 10px 12px; }
+.mastery-top { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+.mastery-top b { font-family: var(--font-brush); color: var(--gold2); font-size: 16px; letter-spacing: 1px; }
+.mastery-bar { height: 6px; background: #0e0e15; border: 1px solid var(--line); margin: 6px 0 4px; }
+.mastery-fill { height: 100%; background: linear-gradient(90deg, var(--gold), var(--gold2)); transition: width .3s; }
+.mastery-xp { font-size: 11px; letter-spacing: 1px; }
+.mastery-bonus { font-size: 12px; }
+.mastery-popup { position: fixed; inset: 0; z-index: 10001; display: flex; align-items: center; justify-content: center; background: rgba(0,0,0,.55); cursor: pointer; }
+.mastery-popup-inner { background: #0e0e15; border: 1px solid var(--gold); padding: 22px 34px; text-align: center; box-shadow: 0 0 40px rgba(201,168,106,.25); animation: toast-in .25s ease; }
+.mastery-popup-inner h3 { font-family: var(--font-brush); color: var(--gold2); font-size: 26px; letter-spacing: 2px; margin: 0 0 6px; }
+.mastery-rank { font-family: var(--font-brush); color: var(--gold); font-size: 17px; letter-spacing: 2px; margin: 0; }
 
 /* bottom-right notices (the forge and friends) */
 #toast-box { position: fixed; right: 18px; bottom: 18px; z-index: 10000; display: flex; flex-direction: column; align-items: flex-end; gap: 8px; pointer-events: none; }

@@ -11,6 +11,31 @@ and push to `main` on https://github.com/itzRealEzra/ashen-fantasy.
 
 ## [Unreleased]
 
+## [0.9.15] - 2026-10-20
+### Added
+- **Mastery system.** Four tracks -- cooking, alchemy, crafting and battle --
+  each levelling to 99, all shown on the Character panel with the rank, the
+  level, the road to the next level and what that level buys. Every ten
+  levels the rank turns over: a level 10 cook is "Cooking Beginner X", a
+  level 11 is "Cooking Artisan I", and the notice that greets the level-up
+  says both ("Cooking Mastery 9 -> 10").
+- **Every level of a trade buys something.** Cooking, alchemy and crafting
+  each add a 1% chance (per level, up to 50%) to duplicate what you made --
+  rolled on the server, where the work happens. Battle mastery adds a 2%
+  chance (per level) of a second roll of the loot table, and every kill
+  teaches the hunt. The three trades grant their own XP server-side; battle
+  XP is reported with the save and never rolls back.
+- Icons for the three benches: `craft_icon.png`, `alchemy_icon.png` and
+  `cook_icon.png` sit on the Craft, Alchemy and Cook tabs.
+
+### Changed
+- The top bar drops the "Stones:" word -- the stone and the number are enough.
+- Rarity and difficulty labels are drawn in the brush face, like the rest of
+  the labels.
+- The floating sidebar puts itself away when you click the canvas.
+- The bag holds only what you carry: no empty slots, and an empty bag says
+  "Currently no Item Stored" in the middle of it. The bag grows with you.
+
 ## [0.9.14] - 2026-10-20
 ### Added
 - **Ma Shan Zheng** (brush face) for the labels: the top bar (Name, Realm,
