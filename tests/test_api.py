@@ -395,6 +395,7 @@ try:
     ok(st == 200 and len(j.get("recipes", [])) > 0, "recipes are served")
     recipes = j.get("recipes") or []
     ok(all(r["cost"] for r in recipes), "every recipe names its materials")
+    ok(all(r.get("max_count") for r in recipes), "every recipe says how many it may make at once")
     ok(all(c["id"] in server.ITEM_BY_ID for r in recipes for c in r["cost"]),
        "recipe materials are real items")
     ok(all(r["out"] in server.ITEM_BY_ID for r in recipes),

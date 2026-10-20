@@ -32,7 +32,7 @@ const els = {
   "p-stones": mkEl(), "enemy-back": mkEl(), "craft-root": mkEl(),
   "alchemy-root": mkEl(), "cook-root": mkEl(),
 };
-const calls = { cEvents: [], saves: [], enemies: [], notices: [], renderInv: 0, timeouts: [], fetch: null };
+const calls = { cEvents: [], saves: [], enemies: [], notices: [], renderInv: 0, timeouts: [], fetch: null, toasts: [] };
 const state = { username: "tester", player: null };
 
 const ZERO_STATS = { atk: 0, def: 0, hp: 0, crit: 0, critDmg: 0 };
@@ -121,6 +121,8 @@ const parts = [
   grab(/const TRADES = \{[\s\S]*?\n\};/, "TRADES"),
   grab(/async function fetchRecipes\(\) \{[\s\S]*?\n\}/, "fetchRecipes"),
   grab(/function craftReady\(r, count\) \{[\s\S]*?\n\}/, "craftReady"),
+  grab(/function craftMax\(r\) \{[\s\S]*?\n\}/, "craftMax"),
+  grab(/function toast\(msg\) \{[\s\S]*?\n\}/, "toast"),
   grab(/function renderWork\(rootId, kind\) \{[\s\S]*?\n\}/, "renderWork"),
   grab(/async function craftRecipe\(recipeId, count\) \{[\s\S]*?\n\}/, "craftRecipe"),
   // The real card painter is renamed on extraction: the prelude already has
@@ -157,6 +159,15 @@ const prelude = `
   const renderInventory = () => { calls.renderInv++; };
   const notifyStatChange = (b, a) => calls.notices.push([b, a]);
   const showBattleEnemies = msg => calls.enemies.push(msg);
+  const document = {
+    getElementById: () => null,
+    createElement: () => ({
+      className: "", textContent: "", style: {},
+      classList: { add() {}, remove() {} }, remove() {},
+      appendChild(child) { if (child.textContent) calls.toasts.push(child.textContent); },
+    }),
+    body: { appendChild() {} },
+  };
   const setTimeout = (fn, ms) => { calls.timeouts.push({ fn, ms }); return calls.timeouts.length; };
   const fetch = (...a) => (calls.fetch ? calls.fetch(...a) : Promise.resolve({ ok: false, json: async () => ({ ok: false }) }));
 `;
@@ -171,7 +182,7 @@ const lib = new Function("__", prelude + parts + `
     advanceRealm, accrue, equipItem, unequipSlot, bagGearAction, useConsumable,
     loadElixirSlot, unloadElixir, elixirPreferredSlot, leaveActiveHunt,
     showBattleAreas, showBattleEnemiesCard, battleTick, derivedStats, playerMaxHp, addInv, takeInv,
-    craftReady, renderWork, craftRecipe, fetchRecipes,
+    craftReady, craftMax, toast, renderWork, craftRecipe, fetchRecipes,
     setRecipes: r => { RECIPES = r; },
     mobStones, rollStones, onMobDeath,
     itemTipHtml, itemTypeLabel, bagTabOf, dropsFor, iconHtml, artCls, BAG_TABS, slotTypeLabel,
@@ -507,19 +518,28 @@ state.player = basePlayer();
   ok(/craft-cost short/.test(craftHtml), "a material you lack is marked short");
   ok(/data-craft="1" disabled/.test(craftHtml),
      "crafting is disabled while a material is missing");
-  ok(/data-craft="5" disabled/.test(craftHtml),
-     "bulk crafting stays locked until five sets are in hand");
+  ok(/data-craft="max" disabled/.test(craftHtml),
+     "forge max is disabled while a material is missing");
   state.player.inventory = { rat_tail: 3, raw_meat: 2 };
   lib.renderWork("cook-root", "cook");
   craftHtml = els["cook-root"].innerHTML;
   ok(!/data-craft="1" disabled/.test(craftHtml),
      "crafting unlocks once the materials are there");
-  ok(/data-craft="5" disabled/.test(craftHtml),
-     "five crafts still need five sets of materials");
+  ok(!/data-craft="max" disabled/.test(craftHtml),
+     "forge max unlocks with it");
   ok(lib.craftReady(recipe, 1) === true && lib.craftReady(recipe, 5) === false,
      "the gate follows the recipe cost");
+  ok(lib.craftMax(recipe) === 1, "forge max counts what the materials can pay for");
+  state.player.inventory = { rat_tail: 9, raw_meat: 20 };
+  ok(lib.craftMax(recipe) === 9, "forge max is limited by the scarcest material");
+  state.player.inventory = { rat_tail: 3, raw_meat: 2 };
+  lib.renderWork("craft-root", "craft");
+  craftHtml = els["craft-root"].innerHTML;
+  ok(/>Forge</.test(craftHtml) && />Forge Max</.test(craftHtml),
+     "the craft bench offers Forge and Forge Max");
 
   calls.cEvents.length = 0;
+  calls.toasts.length = 0;
   calls.fetch = async (url, opts) => {
     const body = JSON.parse(opts.body);
     ok(body.recipe_id === "roast_meat" && body.count === 1,
@@ -530,7 +550,9 @@ state.player = basePlayer();
   await lib.craftRecipe("roast_meat", 1);
   ok(state.player.inventory.roasted_wild_rat_meat === 1, "the crafted item lands in the bag");
   ok(state.player.inventory.rat_tail === 2, "the server's inventory replaces the local one");
-  ok(calls.cEvents.some(m => /Cooked/.test(m)), "the cook bench reports what it made");
+  ok(calls.cEvents.some(m => /Cooked/.test(m)), "the forge reports what it made");
+  ok(calls.toasts.some(m => /Cooked Roasted Wild Rat Meat x1/.test(m)),
+     "the forge raises a bottom-right notice naming what it made");
   calls.fetch = null;
 
   calls.cEvents.length = 0;
@@ -949,6 +971,23 @@ state.player = basePlayer();
      "the forge panel is styled, and a missing material reads as short");
   ok(/\.craft-out-name \{ display: flex/.test(CSS) && /\.craft-way \{ border-top/.test(CSS),
      "the item name sits above its ways, never glued to them");
+
+  // ============ 19. the brush face, vendored locally ============
+  ok(/--font-brush: "Ma Shan Zheng"/.test(CSS), "the brush face is wired as the label font");
+  ok(/\.top-name, \.top-realm, \.top-stones \{ font-family: var\(--font-brush\)/.test(CSS),
+     "the top bar labels (name, realm, currency) use the brush face");
+  ok(/\.side-btn \{[^}]*font-family: var\(--font-brush\)/.test(CSS),
+     "the tab labels use the brush face");
+  ok(/href="\/css\/fonts\.css/.test(HTML), "the vendored font sheet is linked");
+  const FONTCSS = fs.readFileSync(path.join(__dirname, "..", "public", "css", "fonts.css"), "utf8");
+  const fontFiles = [...FONTCSS.matchAll(/url\('\/assets\/fonts\/([^']+)'\)/g)].map(m => m[1]);
+  ok(fontFiles.length > 0, "the brush face is vendored as local files");
+  ok(fontFiles.every(f => fs.existsSync(path.join(__dirname, "..", "public", "assets", "fonts", f))),
+     "every vendored font file is on disk");
+  ok(!/fonts\.googleapis\.com/.test(FONTCSS) && !/fonts\.gstatic\.com/.test(FONTCSS),
+     "the font never waits on a CDN");
+  ok(/#toast-box \{ position: fixed; right:/.test(CSS),
+     "notices sit in the bottom-right corner");
   ok(/\.stone-glyph \{ width: 14px/.test(CSS), "the stone glyph is sized for inline use");
   ok(/\.slot \.slot-icon \{ width: 42px/.test(CSS), "slot icons are sized for the doll");
   ok(/\.slot \.art-slot \{ width: 46px/.test(CSS), "equipped slot art fills the now-label-free slot");

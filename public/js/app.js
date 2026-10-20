@@ -1,6 +1,6 @@
 /* Ashen Fantasy — vanilla JS state machine: username -> roots -> main */
 const $ = (id) => document.getElementById(id);
-const CLIENT_VERSION = "0.9.13"; // must match server.py server_version + footer
+const CLIENT_VERSION = "0.9.14"; // must match server.py server_version + footer
 const state = {
   username: localStorage.getItem("af_user") || "",
   rollId: null,
@@ -1283,9 +1283,9 @@ async function fetchAreas() {
 let RECIPES = [];
 
 const TRADES = {
-  craft: { title: "Crafting", sub: "Hide, bone and spirit worked into gear.", verb: "Forged" },
-  alchemy: { title: "Alchemy", sub: "Cores, blood and bone ground into pills and elixirs.", verb: "Brewed" },
-  cook: { title: "Cooking", sub: "Raw parts turned into a hot meal.", verb: "Cooked" },
+  craft: { title: "Crafting", sub: "Hide, bone and spirit worked into gear.", verb: "Forge", done: "Forged" },
+  alchemy: { title: "Alchemy", sub: "Cores, blood and bone ground into pills and elixirs.", verb: "Brew", done: "Brewed" },
+  cook: { title: "Cooking", sub: "Raw parts turned into a hot meal.", verb: "Cook", done: "Cooked" },
 };
 
 async function fetchRecipes() {
@@ -1300,6 +1300,36 @@ async function fetchRecipes() {
 function craftReady(r, count) {
   const inv = (state.player && state.player.inventory) || {};
   return r.cost.every(c => (inv[c.id] || 0) >= c.need * count);
+}
+
+// How many of this recipe the materials on hand can pay for.
+function craftMax(r) {
+  const inv = (state.player && state.player.inventory) || {};
+  let max = r.max_count || 20;
+  for (const c of r.cost) {
+    const can = Math.floor((inv[c.id] || 0) / c.need);
+    if (can < max) max = can;
+  }
+  return Math.max(0, max);
+}
+
+// Bottom-right notice: the forge reports faster than the eye can follow the
+// event log, and the bag changes under the cursor.
+function toast(msg) {
+  let box = document.getElementById("toast-box");
+  if (!box) {
+    box = document.createElement("div");
+    box.id = "toast-box";
+    document.body.appendChild(box);
+  }
+  const el = document.createElement("div");
+  el.className = "toast";
+  el.textContent = msg;
+  box.appendChild(el);
+  setTimeout(() => {
+    el.classList.add("toast-out");
+    setTimeout(() => { if (el.remove) el.remove(); }, 400);
+  }, 3200);
 }
 
 function renderWork(rootId, kind) {
@@ -1343,7 +1373,7 @@ function renderWork(rootId, kind) {
           <p class="craft-note muted">${esc(r.note || "")}</p>
           <div class="craft-actions">
             <button class="btn" data-recipe="${r.id}" data-craft="1"${craftReady(r, 1) ? "" : " disabled"}>${esc(trade.verb)}</button>
-            <button class="btn" data-recipe="${r.id}" data-craft="5"${craftReady(r, 5) ? "" : " disabled"}>${esc(trade.verb)} ×5</button>
+            <button class="btn" data-recipe="${r.id}" data-craft="max"${craftMax(r) > 0 ? "" : " disabled"}>${esc(trade.verb)} Max</button>
           </div>
         </div>`;
       }).join("");
@@ -1353,7 +1383,12 @@ function renderWork(rootId, kind) {
       </div>`;
     }).join("") + `</div>`;
   root.querySelectorAll("[data-craft]").forEach(btn => {
-    btn.onclick = () => craftRecipe(btn.dataset.recipe, +btn.dataset.craft);
+    btn.onclick = () => {
+      const r = RECIPES.find(x => x.id === btn.dataset.recipe);
+      if (!r) return;
+      const n = btn.dataset.craft === "max" ? craftMax(r) : +btn.dataset.craft;
+      if (n > 0) craftRecipe(r.id, n);
+    };
   });
 }
 
@@ -1379,7 +1414,9 @@ async function craftRecipe(recipeId, count) {
     p.inventory = j.player.inventory;
     const it = ITEM_BY_ID[j.crafted] || {};
     const trade = TRADES[j.kind] || TRADES.craft;
-    cEvent(`${trade.verb} ${it.name || j.crafted}${j.count > 1 ? ` ×${j.count}` : ""}.`);
+    const made = `${trade.done} ${it.name || j.crafted} x${j.count}`;
+    cEvent(made + ".");
+    toast(made);
     saveLocal(p);
     // repaint the bench the player is standing at, with the new counts
     const kind = j.kind || "craft";

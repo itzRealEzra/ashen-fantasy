@@ -11,6 +11,25 @@ and push to `main` on https://github.com/itzRealEzra/ashen-fantasy.
 
 ## [Unreleased]
 
+## [0.9.14] - 2026-10-20
+### Added
+- **Ma Shan Zheng** (brush face) for the labels: the top bar (Name, Realm,
+  Stones), the sidebar tabs, the panel titles, the game title and the lore
+  lines. The font is vendored locally under `public/assets/fonts` -- only the
+  subsets the game actually renders (Latin, plus the slices carrying 灰燼仙途)
+  -- so it never waits on a CDN and the game still works offline.
+- A **bottom-right notice** when the forge finishes: "Forged Leather Chest
+  x1", fading out after a few seconds. The event log keeps the story; the
+  notice is the immediate feedback.
+
+### Changed
+- The forge's verbs are imperatives now: **Forge** (gear), **Brew** (pills),
+  **Cook** (food).
+- The second button is **Forge Max**: it makes as many as the materials on
+  hand can pay for, limited by the scarcest one and capped at 20 by the
+  server.
+- The top bar spells the currency out: "Stones: 123" beside the stone.
+
 ## [0.9.13] - 2026-10-20
 ### Changed
 - **One recipe per item.** Every craftable, pill and food now has a single
