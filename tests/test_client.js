@@ -472,6 +472,7 @@ state.player = basePlayer();
   };
   const pillRecipe = {
     id: "grind_qi_pill", out: "minor_qi_pill", count: 1, note: "Bone and blood.", kind: "alchemy",
+    label: "Bone & Blood",
     cost: [{ id: "small_beast_bone", need: 1, name: "Small Beast Bone", rarity: "Uncommon", color: "#7cb342", img: "", glyph: "✦" }],
     out_name: "Minor Qi Pill", out_rarity: "Common", out_img: "", out_glyph: "🔹",
   };
@@ -487,6 +488,10 @@ state.player = basePlayer();
   const alchHtml = els["alchemy-root"].innerHTML;
   ok(/Minor Qi Pill/.test(alchHtml) && !/Leather Chest/.test(alchHtml),
      "the alchemy bench shows pills only");
+  ok(/craft-variant/.test(alchHtml) && /Bone &amp; Blood/.test(alchHtml),
+     "a recipe with more than one way is named, so no two cards read the same");
+  ok(!/craft-variant/.test(craftHtml),
+     "a recipe with only one way carries no variant name");
   lib.renderWork("cook-root", "cook");
   const cookHtml = els["cook-root"].innerHTML;
   ok(/Roasted Wild Rat Meat/.test(cookHtml) && !/Leather Chest/.test(cookHtml),

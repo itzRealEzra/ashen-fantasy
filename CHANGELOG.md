@@ -11,6 +11,17 @@ and push to `main` on https://github.com/itzRealEzra/ashen-fantasy.
 
 ## [Unreleased]
 
+## [0.9.10] - 2026-10-20
+### Fixed
+- The Alchemy bench showed three cards all reading "Minor Qi Pill" and three
+  all reading "Minor Vitality Elixir" — three different recipes for the same
+  item, indistinguishable on screen. Every recipe that shares its output with
+  another now carries a variant name, shown as a tag next to the item:
+  Bone & Blood, Gray Core and Alpha Fang for the qi pill; Core & Blood, Wolf
+  Essence and Alpha Blood for the elixir; Corrupted Fang and Alpha Core for
+  the two Jade Guard Ring forges on the craft bench. The craft log names the
+  variant too ("Brewed Minor Qi Pill (Alpha Fang)").
+
 ## [0.9.9] - 2026-10-20
 ### Changed
 - **Every item now has a picture.** An item with no art of its own is drawn

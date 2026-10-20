@@ -412,6 +412,20 @@ try:
        "food is not sold as alchemy")
     ok("minor_qi_pill" not in {r["out"] for r in by_bench["cook"]},
        "pills are not sold as food")
+    # One item made more than one way must carry a variant name, or the bench
+    # shows three cards that all read the same thing.
+    for bench in ("craft", "alchemy", "cook"):
+        outs = [r["out"] for r in by_bench[bench]]
+        for out in set(outs):
+            same = [r for r in by_bench[bench] if r["out"] == out]
+            if len(same) > 1:
+                ok(all(r.get("label") for r in same),
+                   "the %s bench names each %s variant" % (bench, out))
+    qi_pills = [r for r in by_bench["alchemy"] if r["out"] == "minor_qi_pill"]
+    ok(len({r["label"] for r in qi_pills}) == len(qi_pills),
+       "every qi pill recipe has its own name")
+    ok(len({r["cost"] and json.dumps(r["cost"], sort_keys=True) for r in qi_pills}) == len(qi_pills),
+       "the qi pill variants really are different recipes")
 
     fresh("crafter", inventory={"rat_tail": 4, "raw_meat": 2})
     st, j = req("/api/craft", {"username": "crafter", "recipe_id": "roast_meat", "count": 1})
