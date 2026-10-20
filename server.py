@@ -17,8 +17,8 @@ import mimetypes
 # Single source of truth for the build number. Must match CLIENT_VERSION in
 # public/js/app.js and the footer in public/index.html. A player whose saved
 # patch_version differs gets one patch-note mail when they next check mail.
-SERVER_VERSION = "0.9.3"
-CLIENT_VERSION = "0.9.3"  # for /status only; the client keeps its own copy
+SERVER_VERSION = "0.9.4"
+CLIENT_VERSION = "0.9.4"  # for /status only; the client keeps its own copy
 STARTED_AT = time.time()
 RESTARTED_AT = 0
 RESTART_SEQ = 0
@@ -169,17 +169,22 @@ SECLUSION_MULT = 2.0
 REALM_RATE_STEP = 0.15
 ONLINE_GRACE_SEC = 300  # elapsed beyond this counts as offline (capped, 50%)
 MANUAL_ALLOW_MULT = 6.0  # headroom per second: meditate clicks + battle Qi rewards
+# Spirit stones ride the same client-side reward path as loot rolls, so the
+# sync clamp only rejects absurd forgeries (there is no spend path yet; a
+# shop must price and deduct server-side when it arrives).
+SPIRIT_STONE_CAP = 1_000_000_000
 
 # ----------------------------------------------------------------------------
 # Hunting areas (single source of truth; served via GET /api/areas)
 # req_idx gates by player realm. Loot rolls are client-side; Qi rewards flow
 # through accrue() and the /api/sync clamp like any other honest gain.
+# Spirit stones are granted per kill from the mob's stones field.
 # ----------------------------------------------------------------------------
 def _mob(id, name, realm, difficulty, desc, glyph, hp, atk, dfn, speed, qi, loot):
     return {"id": id, "name": name, "realm": realm, "difficulty": difficulty,
             "desc": desc, "glyph": glyph,
             "hp": hp, "atk": atk, "def": dfn, "crit": 5, "crit_dmg": 150,
-            "speed": speed, "qi": qi, "loot": loot}
+            "speed": speed, "qi": qi, "stones": max(1, qi // 3), "loot": loot}
 
 # A mob's loot list, written as (item, rarity, chance%, min, max).
 def _drops(*rows):
@@ -701,6 +706,10 @@ def load_players():
         with open(os.path.join(BASE_DIR, "players.json"), encoding="utf-8-sig") as f:
             data = json.load(f)
         if isinstance(data, dict):
+            # Legacy saves predate spirit stones; back-fill before adoption.
+            for p in data.values():
+                if isinstance(p, dict):
+                    p.setdefault("spirit_stones", 0)
             PLAYERS.update(data)
             return len(data)
     except (OSError, ValueError):
@@ -746,6 +755,7 @@ def build_player(username, picks):
         "cultivation_to_next": REALMS[0]["cost"],
         "bottleneck": 0,
         "dao_insight": 0,
+        "spirit_stones": 0,
         "seclusion": False,
         "equipment": {s: None for s in EQUIP_SLOTS},
         "inventory": {},
@@ -1265,6 +1275,16 @@ class Handler(BaseHTTPRequestHandler):
             # insight is monotonic: the client may condense several times
             # between syncs (a +1 clamp would roll honest progress back)
             dao_insight = max(dao_insight, extra_insight)
+            # Spirit stones are granted per kill client-side (like loot rolls),
+            # so the balance is monotonic: a lower claim is a rollback, never
+            # an honest spend — there is no spend path yet. Cap forgeries.
+            stones_stored = int(stored.get("spirit_stones", 0) or 0)
+            try:
+                stones_claimed = int(data.get("spirit_stones", stones_stored))
+            except (TypeError, ValueError):
+                stones_claimed = stones_stored
+            stones_claimed = max(0, min(stones_claimed, SPIRIT_STONE_CAP))
+            spirit_stones = max(stones_stored, stones_claimed)
             # equipment / inventory / elixirs: accept only known items in valid slots
             equip_in = data.get("equipment") or {}
             equipment = {s: None for s in EQUIP_SLOTS}
@@ -1300,6 +1320,7 @@ class Handler(BaseHTTPRequestHandler):
                 "cultivation_to_next": stage["cost"],
                 "bottleneck": bottleneck,
                 "dao_insight": dao_insight,
+                "spirit_stones": spirit_stones,
                 "seclusion": bool(data.get("seclusion", stored.get("seclusion", False))),
                 "equipment": equipment,
                 "inventory": inventory,

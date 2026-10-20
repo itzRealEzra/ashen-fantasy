@@ -54,6 +54,7 @@ def restore(path):
     player.setdefault("equipment", {s: None for s in server.EQUIP_SLOTS})
     player.setdefault("inventory", {})
     player.setdefault("elixirs", [None, None, None])
+    player.setdefault("spirit_stones", 0)
     player.setdefault("roots", [])
     player.setdefault("stats", {})
     player["hp"] = None  # client-tracked; never restored from disk

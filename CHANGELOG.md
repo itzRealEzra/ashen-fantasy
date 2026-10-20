@@ -11,6 +11,19 @@ and push to `main` on https://github.com/itzRealEzra/ashen-fantasy.
 
 ## [Unreleased]
 
+## [0.9.4] - 2026-10-20
+### Added
+- Spirit Stones currency: every kill now grants stones derived from the mob's
+  qi (`max(1, qi // 3)`), published per mob via `/api/areas` and granted
+  client-side in `onMobDeath` alongside the qi reward. The balance is a new
+  `spirit_stones` player field (server-created at 0, back-filled for legacy
+  saves, monotonic on `/api/sync` like dao insight — no spend path yet, so a
+  lower claim is a rollback; `SPIRIT_STONE_CAP` rejects absurd forgeries).
+- Top bar counter: 💎 spirit-stone total pinned to the right of the top bar
+  (`.top-stones`, painted by `updateQi`), and the respawn line now shows
+  `+N 💎` next to the qi reward.
+- `/reset` (admin) and `tools/restore_player.py` handle the new field.
+
 ## [0.9.3] - 2026-10-18
 ### Added
 - Complete enemy refresh: all 6 original enemies replaced with new variants

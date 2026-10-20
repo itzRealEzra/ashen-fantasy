@@ -1,6 +1,6 @@
 /* Ashen Fantasy — vanilla JS state machine: username -> roots -> main */
 const $ = (id) => document.getElementById(id);
-const CLIENT_VERSION = "0.9.3"; // must match server.py server_version + footer
+const CLIENT_VERSION = "0.9.4"; // must match server.py server_version + footer
 const state = {
   username: localStorage.getItem("af_user") || "",
   rollId: null,
@@ -282,6 +282,7 @@ function normalizePlayer(p) {
   p.cultivation_to_next = st.cost;
   p.bottleneck = Math.max(0, Math.min(p.bottleneck | 0, st.bottleneck_req));
   p.dao_insight = p.dao_insight | 0;
+  p.spirit_stones = Math.max(0, Math.floor(+p.spirit_stones || 0));
   p.seclusion = false; // seclusion retired in v0.4.1 (pure idle)
   if (!p.equipment || typeof p.equipment !== "object") p.equipment = {};
   for (const s of EQUIP_SLOT_LIST) if (!(s in p.equipment)) p.equipment[s] = null;
@@ -449,6 +450,8 @@ function derivedStats(p) {
 
 function updateQi(p) {
   $("p-name").textContent = p.username;
+  const ss = $("p-stones");
+  if (ss) ss.textContent = String(p.spirit_stones | 0);
   // Single source of truth: always the current stage cost, never a stale
   // cached cultivation_to_next (bar and button can never disagree).
   const cost = stageOf(p).cost;
@@ -541,6 +544,7 @@ async function syncPlayer(initial) {
         username: p.username, cultivation: p.cultivation, realm_idx: p.realm_idx,
         bottleneck: p.bottleneck, dao_insight: p.dao_insight, seclusion: p.seclusion,
         equipment: p.equipment, inventory: p.inventory, elixirs: p.elixirs,
+        spirit_stones: p.spirit_stones | 0,
       }),
     });
     const j = await r.json();
@@ -1241,7 +1245,7 @@ function unloadElixir(itemId) {
 const battle = {
   areas: [], view: "areas", area: null, mob: null,
   php: 1, ehp: 1, pbar: 0, ebar: 0, timer: null,
-  searching: false, kills: 0, loot: {}, lastQi: 0,
+  searching: false, kills: 0, loot: {}, lastQi: 0, lastStones: 0,
 };
 
 function lootKey() { return "af_loot_" + (state.username || "guest"); }
@@ -1466,6 +1470,7 @@ function startCombat() {
   battle.kills = 0;
   battle.searching = false;
   battle.lastQi = 0;
+  battle.lastStones = 0;
   renderCombat();
   stopBattle();
   battle.timer = setInterval(battleTick, 100);
@@ -1534,7 +1539,7 @@ function paintCombat() {
   if (kc) kc.textContent = battle.kills ? `${m.name} slain ×${battle.kills}` : "";
   const st = $("battle-status");
   if (st) st.innerHTML = battle.searching
-    ? `<div class="searching">Searching for that same enemy…${battle.lastQi ? ` · +${battle.lastQi} Qi` : ""}</div>`
+    ? `<div class="searching">Searching for that same enemy…${battle.lastQi ? ` · +${battle.lastQi} Qi` : ""}${battle.lastStones ? ` · +${battle.lastStones} 💎` : ""}</div>`
     : "";
 }
 
@@ -1582,6 +1587,13 @@ function battleTick() {
   paintBars();
 }
 
+// Spirit stones ride with the kill: the server publishes stones per mob
+// (derived from its qi); an older area payload falls back to qi/3.
+function mobStones(m) {
+  if (!m) return 0;
+  return Math.max(0, Math.floor(m.stones != null ? m.stones : (m.qi || 0) / 3));
+}
+
 function onMobDeath() {
   const p = state.player, m = battle.mob;
   battle.kills++;
@@ -1595,6 +1607,11 @@ function onMobDeath() {
   }
   saveLoot();
   accrue(p, m.qi);
+  const stones = mobStones(m);
+  if (stones > 0) {
+    p.spirit_stones = (p.spirit_stones | 0) + stones;
+    battle.lastStones = stones;
+  }
   saveLocal(p);
   updateQi(p);
   battle.searching = true;

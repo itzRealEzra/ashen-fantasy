@@ -29,6 +29,7 @@ const els = {
   "breakthrough-btn": mkEl(), "p-name": mkEl(), "qi-bar": mkEl(),
   "char-sheet": mkEl(), "p-realm": mkEl(), "cult-rate": mkEl(),
   "battle-root": mkEl(), "char-hp": mkEl(), "char-qi": mkEl(),
+  "p-stones": mkEl(),
 };
 const calls = { cEvents: [], saves: [], enemies: [], notices: [], renderInv: 0, timeouts: [], fetch: null };
 const state = { username: "tester", player: null };
@@ -121,6 +122,7 @@ const parts = [
   grab(/function flash\(id\) \{[\s\S]*?\n\}/, "flash"),
   grab(/function strikeDmg\(atk, crit, critDmg, dfn\) \{[\s\S]*?\n\}/, "strikeDmg"),
   grab(/function battleTick\(\) \{[\s\S]*?\n\}/, "battleTick"),
+  grab(/function mobStones\(m\) \{[\s\S]*?\n\}/, "mobStones"),
   grab(/function onMobDeath\(\) \{[\s\S]*?\n\}/, "onMobDeath"),
   grab(/function onPlayerDeath\(\) \{[\s\S]*?\n\}/, "onPlayerDeath"),
   grab(/function addInv\(id, n\) \{[\s\S]*?\n\}/, "addInv"),
@@ -157,6 +159,7 @@ const lib = new Function("__", prelude + parts + `
     advanceRealm, accrue, equipItem, unequipSlot, bagGearAction, useConsumable,
     loadElixirSlot, unloadElixir, elixirPreferredSlot, leaveActiveHunt,
     showBattleAreas, battleTick, derivedStats, playerMaxHp, addInv, takeInv,
+    mobStones, onMobDeath,
     itemTipHtml, itemTypeLabel, bagTabOf, dropsFor, iconHtml, artCls, BAG_TABS, slotTypeLabel,
     ITEM_BY_ID, gearBonus, derivedStats,
     ITEM_RARITY_COLORS,
@@ -169,6 +172,7 @@ const MAXHP = 225;
 const basePlayer = () => ({
   username: "tester", hp: MAXHP, realm_idx: 0, realm: "Mortal",
   cultivation: 0, cultivation_to_next: 50, bottleneck: 0, dao_insight: 0,
+  spirit_stones: 0,
   seclusion: false, last_seen: Date.now() / 1000,
   stats: { qi_mult: 1, comprehension: 5, physique: 5, fortune: 5, synergy_bonus: 0 },
   roots: [{ name: "Test Root", rarity: "Mortal", element: "Earth", color: "#9aa0a6", desc: "d" }],
@@ -336,6 +340,8 @@ state.player = basePlayer();
   ok(state.player.hp === lib.battle.php && state.player.hp < MAXHP, "combat damage mirrored into the save every strike");
   ok(calls.timeouts.length >= 1, "respawn timer scheduled");
   ok(lib.battle.lastQi === 3, "qi reward staged for combat feedback");
+  ok(state.player.spirit_stones === 1, "kill granted the mob's stone reward");
+  ok(lib.battle.lastStones === 1, "stone reward staged for combat feedback");
 
   // stale respawn must not heal a fresh fight
   const stale = calls.timeouts[calls.timeouts.length - 1];
@@ -370,6 +376,38 @@ state.player = basePlayer();
   calls.enemies.length = 0;
   lib.battleTick();
   ok(calls.enemies.length === 1 && lib.battle.ehp === 35, "0-HP player dies without dealing another blow");
+
+  // ============ 6b. spirit stones: normalize, paint, sync ============
+  lib.setRealms(REALMS_FIXTURE);
+  state.player = basePlayer();
+  delete state.player.spirit_stones;
+  lib.normalizePlayer(state.player);
+  ok(state.player.spirit_stones === 0, "normalize defaults a missing stone balance to 0");
+  state.player.spirit_stones = -5;
+  lib.normalizePlayer(state.player);
+  ok(state.player.spirit_stones === 0, "normalize clamps a negative stone balance to 0");
+  lib.updateQi(state.player);
+  ok(els["p-stones"].textContent === "0", "top bar paints the stone balance");
+  state.player.spirit_stones = 1234;
+  lib.updateQi(state.player);
+  ok(els["p-stones"].textContent === "1234", "top bar updates as stones are earned");
+  ok(lib.mobStones({ qi: 3 }) === 1, "stones fall back to qi/3 for older area payloads");
+  ok(lib.mobStones({ qi: 50, stones: 16 }) === 16, "the server-published stones reward wins");
+  ok(lib.mobStones(null) === 0, "no mob means no stones");
+
+  let sentBody = null;
+  state.player = basePlayer();
+  state.player.spirit_stones = 9;
+  // Any syncPlayer fired without await (e.g. by useConsumable) is still in
+  // flight; the syncing guard would swallow this call until it settles.
+  for (let i = 0; i < 8; i++) await Promise.resolve();
+  calls.fetch = async (url, opts) => {
+    sentBody = JSON.parse(opts.body);
+    return { ok: true, json: async () => ({ ok: true, clamped: false, player: { ...state.player } }) };
+  };
+  await lib.syncPlayer(true);
+  ok(sentBody && sentBody.spirit_stones === 9, "sync reports the stone balance");
+  calls.fetch = null;
 
   // ============ 7. leaving the hunt persists HP, stops fight, clears log ============
   state.player = basePlayer();
@@ -524,6 +562,11 @@ state.player = basePlayer();
   ok(/Crafting is deferred/.test(SRC) === false, "material wording lives server-side (no stale client copy)");
   ok(/it\.kind === "material" \? ` title=/.test(SRC) === false, "no native title tooltip left in the bag");
   ok(/data-item="\$\{id\}" data-tip="\$\{id\}"/.test(SRC), "every bag slot carries data-tip");
+  ok(/\$\("p-stones"\)/.test(SRC), "updateQi paints the top-bar stone counter");
+  ok(/spirit_stones: p\.spirit_stones \| 0/.test(SRC), "sync payload carries spirit_stones");
+  ok(/p\.spirit_stones = Math\.max\(0, Math\.floor\(\+p\.spirit_stones \|\| 0\)\)/.test(SRC),
+     "normalizePlayer repairs the stone balance");
+  ok(/\+\$\{battle\.lastStones\} 💎/.test(SRC), "the respawn line shows the stone reward");
 
   // ============ 14. scrollbars hidden, scrolling kept ============
   const CSS = fs.readFileSync(path.join(__dirname, "..", "public", "css", "style.css"), "utf8").replace(/\r\n/g, "\n");

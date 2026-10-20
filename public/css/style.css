@@ -94,6 +94,7 @@ input { background: #0e0e14; border: 1px solid var(--line); color: var(--ink); p
 .hamb:hover { color: var(--gold2); }
 .hamb.collapsed { transform: rotate(90deg); color: var(--gold); }
 .top-name, .top-realm { border-right: 1px solid var(--line); padding: 12px 20px; }
+.top-stones { margin-left: auto; border-left: 1px solid var(--line); padding: 12px 20px; color: var(--gold2); letter-spacing: 1px; white-space: nowrap; }
 .shell-body { display: flex; flex: 1; min-height: 0; position: relative; }
 /* Sidebar floats above the canvas — opening/closing never resizes .content */
 .sidebar { position: absolute; top: 0; left: 0; bottom: 0; width: 220px; z-index: 10; background: var(--panel); border-right: 1px solid var(--line); display: flex; flex-direction: column; overflow: hidden; opacity: 1; visibility: visible; transform: translateX(0); transition: transform .3s ease, opacity .22s ease, visibility 0s; box-shadow: 8px 0 24px rgba(0,0,0,.55); }

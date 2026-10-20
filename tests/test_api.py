@@ -106,7 +106,8 @@ def new_player(name):
 def sync(username, **fields):
     body = {"username": username, "realm_idx": 0, "cultivation": 0,
             "bottleneck": 0, "dao_insight": 0, "seclusion": False,
-            "equipment": {}, "inventory": {}, "elixirs": [None, None, None]}
+            "equipment": {}, "inventory": {}, "elixirs": [None, None, None],
+            "spirit_stones": 0}
     body.update(fields)
     return req("/api/sync", body)
 
@@ -151,6 +152,9 @@ try:
     ok(st == 200 and len(j.get("items", [])) > 0, "items served")
     st, j = req("/api/realms")
     ok(st == 200 and len(j.get("realms", [])) > 0, "realms served")
+    with open(os.path.join(ROOT, "public", "index.html"), encoding="utf-8") as f:
+        top_html = f.read()
+    ok('id="p-stones"' in top_html, "top bar carries the spirit-stone counter")
 
     # ============ 2b. art is resolved by id, live, with an emoji fallback ============
     # Adding a PNG must show up on the next request without a server restart.
@@ -236,6 +240,7 @@ try:
     p = new_player("sage_one")
     ok(p["realm_idx"] == 0 and len(p["roots"]) == 3, "create builds a fresh cultivator")
     ok(p.get("hp") is None, "created player hp is null (client-tracked)")
+    ok(p.get("spirit_stones") == 0, "created player starts with 0 spirit stones")
     server.LAST_ROLL_BY_IP.clear()
     _, r2 = roll()
     st, j = req("/api/create", {"username": "sage_one", "roll_id": r2["roll_id"],
@@ -315,6 +320,24 @@ try:
     ok(st == 200 and j["player"]["dao_insight"] == 7, "condensed insight is accepted")
     st, j = sync("insight_sage", dao_insight=3)
     ok(j["player"]["dao_insight"] == 7, "older insight never rolls progress back")
+
+    # ============ 10b. spirit stones: monotonic, capped, back-filled ============
+    st, j = req("/api/areas")
+    mobs = [m for a in j["areas"] for m in a["mobs"]]
+    ok(all(m.get("stones") == max(1, m["qi"] // 3) for m in mobs),
+       "every mob publishes a stones reward derived from its qi")
+    fresh("stone_collector", spirit_stones=50)
+    st, j = sync("stone_collector", spirit_stones=70)
+    ok(st == 200 and j["player"]["spirit_stones"] == 70, "earned stones are accepted")
+    st, j = sync("stone_collector", spirit_stones=10)
+    ok(j["player"]["spirit_stones"] == 70, "a lower claim never rolls stones back")
+    st, j = sync("stone_collector", spirit_stones=10 ** 12)
+    ok(j["player"]["spirit_stones"] == server.SPIRIT_STONE_CAP,
+       "absurd stone forgeries clamp to the cap")
+    del server.PLAYERS["stone_collector"]["spirit_stones"]
+    st, j = sync("stone_collector")
+    ok(st == 200 and j["player"]["spirit_stones"] == 0,
+       "a save missing the field is back-filled instead of erroring")
 
     # ============ 11. sync response never echoes hp ============
     fresh("hp_hidden")

@@ -219,6 +219,7 @@ def cmd_reset(srv, args):
     p["cultivation_to_next"] = srv.REALMS[0]["cost"]
     p["bottleneck"] = 0
     p["dao_insight"] = 0
+    p["spirit_stones"] = 0
     p["equipment"] = {s: None for s in srv.EQUIP_SLOTS}
     p["inventory"] = {}
     p["elixirs"] = [None, None, None]
