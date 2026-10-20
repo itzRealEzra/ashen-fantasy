@@ -327,9 +327,40 @@ try:
     ok(all(m.get("stones") == max(1, m["qi"] // 3) for m in mobs),
        "every mob publishes a stones reward derived from its qi")
     village = next(a for a in j["areas"] if a["id"] == "origin_village")
-    den = next(a for a in j["areas"] if a["id"] == "corrupted_den")
-    ok(max(m["stones"] for m in den["mobs"]) > max(m["stones"] for m in village["mobs"]),
+    boss = next(m for m in village["mobs"] if m["id"] == "corrupted_alpha_wolf")
+    ok(boss["stones"] > max(m["stones"] for m in village["mobs"] if m["id"] != boss["id"]),
        "the higher the enemy the higher the stone drop")
+    # ============ 10c. the boss lives in the village, gated and loot-clean ====
+    ok(all(a["id"] != "corrupted_den" for a in j["areas"]),
+       "the separate boss den is gone")
+    ok(boss.get("boss") is True, "the alpha wolf is flagged as a boss")
+    ok(boss.get("req_idx") == 1, "the boss demands Qi Refinement I")
+    ok(all(m.get("req_idx", 0) == 0 for m in village["mobs"] if m["id"] != boss["id"]),
+       "the rest of the village is open to a Mortal")
+    # The boss no longer mints the stray materials from v0.9.3: its trophies
+    # are the new art-bearing drops, and the bulk of the haul is drawn from
+    # materials that already existed.
+    gone = ("frostmane_wereboar_meat", "silver_wind_wolf_pelt", "alpha_wolf_pelt",
+            "corrupted_alpha_fang")
+    ok(not any(i["id"] in gone for i in server.ITEMS),
+       "the stray boss-only items from v0.9.3 are gone from the item database")
+    names = {i["name"] for i in server.ITEMS}
+    ok(all(l["item"] in names for l in boss["loot"]),
+       "every boss drop resolves to a real item")
+    existing = {"Corrupted Beast Core", "Bloodied Tusk", "Wolf Fang", "Tough Boar Hide"}
+    ok(existing.issubset({l["item"] for l in boss["loot"]}),
+       "the boss still drops the materials that already existed")
+    boss_ids = {server._slug(l["item"]) for l in boss["loot"]}
+    ok("corrupted_fang" in boss_ids and "corrupted_alpha_wolf_core" in boss_ids
+       and "corrupted_alpha_wolf_pelt" in boss_ids and "corrupted_alpha_blood" in boss_ids,
+       "the boss drops its new art-bearing trophies")
+    st, j = req("/api/items")
+    by_id = {i["id"]: i for i in j["items"]}
+    ok(all(by_id[i].get("img") == "/assets/items/%s.png" % i
+           for i in ("corrupted_fang", "corrupted_alpha_blood",
+                     "corrupted_alpha_wolf_core", "corrupted_alpha_wolf_pelt",
+                     "qi_gathering_ring")),
+       "the new art lands on the items it belongs to")
     fresh("stone_collector", spirit_stones=50)
     st, j = sync("stone_collector", spirit_stones=70)
     ok(st == 200 and j["player"]["spirit_stones"] == 70, "earned stones are accepted")

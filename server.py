@@ -17,8 +17,8 @@ import mimetypes
 # Single source of truth for the build number. Must match CLIENT_VERSION in
 # public/js/app.js and the footer in public/index.html. A player whose saved
 # patch_version differs gets one patch-note mail when they next check mail.
-SERVER_VERSION = "0.9.5"
-CLIENT_VERSION = "0.9.5"  # for /status only; the client keeps its own copy
+SERVER_VERSION = "0.9.6"
+CLIENT_VERSION = "0.9.6"  # for /status only; the client keeps its own copy
 STARTED_AT = time.time()
 RESTARTED_AT = 0
 RESTART_SEQ = 0
@@ -180,11 +180,16 @@ SPIRIT_STONE_CAP = 1_000_000_000
 # through accrue() and the /api/sync clamp like any other honest gain.
 # Spirit stones are granted per kill from the mob's stones field.
 # ----------------------------------------------------------------------------
-def _mob(id, name, realm, difficulty, desc, glyph, hp, atk, dfn, speed, qi, loot):
+def _mob(id, name, realm, difficulty, desc, glyph, hp, atk, dfn, speed, qi, loot,
+         req_idx=0, boss=False):
+    # req_idx: realm the player must have reached before this beast can be
+    # faced (a boss can demand more than the area around it). boss: marks the
+    # card as a boss encounter.
     return {"id": id, "name": name, "realm": realm, "difficulty": difficulty,
             "desc": desc, "glyph": glyph,
             "hp": hp, "atk": atk, "def": dfn, "crit": 5, "crit_dmg": 150,
-            "speed": speed, "qi": qi, "stones": max(1, qi // 3), "loot": loot}
+            "speed": speed, "qi": qi, "stones": max(1, qi // 3), "loot": loot,
+            "req_idx": req_idx, "boss": boss}
 
 # A mob's loot list, written as (item, rarity, chance%, min, max).
 def _drops(*rows):
@@ -195,7 +200,9 @@ AREAS = [
     {"id": "origin_village", "name": "Origin Village", "req_idx": 0,
       "req": "Mortal", "difficulty": "Beginner",
       "desc": "A peaceful village where new cultivators begin their journey, "
-              "complete basic quests, and learn the fundamentals of combat.",
+              "complete basic quests, and learn the fundamentals of combat. "
+              "A corrupted alpha prowls the treeline past the fields — a "
+              "Mortal is not ready for it.",
       "mobs": [
         _mob("spectral_rat", "Spectral Rat", "Mortal", "Very Easy",
              "Scratching under the granary boards. Bold in numbers, harmless alone.",
@@ -247,24 +254,26 @@ AREAS = [
              "🐃", 260, 18, 10, 1.05, 18,
              _drops(("Tough Boar Hide", "Uncommon", 80, 2, 5),
                      ("Raw Meat", "Common", 85, 5, 9),
-                     ("Broken Claw", "Uncommon", 60, 4, 4),
+                     ("Broken Claw", "Uncommon", 50, 3, 3),
                      ("Bloodied Tusk", "Rare", 65, 2, 4),
                      ("Beast Blood", "Uncommon", 45, 2, 4),
                      ("Corrupted Beast Core", "Epic", 12, 1, 1))),
-      ]},
-    {"id": "corrupted_den", "name": "Corrupted Den", "req_idx": 1,
-      "req": "Qi Refinement I", "difficulty": "Deadly",
-      "desc": "A corrupted den where the Alpha Wolf prowls. Only the prepared survive.",
-      "mobs": [
+        # The boss hunts the same fields as the rest of the pack, but it
+        # demands a realm of its own: a Mortal cannot survive it, so it stays
+        # locked until Qi Refinement I. Its loot is drawn from materials that
+        # already exist -- no new item is minted for a boss kill.
         _mob("corrupted_alpha_wolf", "Corrupted Alpha Wolf", "Qi Refinement I", "Nightmare",
              "The corrupted alpha. Its breath freezes the air, its claws rend steel.",
              "🐺", 800, 50, 30, 0.8, 50,
-             _drops(("Corrupted Beast Core", "Epic", 100, 1, 1),
-                     ("Corrupted Alpha Fang", "Legendary", 25, 1, 1),
-                     ("Alpha Wolf Pelt", "Legendary", 50, 1, 1),
+             _drops(("Corrupted Alpha Wolf Core", "Legendary", 100, 1, 1),
+                     ("Corrupted Alpha Wolf Pelt", "Legendary", 50, 1, 1),
+                     ("Corrupted Fang", "Legendary", 25, 1, 1),
                      ("Corrupted Alpha Blood", "Epic", 30, 1, 1),
-                     ("Frostmane Wereboar Meat", "Rare", 80, 3, 5),
-                     ("Silver Wind Wolf Pelt", "Rare", 70, 2, 3))),
+                     ("Corrupted Beast Core", "Epic", 100, 1, 1),
+                     ("Bloodied Tusk", "Rare", 60, 1, 2),
+                     ("Wolf Fang", "Uncommon", 70, 2, 4),
+                     ("Tough Boar Hide", "Uncommon", 60, 1, 3)),
+             req_idx=1, boss=True),
       ]},
 ]
 

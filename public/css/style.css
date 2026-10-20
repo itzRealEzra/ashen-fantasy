@@ -95,6 +95,8 @@ input { background: #0e0e14; border: 1px solid var(--line); color: var(--ink); p
 .hamb.collapsed { transform: rotate(90deg); color: var(--gold); }
 .top-name, .top-realm { border-right: 1px solid var(--line); padding: 12px 20px; }
 .top-stones { margin-left: auto; border-left: 1px solid var(--line); padding: 12px 20px; color: var(--gold2); letter-spacing: 1px; white-space: nowrap; }
+.top-stones .stone-icon { width: 20px; height: 20px; vertical-align: -4px; margin-right: 6px; }
+.stone-glyph { width: 14px; height: 14px; vertical-align: -2px; }
 .shell-body { display: flex; flex: 1; min-height: 0; position: relative; }
 /* Sidebar floats above the canvas — opening/closing never resizes .content */
 .sidebar { position: absolute; top: 0; left: 0; bottom: 0; width: 220px; z-index: 10; background: var(--panel); border-right: 1px solid var(--line); display: flex; flex-direction: column; overflow: hidden; opacity: 1; visibility: visible; transform: translateX(0); transition: transform .3s ease, opacity .22s ease, visibility 0s; box-shadow: 8px 0 24px rgba(0,0,0,.55); }
@@ -134,6 +136,12 @@ input { background: #0e0e14; border: 1px solid var(--line); color: var(--ink); p
 .enemy-card b { font-size: 15px; }
 .enemy-card .realm-tag { font-size: 12px; color: var(--gold2); }
 .enemy-card .difficulty-tag { font-size: 12px; color: var(--muted); }
+.enemy-card.boss { border-color: var(--gold); background: #241d0e; }
+.enemy-card.boss:hover { box-shadow: 0 0 10px rgba(201,168,106,.35); }
+.enemy-card .boss-tag { font-size: 11px; letter-spacing: 2px; color: var(--gold2); text-transform: uppercase; }
+.enemy-card.locked { opacity: .5; }
+.enemy-card.locked b { color: var(--muted); }
+.enemy-card .locked-tag { font-size: 11px; color: var(--red); letter-spacing: 1px; }
 .enemy-card .desc { font-size: 12px; color: var(--muted); line-height: 1.5; }
 .enemy-glyph { font-size: 44px; text-align: center; padding: 10px 0; background: #0e0e15; border: 1px solid var(--line); line-height: 0; }
 .enemy-glyph .art-enemy { width: 100%; height: 96px; object-fit: contain; }

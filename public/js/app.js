@@ -1,6 +1,6 @@
 /* Ashen Fantasy — vanilla JS state machine: username -> roots -> main */
 const $ = (id) => document.getElementById(id);
-const CLIENT_VERSION = "0.9.5"; // must match server.py server_version + footer
+const CLIENT_VERSION = "0.9.6"; // must match server.py server_version + footer
 const state = {
   username: localStorage.getItem("af_user") || "",
   rollId: null,
@@ -1424,19 +1424,24 @@ function showBattleEnemies(notice) {
   battle.view = "enemies";
   stopBattle();
   const a = battle.area;
+  const p = state.player;
   const root = $("battle-root");
   root.innerHTML =
     `<div class="enemy-head"><h2>${esc(a.name)}</h2><button id="enemy-back" class="btn">Back</button></div>` +
     `<p class="enemy-notice">${esc(notice || "")}</p>` +
-    `<div class="enemy-grid">` + a.mobs.map(m =>
-      `<div class="enemy-card" data-mob="${m.id}">
+    `<div class="enemy-grid">` + a.mobs.map(m => {
+      // A boss can demand more than the area around it, so the lock is per beast.
+      const locked = (p.realm_idx | 0) < (m.req_idx || 0);
+      return `<div class="enemy-card${m.boss ? " boss" : ""}${locked ? " locked" : ""}" data-mob="${m.id}" data-locked="${locked ? "1" : "0"}">
         <b>${esc(m.name)}</b>
+        ${m.boss ? `<div class="boss-tag">Boss</div>` : ""}
         <div class="realm-tag">${esc(m.realm)}</div>
         ${m.difficulty ? `<div class="difficulty-tag">${esc(m.difficulty)}</div>` : ""}
+        ${locked ? `<div class="locked-tag">Locked — needs ${esc(m.realm)}</div>` : ""}
         <div class="desc">${esc(m.desc)}</div>
         <div class="enemy-glyph">${iconHtml(m.img, m.glyph, "art-enemy")}</div>
         <div class="enemy-loot">Loot list<div class="loot-row loot-guaranteed">
-            <span class="loot-name">💎 Spirit Stone</span>
+            <span class="loot-name"><img class="stone-glyph" src="/assets/icons/spirit_stone.png" alt="" /> Spirit Stone</span>
             <span class="loot-rar">guaranteed</span>
             <span class="loot-qty">${mobStones(m)}x</span>
             <span class="loot-pct">100%</span>
@@ -1450,11 +1455,18 @@ function showBattleEnemies(notice) {
             <span class="loot-pct">${Math.round(l.chance * 100)}%</span>
           </div>`;
         }).join("")}</div>
-      </div>`).join("") + `</div>`;
+      </div>`;
+    }).join("") + `</div>`;
   $("enemy-back").onclick = showBattleAreas;
-  root.querySelectorAll(".enemy-card").forEach(el => el.onclick = () => {
-    battle.mob = a.mobs.find(x => x.id === el.dataset.mob);
-    startCombat();
+  root.querySelectorAll(".enemy-card").forEach(el => {
+    if (el.dataset.locked === "1") {
+      el.onclick = () => cEvent("That beast is beyond you for now — your realm is not deep enough.");
+      return;
+    }
+    el.onclick = () => {
+      battle.mob = a.mobs.find(x => x.id === el.dataset.mob);
+      startCombat();
+    };
   });
 }
 
@@ -1544,7 +1556,7 @@ function paintCombat() {
   if (kc) kc.textContent = battle.kills ? `${m.name} slain ×${battle.kills}` : "";
   const st = $("battle-status");
   if (st) st.innerHTML = battle.searching
-    ? `<div class="searching">Searching for that same enemy…${battle.lastQi ? ` · +${battle.lastQi} Qi` : ""}${battle.lastStones ? ` · +${battle.lastStones} 💎` : ""}</div>`
+    ? `<div class="searching">Searching for that same enemy…${battle.lastQi ? ` · +${battle.lastQi} Qi` : ""}${battle.lastStones ? ` · +${battle.lastStones} <img class="stone-glyph" src="/assets/icons/spirit_stone.png" alt="" />` : ""}</div>`
     : "";
 }
 

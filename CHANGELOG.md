@@ -11,6 +11,27 @@ and push to `main` on https://github.com/itzRealEzra/ashen-fantasy.
 
 ## [Unreleased]
 
+## [0.9.6] - 2026-10-20
+### Changed
+- The Corrupted Alpha Wolf is now a boss of **Origin Village** instead of
+  living in its own "Corrupted Den" area (the den is gone). Its card is
+  flagged `BOSS` and stays locked until Qi Refinement I — a Mortal cannot
+  survive it, so the lock is now per beast (`req_idx`) rather than per area.
+- The boss no longer mints the stray materials added in v0.9.3 — Frostmane
+  Wereboar Meat, Silver Wind Wolf Pelt and Alpha Wolf Pelt are gone. Its haul
+  is drawn from materials that already existed (Corrupted Beast Core, Bloodied
+  Tusk, Wolf Fang, Tough Boar Hide) plus its own new trophies.
+
+### Added
+- New art for the boss trophies, dropped by the Corrupted Alpha Wolf:
+  Corrupted Alpha Wolf Core (Legendary, guaranteed), Corrupted Alpha Wolf
+  Pelt (Legendary, 50%), Corrupted Fang (Legendary, 25%) and Corrupted Alpha
+  Blood (Epic, 30%).
+- `spirit_stone.png` — the spirit stone now has its own picture: the top bar
+  counter, the enemy-card guaranteed-drop row and the respawn line all draw
+  the art instead of the 💎 emoji.
+- Art for the Qi Gathering Ring (`qi_gathering_ring.png`).
+
 ## [0.9.5] - 2026-10-20
 ### Added
 - Spirit Stone drops are now an explicit guaranteed drop: every kill logs

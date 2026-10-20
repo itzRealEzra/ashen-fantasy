@@ -29,7 +29,7 @@ const els = {
   "breakthrough-btn": mkEl(), "p-name": mkEl(), "qi-bar": mkEl(),
   "char-sheet": mkEl(), "p-realm": mkEl(), "cult-rate": mkEl(),
   "battle-root": mkEl(), "char-hp": mkEl(), "char-qi": mkEl(),
-  "p-stones": mkEl(),
+  "p-stones": mkEl(), "enemy-back": mkEl(),
 };
 const calls = { cEvents: [], saves: [], enemies: [], notices: [], renderInv: 0, timeouts: [], fetch: null };
 const state = { username: "tester", player: null };
@@ -116,6 +116,10 @@ const parts = [
   grab(/function persistBattleHp\(fainted\) \{[\s\S]*?\n\}/, "persistBattleHp"),
   grab(/function leaveActiveHunt\(\) \{[\s\S]*?\n\}/, "leaveActiveHunt"),
   grab(/function showBattleAreas\(\) \{[\s\S]*?\n\}/, "showBattleAreas"),
+  // The real card painter is renamed on extraction: the prelude already has
+  // a showBattleEnemies stub (the defeat message sink).
+  grab(/function showBattleEnemies\(notice\) \{[\s\S]*?\n\}/, "showBattleEnemiesCard")
+    .replace("function showBattleEnemies(", "function showBattleEnemiesCard("),
   grab(/function setBar\(id, frac, attack\) \{[\s\S]*?\n\}/, "setBar"),
   grab(/function paintBars\(\) \{[\s\S]*?\n\}/, "paintBars"),
   grab(/function paintCombat\(\) \{[\s\S]*?\n\}/, "paintCombat"),
@@ -158,7 +162,7 @@ const lib = new Function("__", prelude + parts + `
     syncPlayer, fetchServerPlayer, normalizePlayer, breakthroughReady, updateQi,
     advanceRealm, accrue, equipItem, unequipSlot, bagGearAction, useConsumable,
     loadElixirSlot, unloadElixir, elixirPreferredSlot, leaveActiveHunt,
-    showBattleAreas, battleTick, derivedStats, playerMaxHp, addInv, takeInv,
+    showBattleAreas, showBattleEnemiesCard, battleTick, derivedStats, playerMaxHp, addInv, takeInv,
     mobStones, onMobDeath,
     itemTipHtml, itemTypeLabel, bagTabOf, dropsFor, iconHtml, artCls, BAG_TABS, slotTypeLabel,
     ITEM_BY_ID, gearBonus, derivedStats,
@@ -412,6 +416,30 @@ state.player = basePlayer();
   ok(sentBody && sentBody.spirit_stones === 9, "sync reports the stone balance");
   calls.fetch = null;
 
+  // ============ 6c. the boss card: flagged, gated, richer drop ============
+  const bossMob = { id: "corrupted_alpha_wolf", name: "Corrupted Alpha Wolf", realm: "Qi Refinement I",
+    difficulty: "Nightmare", desc: "d", glyph: "🐺", hp: 800, atk: 50, def: 30, crit: 5, crit_dmg: 150,
+    speed: 0.8, qi: 50, stones: 16, req_idx: 1, boss: true,
+    loot: [{ item: "Corrupted Beast Core", rarity: "Epic", chance: 1, min: 1, max: 1 }] };
+  const ratMob = { id: "spectral_rat", name: "Spectral Rat", realm: "Mortal",
+    difficulty: "Very Easy", desc: "d", glyph: "🐀", hp: 40, atk: 6, def: 0, crit: 5, crit_dmg: 150,
+    speed: 1.4, qi: 3, stones: 1, req_idx: 0, boss: false, loot: [] };
+  lib.battle.area = { id: "origin_village", name: "Origin Village", req_idx: 0, req: "Mortal",
+    difficulty: "Beginner", desc: "", mobs: [ratMob, bossMob] };
+  state.player = basePlayer();          // realm 0: the boss is out of reach
+  lib.showBattleEnemiesCard("");
+  let cardHtml = els["battle-root"].innerHTML;
+  ok(/boss-tag/.test(cardHtml), "the boss card is flagged as a boss");
+  ok(/enemy-card boss locked/.test(cardHtml), "the boss is locked below Qi Refinement I");
+  ok(/Locked — needs Qi Refinement I/.test(cardHtml), "the lock names the realm required");
+  ok(/16x/.test(cardHtml), "the boss card previews its bigger stone drop");
+  state.player.realm_idx = 1;           // Qi Refinement I reached
+  lib.showBattleEnemiesCard("");
+  cardHtml = els["battle-root"].innerHTML;
+  ok(!/enemy-card boss locked/.test(cardHtml), "the boss unlocks once the realm is deep enough");
+  ok(/enemy-card boss"/.test(cardHtml) && !/locked-tag/.test(cardHtml),
+     "the boss card stays flagged once unlocked");
+
   // ============ 7. leaving the hunt persists HP, stops fight, clears log ============
   state.player = basePlayer();
   state.player.hp = MAXHP;
@@ -569,10 +597,12 @@ state.player = basePlayer();
   ok(/spirit_stones: p\.spirit_stones \| 0/.test(SRC), "sync payload carries spirit_stones");
   ok(/p\.spirit_stones = Math\.max\(0, Math\.floor\(\+p\.spirit_stones \|\| 0\)\)/.test(SRC),
      "normalizePlayer repairs the stone balance");
-  ok(/\+\$\{battle\.lastStones\} 💎/.test(SRC), "the respawn line shows the stone reward");
+  ok(/\+\$\{battle\.lastStones\} <img class="stone-glyph"/.test(SRC),
+     "the respawn line shows the stone reward");
   ok(/battle\.loot\["Spirit Stone"\]/.test(SRC), "kills log the guaranteed stone drop");
   ok(/loot-guaranteed/.test(SRC) && /guaranteed/.test(SRC),
      "enemy cards preview the drop as guaranteed");
+  ok(/stone-glyph/.test(SRC), "the spirit stone is drawn with its own art, not an emoji");
 
   // ============ 14. scrollbars hidden, scrolling kept ============
   const CSS = fs.readFileSync(path.join(__dirname, "..", "public", "css", "style.css"), "utf8").replace(/\r\n/g, "\n");
@@ -804,6 +834,9 @@ state.player = basePlayer();
   ok(!/line-art/.test(plainArt), "no line-art class when the server flagged nothing");
 
   ok(/\.tab-icon \{ width: 22px/.test(CSS), "tab icons are sized for the sidebar");
+  ok(/stone-icon/.test(HTML) && /spirit_stone\.png/.test(HTML),
+     "the top bar draws the spirit stone art");
+  ok(/\.stone-glyph \{ width: 14px/.test(CSS), "the stone glyph is sized for inline use");
   ok(/\.slot \.slot-icon \{ width: 42px/.test(CSS), "slot icons are sized for the doll");
   ok(/\.slot \.art-slot \{ width: 46px/.test(CSS), "equipped slot art fills the now-label-free slot");
   ok(/--line-art-opacity: \.3/.test(CSS) && /--line-art-gray: \.6/.test(CSS),
