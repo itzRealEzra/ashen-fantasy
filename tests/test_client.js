@@ -342,6 +342,7 @@ state.player = basePlayer();
   ok(lib.battle.lastQi === 3, "qi reward staged for combat feedback");
   ok(state.player.spirit_stones === 1, "kill granted the mob's stone reward");
   ok(lib.battle.lastStones === 1, "stone reward staged for combat feedback");
+  ok(lib.battle.loot["Spirit Stone"] === 1, "the stone drop is logged in the hunt loot panel");
 
   // stale respawn must not heal a fresh fight
   const stale = calls.timeouts[calls.timeouts.length - 1];
@@ -393,6 +394,8 @@ state.player = basePlayer();
   ok(els["p-stones"].textContent === "1234", "top bar updates as stones are earned");
   ok(lib.mobStones({ qi: 3 }) === 1, "stones fall back to qi/3 for older area payloads");
   ok(lib.mobStones({ qi: 50, stones: 16 }) === 16, "the server-published stones reward wins");
+  ok(lib.mobStones({ qi: 50, stones: 16 }) > lib.mobStones({ qi: 3, stones: 1 }),
+     "the higher the enemy the higher the stone drop");
   ok(lib.mobStones(null) === 0, "no mob means no stones");
 
   let sentBody = null;
@@ -567,6 +570,9 @@ state.player = basePlayer();
   ok(/p\.spirit_stones = Math\.max\(0, Math\.floor\(\+p\.spirit_stones \|\| 0\)\)/.test(SRC),
      "normalizePlayer repairs the stone balance");
   ok(/\+\$\{battle\.lastStones\} 💎/.test(SRC), "the respawn line shows the stone reward");
+  ok(/battle\.loot\["Spirit Stone"\]/.test(SRC), "kills log the guaranteed stone drop");
+  ok(/loot-guaranteed/.test(SRC) && /guaranteed/.test(SRC),
+     "enemy cards preview the drop as guaranteed");
 
   // ============ 14. scrollbars hidden, scrolling kept ============
   const CSS = fs.readFileSync(path.join(__dirname, "..", "public", "css", "style.css"), "utf8").replace(/\r\n/g, "\n");

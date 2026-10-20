@@ -326,6 +326,10 @@ try:
     mobs = [m for a in j["areas"] for m in a["mobs"]]
     ok(all(m.get("stones") == max(1, m["qi"] // 3) for m in mobs),
        "every mob publishes a stones reward derived from its qi")
+    village = next(a for a in j["areas"] if a["id"] == "origin_village")
+    den = next(a for a in j["areas"] if a["id"] == "corrupted_den")
+    ok(max(m["stones"] for m in den["mobs"]) > max(m["stones"] for m in village["mobs"]),
+       "the higher the enemy the higher the stone drop")
     fresh("stone_collector", spirit_stones=50)
     st, j = sync("stone_collector", spirit_stones=70)
     ok(st == 200 and j["player"]["spirit_stones"] == 70, "earned stones are accepted")

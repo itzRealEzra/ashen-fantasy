@@ -1,6 +1,6 @@
 /* Ashen Fantasy — vanilla JS state machine: username -> roots -> main */
 const $ = (id) => document.getElementById(id);
-const CLIENT_VERSION = "0.9.4"; // must match server.py server_version + footer
+const CLIENT_VERSION = "0.9.5"; // must match server.py server_version + footer
 const state = {
   username: localStorage.getItem("af_user") || "",
   rollId: null,
@@ -1435,7 +1435,12 @@ function showBattleEnemies(notice) {
         ${m.difficulty ? `<div class="difficulty-tag">${esc(m.difficulty)}</div>` : ""}
         <div class="desc">${esc(m.desc)}</div>
         <div class="enemy-glyph">${iconHtml(m.img, m.glyph, "art-enemy")}</div>
-        <div class="enemy-loot">Loot list${m.loot.map(l => {
+        <div class="enemy-loot">Loot list<div class="loot-row loot-guaranteed">
+            <span class="loot-name">💎 Spirit Stone</span>
+            <span class="loot-rar">guaranteed</span>
+            <span class="loot-qty">${mobStones(m)}x</span>
+            <span class="loot-pct">100%</span>
+          </div>${m.loot.map(l => {
           const c = ITEM_RARITY_COLORS[l.rarity] || "";
           const qty = l.min === l.max ? `${l.min}x` : `${l.min}-${l.max}x`;
           return `<div class="loot-row">
@@ -1605,13 +1610,17 @@ function onMobDeath() {
       if (iid) addInv(iid, n); // drops also land in the bag
     }
   }
-  saveLoot();
   accrue(p, m.qi);
+  // Guaranteed drop on every kill, logged like any other loot. The count
+  // scales with the enemy: the server publishes stones per mob from its qi,
+  // so stronger prey pays far better than rats.
   const stones = mobStones(m);
   if (stones > 0) {
     p.spirit_stones = (p.spirit_stones | 0) + stones;
     battle.lastStones = stones;
+    battle.loot["Spirit Stone"] = (battle.loot["Spirit Stone"] || 0) + stones;
   }
+  saveLoot();
   saveLocal(p);
   updateQi(p);
   battle.searching = true;

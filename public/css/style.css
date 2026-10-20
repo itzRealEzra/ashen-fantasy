@@ -143,6 +143,8 @@ input { background: #0e0e14; border: 1px solid var(--line); color: var(--ink); p
 .loot-row .loot-name { font-weight: 600; }
 .loot-row .loot-rar { font-size: 10px; color: var(--muted); }
 .loot-row .loot-qty, .loot-row .loot-pct { font-size: 11px; color: var(--gold2); white-space: nowrap; }
+.loot-row.loot-guaranteed .loot-name { color: var(--gold2); }
+.loot-row.loot-guaranteed .loot-rar { color: var(--gold); font-size: 10px; letter-spacing: 1px; }
 /* battle: combat (mockup 3) */
 .combat-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 8px; }
 .combat-head h2 { margin: 0; font-size: 18px; }

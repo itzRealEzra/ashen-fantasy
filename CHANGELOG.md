@@ -11,6 +11,16 @@ and push to `main` on https://github.com/itzRealEzra/ashen-fantasy.
 
 ## [Unreleased]
 
+## [0.9.5] - 2026-10-20
+### Added
+- Spirit Stone drops are now an explicit guaranteed drop: every kill logs
+  `Spirit Stone ×N` in the hunt loot panel (persisted with the session loot,
+  gold-tinted `.loot-guaranteed` row), and each enemy card previews its
+  guaranteed stones (`💎 Spirit Stone — guaranteed, ×N, 100%`) above the
+  regular loot list. The count keeps scaling with the enemy — the server
+  publishes stones per mob from its qi (`max(1, qi // 3)`), so a Spectral Rat
+  pays 1 while the Corrupted Alpha Wolf pays 16.
+
 ## [0.9.4] - 2026-10-20
 ### Added
 - Spirit Stones currency: every kill now grants stones derived from the mob's
