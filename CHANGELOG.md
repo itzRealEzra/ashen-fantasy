@@ -11,6 +11,20 @@ and push to `main` on https://github.com/itzRealEzra/ashen-fantasy.
 
 ## [Unreleased]
 
+## [0.9.13] - 2026-10-20
+### Changed
+- **One recipe per item.** Every craftable, pill and food now has a single
+  recipe, and the benches list 14 gear, 1 pill, 1 elixir and 4 foods -- no
+  item appears twice. The variant naming from v0.9.10 and the folded ways
+  from v0.9.12 are gone with it: there is nothing left to distinguish.
+- The recipes were rebuilt so that **every material in the game has a use**
+  (24 materials, 0 unused). The rare drops now feed the high gear: the
+  wereboar's corrupted core goes into the Cracked Qi Stone, the alpha's
+  pelt into the Chipped Jade Pendant, the alpha's core into the Qi Gathering
+  Ring, its fang into the Jade Guard Ring, and its blood into the Spirit
+  Dumpling. Tough boar hide, grey wolf pelt and weak beast core were folded
+  into the leather chest, the cape and the wolf stew.
+
 ## [0.9.12] - 2026-10-20
 ### Fixed
 - The benches listed one card per *recipe*, so the same item made three ways

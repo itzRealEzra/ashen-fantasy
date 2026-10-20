@@ -472,13 +472,11 @@ state.player = basePlayer();
   };
   const pillRecipe = {
     id: "grind_qi_pill", out: "minor_qi_pill", count: 1, note: "Bone and blood.", kind: "alchemy",
-    label: "Bone & Blood",
     cost: [{ id: "small_beast_bone", need: 1, name: "Small Beast Bone", rarity: "Uncommon", color: "#7cb342", img: "", glyph: "✦" }],
     out_name: "Minor Qi Pill", out_rarity: "Common", out_img: "", out_glyph: "🔹",
   };
   const pillRecipe2 = {
     id: "grind_alpha_fang", out: "minor_qi_pill", count: 1, note: "Fang and essence.", kind: "alchemy",
-    label: "Alpha Fang",
     cost: [{ id: "corrupted_fang", need: 1, name: "Corrupted Fang", rarity: "Legendary", color: "#ffb300", img: "", glyph: "✦" }],
     out_name: "Minor Qi Pill", out_rarity: "Common", out_img: "", out_glyph: "🔹",
   };
@@ -496,9 +494,7 @@ state.player = basePlayer();
      "the alchemy bench shows pills only");
   ok((alchHtml.match(/Minor Qi Pill/g) || []).length === 1,
      "one pill entry, however many ways there are to brew it");
-  ok(/craft-way/.test(alchHtml) && /Bone &amp; Blood/.test(alchHtml),
-     "the ways to brew it are folded into that one entry");
-  ok(!/craft-variant/.test(craftHtml), "a single-way recipe carries no way name");
+  ok(/craft-way/.test(alchHtml), "the ways to brew it are folded into that one entry");
   lib.renderWork("cook-root", "cook");
   const cookHtml = els["cook-root"].innerHTML;
   ok(/Roasted Wild Rat Meat/.test(cookHtml) && !/Leather Chest/.test(cookHtml),

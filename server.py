@@ -17,8 +17,8 @@ import mimetypes
 # Single source of truth for the build number. Must match CLIENT_VERSION in
 # public/js/app.js and the footer in public/index.html. A player whose saved
 # patch_version differs gets one patch-note mail when they next check mail.
-SERVER_VERSION = "0.9.12"
-CLIENT_VERSION = "0.9.12"  # for /status only; the client keeps its own copy
+SERVER_VERSION = "0.9.13"
+CLIENT_VERSION = "0.9.13"  # for /status only; the client keeps its own copy
 STARTED_AT = time.time()
 RESTARTED_AT = 0
 RESTART_SEQ = 0
@@ -491,12 +491,12 @@ def slot_accepts(item_slot, equip_slot):
 #   cook    -- food (the pot)
 # The trade is derived from the output item, so it can never drift from
 # what the recipe actually hands over.
+#
+# One recipe per item: every item is made one way, and every material in
+# the game has a use.
 # ----------------------------------------------------------------------------
-def _recipe(id, out, cost, count=1, note="", label=""):
-    # label: names the variant when one item can be made more than one way,
-    # so the bench never shows three cards that all read the same thing.
-    return {"id": id, "out": out, "count": count, "cost": cost, "note": note,
-            "label": label}
+def _recipe(id, out, cost, count=1, note=""):
+    return {"id": id, "out": out, "count": count, "cost": cost, "note": note}
 
 def _recipe_kind(out_id):
     """Which trade a recipe belongs to, decided by what it makes."""
@@ -513,35 +513,21 @@ RECIPES = [
             note="Skewer the tail, sear the meat. It feeds the body and warms the meridians."),
     _recipe("boar_roast", "boar_roast", {"boar_fat": 2, "bloodied_tusk": 1, "raw_meat": 2},
             note="Fat rendered slow over a bloodied tusk. It sits heavy and warm."),
-    _recipe("wolf_stew", "wolf_stew", {"wolf_fang": 2, "raw_meat": 2, "gray_wolf_essence": 1},
-            note="Marrow and a little wolf essence, simmered down. Sharp, and it warms you through."),
-    _recipe("spirit_dumpling", "spirit_dumpling", {"beast_core_fragment": 1, "raw_meat": 2, "beast_blood": 1},
-            note="Dough folded around a core fragment. It tastes of qi, not flour."),
+    _recipe("wolf_stew", "wolf_stew", {"wolf_fang": 2, "raw_meat": 2, "weak_beast_core": 1},
+            note="Marrow and a weak core, simmered down. Sharp, and it warms you through."),
+    _recipe("spirit_dumpling", "spirit_dumpling",
+            {"corrupted_alpha_blood": 1, "beast_core_fragment": 1, "raw_meat": 2},
+            note="Dough folded around a core fragment, dyed with the alpha's blood. It tastes of qi, not flour."),
 
     # ---- the mortar: pills and elixirs
     _recipe("grind_qi_pill", "minor_qi_pill", {"small_beast_bone": 1, "weak_beast_blood": 1},
-            note="Bone ground to powder, blood to bind it into a pellet.",
-            label="Bone & Blood"),
-    _recipe("distill_gray_pill", "minor_qi_pill", {"weak_beast_core": 1, "gray_wolf_essence": 1, "small_beast_bone": 1},
-            note="A weak core distilled with essence, rolled into a clean pill.",
-            label="Gray Core"),
-    _recipe("grind_alpha_fang", "minor_qi_pill", {"corrupted_fang": 1, "gray_wolf_essence": 2},
-            note="Fang dust and wolf essence, rolled into a pill that bites the dantian.",
-            label="Alpha Fang"),
+            note="Bone ground to powder, blood to bind it into a pellet."),
     _recipe("steep_elixir", "minor_vitality_elixir", {"beast_core_fragment": 1, "beast_blood": 1},
-            note="A core steeped in beast blood until it glows dull red.",
-            label="Core & Blood"),
-    _recipe("distill_wolf_elixir", "minor_vitality_elixir", {"weak_beast_core": 1, "beast_blood": 2, "gray_wolf_essence": 1},
-            note="Essence drawn off the marrow and kept in a vial. It burns going down.",
-            label="Wolf Essence"),
-    _recipe("brew_alpha_blood", "minor_vitality_elixir",
-            {"corrupted_alpha_blood": 1, "beast_core_fragment": 2, "beast_blood": 1},
-            note="The alpha's own blood, boiled slow. It closes wounds it should not close.",
-            label="Alpha Blood"),
+            note="A core steeped in beast blood until it glows dull red."),
 
     # ---- hide and bone gear
-    _recipe("cure_leather_chest", "leather_chest", {"boar_hide": 4, "boar_fat": 2},
-            note="Boar hide, cured with its own fat and sewn close."),
+    _recipe("cure_leather_chest", "leather_chest", {"tough_boar_hide": 2, "boar_hide": 2, "boar_fat": 2},
+            note="The tough hide over the soft, cured with its own fat and sewn close."),
     _recipe("cure_leather_helmet", "leather_helmet", {"boar_hide": 2, "boar_tusk": 1},
             note="Hide boiled soft, a tusk split for the brow."),
     _recipe("cure_leather_boots", "leather_boots", {"boar_hide": 2, "wolf_pelt": 1},
@@ -550,7 +536,7 @@ RECIPES = [
             note="Thin hide guards. A little defence, a little grip."),
     _recipe("pad_leather_leggings", "leather_leggings", {"wolf_pelt": 2, "boar_hide": 1},
             note="Reinforced at the knees, where the beast's claws land first."),
-    _recipe("sew_leather_cape", "leather_cape", {"wolf_pelt": 3, "rat_fur": 2},
+    _recipe("sew_leather_cape", "leather_cape", {"gray_wolf_pelt": 2, "wolf_pelt": 1, "rat_fur": 2},
             note="Travel-worn, ash-stained. It hides nothing, but it catches the wind."),
     _recipe("carve_wooden_sword", "wooden_sword", {"boar_tusk": 2, "boar_fat": 1},
             note="A tusk ground down to a practice blade. Every master kept one."),
@@ -560,21 +546,19 @@ RECIPES = [
             note="A knotted strip of dyed hide, worn at the brow."),
 
     # ---- spirit gear, from the parts that still hum
-    _recipe("split_qi_stone", "cracked_qi_stone", {"beast_core_fragment": 2, "beast_bone": 2},
+    _recipe("split_qi_stone", "cracked_qi_stone",
+            {"corrupted_beast_core": 1, "beast_core_fragment": 1, "beast_bone": 2},
             note="A stone split by a thin seam of living qi. It hums when you breathe."),
-    _recipe("chip_jade_pendant", "chipped_jade_pendant", {"gray_wolf_essence": 1, "beast_bone": 2},
-            note="Jade with a corner broken off. Still cool against the sternum."),
+    _recipe("chip_jade_pendant", "chipped_jade_pendant",
+            {"corrupted_alpha_wolf_pelt": 1, "gray_wolf_essence": 1, "beast_bone": 2},
+            note="Jade with a corner broken off, set in the alpha's own pelt. Still cool against the sternum."),
     _recipe("draw_copper_ring", "copper_spirit_ring", {"wolf_fang": 2, "broken_claw": 3},
             note="A plain copper band that sharpens the wearer's critical strikes."),
-    _recipe("weave_qi_ring", "qi_gathering_ring", {"beast_core_fragment": 1, "gray_wolf_essence": 1},
-            note="A spirit-threaded ring that helps draw ambient Qi into the dantian."),
+    _recipe("weave_qi_ring", "qi_gathering_ring",
+            {"corrupted_alpha_wolf_core": 1, "gray_wolf_essence": 2, "beast_core_fragment": 1},
+            note="The alpha's core spun into a ring that helps draw ambient Qi into the dantian."),
     _recipe("forge_jade_ring", "jade_guard_ring", {"corrupted_fang": 1, "wolf_fang": 2, "beast_blood": 1},
-            note="Dense green jade that steadies the body and turns aside blows.",
-            label="Corrupted Fang"),
-    _recipe("temper_alpha_ring", "jade_guard_ring",
-            {"corrupted_alpha_wolf_core": 1, "gray_wolf_essence": 2, "wolf_fang": 2},
-            note="The alpha's core tempered into the ring. Nothing breaks through it.",
-            label="Alpha Core"),
+            note="Dense green jade that steadies the body and turns aside blows."),
 ]
 RECIPE_BY_ID = {r["id"]: r for r in RECIPES}
 
@@ -1133,7 +1117,6 @@ class Handler(BaseHTTPRequestHandler):
                     "id": r["id"], "out": r["out"], "count": r["count"],
                     "note": r["note"], "cost": cost,
                     "kind": _recipe_kind(r["out"]),
-                    "label": r.get("label", ""),
                     "out_name": out_it.get("name", r["out"]),
                     "out_rarity": out_it.get("rarity", "Common"),
                     "out_img": out_it.get("img", ""),
@@ -1398,7 +1381,6 @@ class Handler(BaseHTTPRequestHandler):
             return self._send_json({
                 "ok": True, "crafted": out_id, "count": made,
                 "kind": _recipe_kind(out_id),
-                "label": recipe.get("label", ""),
                 "player": {k: v for k, v in stored.items() if k != "hp"},
             }, cache="no-store")
 

@@ -1,6 +1,6 @@
 /* Ashen Fantasy — vanilla JS state machine: username -> roots -> main */
 const $ = (id) => document.getElementById(id);
-const CLIENT_VERSION = "0.9.12"; // must match server.py server_version + footer
+const CLIENT_VERSION = "0.9.13"; // must match server.py server_version + footer
 const state = {
   username: localStorage.getItem("af_user") || "",
   rollId: null,
@@ -1379,8 +1379,7 @@ async function craftRecipe(recipeId, count) {
     p.inventory = j.player.inventory;
     const it = ITEM_BY_ID[j.crafted] || {};
     const trade = TRADES[j.kind] || TRADES.craft;
-    const made = j.label ? `${it.name || j.crafted} (${j.label})` : (it.name || j.crafted);
-    cEvent(`${trade.verb} ${made}${j.count > 1 ? ` ×${j.count}` : ""}.`);
+    cEvent(`${trade.verb} ${it.name || j.crafted}${j.count > 1 ? ` ×${j.count}` : ""}.`);
     saveLocal(p);
     // repaint the bench the player is standing at, with the new counts
     const kind = j.kind || "craft";
