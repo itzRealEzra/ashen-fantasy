@@ -18,7 +18,7 @@ import mimetypes
 # public/js/app.js and the footer in public/index.html. A player whose saved
 # patch_version differs gets one patch-note mail when they next check mail.
 SERVER_VERSION = "0.9.3"
-CLIENT_VERSION = "0.9.2"  # for /status only; the client keeps its own copy
+CLIENT_VERSION = "0.9.3"  # for /status only; the client keeps its own copy
 STARTED_AT = time.time()
 RESTARTED_AT = 0
 RESTART_SEQ = 0

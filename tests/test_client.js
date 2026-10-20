@@ -81,7 +81,12 @@ const parts = [
   grab(/async function syncPlayer\(initial\) \{[\s\S]*?\n\}/, "syncPlayer"),
   grab(/function derivedStats\(p\) \{[\s\S]*?\n\}/, "derivedStats"),
   grab(/const PAIRED_SLOTS = \[[^\]]*\];/, "PAIRED_SLOTS"),
+  grab(/const GEAR_STAT_KEYS = \[[^\]]*\];/, "GEAR_STAT_KEYS"),
+  grab(/const PERCENT_STAT_KEYS = new Set\(\[[^\]]*\]\);/, "PERCENT_STAT_KEYS"),
+  grab(/const STAT_DISPLAY_NAMES = \{[\s\S]*?\n\};/, "STAT_DISPLAY_NAMES"),
   grab(/function gearBonus\(p\) \{[\s\S]*?\n\}/, "gearBonus"),
+  grab(/function formatStatValue\(key, value, withSign[^)]*\) \{[\s\S]*?\n\}/, "formatStatValue"),
+  grab(/function formatStatEntry\(key, value\) \{[\s\S]*?\n\}/, "formatStatEntry"),
   grab(/function playerMaxHp\(p\) \{ return derivedStats\(p\)\.hp; \}/, "playerMaxHp"),
   grab(/function equipTargets\(it\) \{[^}]*\}/, "equipTargets"),
   grab(/function bagGearAction\(itemId\) \{[\s\S]*?\n\}/, "bagGearAction"),
@@ -146,7 +151,8 @@ const lib = new Function("__", prelude + parts + `
   return {
     battle, calls,
     setRealms: t => { REALM_TABLE = t; },
-    ITEM_BY_ID,
+    ITEM_BY_ID, PAIRED_SLOTS, GEAR_STAT_KEYS, STAT_DISPLAY_NAMES, PERCENT_STAT_KEYS,
+    formatStatEntry, formatStatValue, gearBonus,
     syncPlayer, fetchServerPlayer, normalizePlayer, breakthroughReady, updateQi,
     advanceRealm, accrue, equipItem, unequipSlot, bagGearAction, useConsumable,
     loadElixirSlot, unloadElixir, elixirPreferredSlot, leaveActiveHunt,
@@ -482,7 +488,7 @@ state.player = basePlayer();
   const conTip = lib.itemTipHtml("minor_qi_pill", {});
   ok(/Cultivation Consumable/.test(conTip) && /tip-actions/.test(conTip), "consumable tooltip keeps its type + actions");
   const gearTip = lib.itemTipHtml("linen_robe", {});
-  ok(/Body Armor/.test(gearTip) && /def\+4/.test(gearTip), "gear tooltip shows slot type + stats");
+  ok(/Body Armor/.test(gearTip) && /DEF \+4/.test(gearTip), "gear tooltip shows slot type + stats");
   ok(/tip-src/.test(gearTip) === false, "gear with no drop source shows no source block");
   ok(lib.dropsFor("Rat Fur").length === 2 && lib.dropsFor("Nonexistent Thing").length === 0,
     "dropsFor finds all sources, and none for an unknown item");
@@ -652,7 +658,7 @@ state.player = basePlayer();
         spirit_meal_icon: "/assets/icons/spirit_meal_icon.png",
       },
       ELIXIR_ICON: "elixir_icon",
-      SLOT_TYPE_LABELS: { core: "Cultivation Artifact", headpiece: "Artifact", ring: "Accessory" },
+      SLOT_TYPE_LABELS: { main_weapon: "Main Weapon", sec_weapon: "Secondary Weapon", head: "Helmet / Circlet", chest: "Body Armor", core: "Cultivation Artifact", arm: "Arm Armor", back: "Cloak / Cape", boots: "Foot Armor", legs: "Leg Armor", ring: "Accessory", necklace: "Accessory", headpiece: "Artifact" },
       SLOT_ICONS: {},
       ELIXIR_SHAPES: [
         { id: "elixir_slot", shape: "heal", icon: "elixir_icon", fallback: "Elixir I", type: "Recovery Consumable" },
@@ -682,7 +688,7 @@ state.player = basePlayer();
     // neutral "Elixir I" fallback no longer occurs in the live game. Nothing to
     // delete: the fixture matches the shipped item set.
     vm.createContext(sb);
-    for (const fn of ["esc", "pillShape", "elixirSlots", "iconHtml", "artCls", "slotIconHtml", "bagTabOf", "renderInventory"]) {
+    for (const fn of ["esc", "pillShape", "elixirSlots", "iconHtml", "artCls", "slotIconHtml", "bagTabOf", "renderInventory", "formatStatValue"]) {
       const src = grabFnSrc(fn);
       if (src) vm.runInContext(src, sb);
     }

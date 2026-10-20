@@ -460,7 +460,7 @@ try:
         "leather_leggings", "leather_bracers", "leather_boots", "leather_cape",
         # the slots the first set left empty
         "cracked_qi_stone", "chipped_jade_pendant", "copper_spirit_ring",
-        "cloth_headband", "jade_guard_ring",
+        "jade_guard_ring", "qi_gathering_ring", "cloth_headband",
         # supplies: one per elixir slot
         "minor_vitality_elixir", "minor_qi_pill", "roasted_wild_rat_meat",
     }

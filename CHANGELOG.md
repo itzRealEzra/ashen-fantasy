@@ -11,6 +11,29 @@ and push to `main` on https://github.com/itzRealEzra/ashen-fantasy.
 
 ## [Unreleased]
 
+## [0.9.3] - 2026-10-18
+### Added
+- Complete enemy refresh: all 6 original enemies replaced with new variants
+  (Wild Rat → Spectral Rat, Giant Field Rat → Crimson Eyed Rat, Forest Wolf →
+  Mystical Wolf, Gray Wolf → Silver Wind Wolf, Wild Boar → Tusked War Boar,
+  Rabid Boar → Frostmane Wereboar). Old sprites removed; new sprites in
+  assets/enemies/ with matching IDs.
+- New boss area "Corrupted Den" (requires Qi Refinement I) featuring the
+  Corrupted Alpha Wolf boss with unique loot table (Corrupted Beast Core,
+  Corrupted Alpha Fang, Alpha Wolf Pelt, Corrupted Alpha Blood, etc.).
+- Equipment doll background: equipment_doll.png from assets/icons/ now renders
+  as a subtle background in the equipment panel (.inv-doll::before, opacity
+  0.08, centered).
+- New enemy sprites in assets/enemies/ automatically served via _asset_cache().
+- 387 tests passing (142 API + 220 client + 37 admin).
+
+### Changed
+- All 6 original enemy sprites replaced; old files removed from assets/enemies/.
+- Version consistency: CLIENT_VERSION now matches SERVER_VERSION (0.9.3).
+
+### Fixed
+- Version consistency: CLIENT_VERSION now matches SERVER_VERSION (0.9.3).
+
 ## [0.9.2] - 2026-10-18
 ### Changed
 - The three consumable slots are now identified by what they hold rather than

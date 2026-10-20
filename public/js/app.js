@@ -719,6 +719,11 @@ const ITEM_RARITY_COLORS = { Common: "#9aa0a6", Uncommon: "#7cb342", Rare: "#42a
   Epic: "#ab47bc", Legendary: "#ffb300", Mythic: "#ff3d00" };
 // Default item rarity when the server sends none.
 const ITEM_DEFAULT_RARITY = "Common";
+// Slots worn in pairs. Two rings are the same slot worn twice, not two
+// different slots, so they take the best value per stat rather than adding up:
+// a second ring must never dilute the first.
+const PAIRED_SLOTS = ["ring1", "ring2"];
+
 // Single source of truth for what an item/slot *is*. An item's type comes from
 // its slot, so a sword reads "Main Weapon" and never "armor".
 const SLOT_TYPE_LABELS = {
@@ -833,9 +838,11 @@ function artCls(it, base) {
 function bagGearAction(itemId) {
   const p = state.player, it = ITEM_BY_ID[itemId];
   if (!it || it.kind !== "gear" || !((p.inventory[itemId] || 0) > 0)) return null;
-  // A bag stack represents unequipped copies. The bag action always equips
-  // that copy; explicit unequip is available from the occupied slot tooltip.
-  return { act: "equip", slot: null };
+  const targets = equipTargets(it);
+  const free = targets.find(s => !p.equipment[s]);
+  if (free) return { act: "equip", slot: free };
+  // All targets occupied: unequip the first one.
+  return { act: "unequip", slot: targets[0] };
 }
 
 // Which beasts drop an item, the best chance any of them offers, and the
@@ -1350,15 +1357,30 @@ function slotIconHtml(slot) {
   return iconImg(SLOT_ICONS[slot] || "", "slot-icon");
 }
 
+// Slots worn in pairs. Two rings are the same slot worn twice, not two
+// different slots, so they take the best value per stat rather than adding up:
+// a second ring must never dilute the first.
+const PAIRED_SLOTS = ["ring1", "ring2"];
+
 // Add every equipped item's contribution. Both Spirit Ring slots are equal:
 // two offensive, two defensive, two Qi-focused, and hybrid builds all work.
 function gearBonus(p) {
   const b = Object.fromEntries(GEAR_STAT_KEYS.map(k => [k, 0]));
   if (!p.equipment) return b;
+  const paired = PAIRED_SLOTS.map(() => []);
   for (const slot of EQUIP_SLOT_LIST) {
     const it = ITEM_BY_ID[p.equipment[slot]];
     if (!it || it.kind !== "gear" || !it.stats) continue;
+    const pi = PAIRED_SLOTS.indexOf(slot);
+    if (pi >= 0) { paired[pi].push(it.stats); continue; }
     for (const k of GEAR_STAT_KEYS) b[k] += Number(it.stats[k]) || 0;
+  }
+  // One max across the pair, not a max per ring.
+  const worn = paired.flat();
+  if (worn.length) {
+    for (const k of GEAR_STAT_KEYS) {
+      b[k] += Math.max(...worn.map(s => s[k] || 0));
+    }
   }
   return b;
 }
