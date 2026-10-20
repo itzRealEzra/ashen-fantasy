@@ -1357,11 +1357,6 @@ function slotIconHtml(slot) {
   return iconImg(SLOT_ICONS[slot] || "", "slot-icon");
 }
 
-// Slots worn in pairs. Two rings are the same slot worn twice, not two
-// different slots, so they take the best value per stat rather than adding up:
-// a second ring must never dilute the first.
-const PAIRED_SLOTS = ["ring1", "ring2"];
-
 // Add every equipped item's contribution. Both Spirit Ring slots are equal:
 // two offensive, two defensive, two Qi-focused, and hybrid builds all work.
 function gearBonus(p) {
