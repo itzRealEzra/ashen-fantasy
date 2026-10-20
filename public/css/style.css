@@ -173,7 +173,8 @@ input { background: #0e0e14; border: 1px solid var(--line); color: var(--ink); p
 #tab-inventory.active { display: flex; flex-direction: column; height: 100%; }
 #inventory-root { flex: 1; min-height: 0; display: flex; }
 .inv-layout { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; flex: 1; width: 100%; min-height: 0; }
-.inv-doll { border: 1px solid var(--line); background: var(--panel); padding: 12px; overflow-y: auto; }
+.inv-doll { border: 1px solid var(--line); background: var(--panel); padding: 12px; overflow-y: auto; position: relative; }
+.inv-doll::before { content: ""; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 80%; height: 80%; background: url("/assets/icons/equipment_doll.png") center / contain no-repeat; opacity: 0.08; pointer-events: none; z-index: 0; }
 .inv-doll h2, .inv-bag h2 { margin: 0 0 8px; font-size: 18px; }
 .doll-row { display: flex; justify-content: space-evenly; gap: 8px; margin-bottom: 8px; }
 .slot { width: 72px; height: 72px; border: 1px solid var(--line); border-radius: 6px; background: #0e0e15; display: flex; flex-direction: column; align-items: center; justify-content: center; cursor: pointer; position: relative; }
