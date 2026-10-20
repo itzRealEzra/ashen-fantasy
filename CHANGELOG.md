@@ -11,6 +11,37 @@ and push to `main` on https://github.com/itzRealEzra/ashen-fantasy.
 
 ## [Unreleased]
 
+## [0.9.19] - 2026-10-20
+### Added
+- **Techniques (skills).** A new `Skills` tab: what you carry on the left,
+  every technique you could carry on the right, and clicking to wear or set
+  one down. Three may be carried; the server keeps the list and refuses
+  unknown or duplicated techniques. Six techniques for now, all wearing the
+  holder art: Iron Fist, Stone Ward, Cloud Step, Thunder Palm, Sword Rain and
+  Deep Breath.
+- **Techniques fire on their own.** When a technique's cooldown is up, there
+  is energy for it and the moment is right, it goes: buffs raise your attack
+  or defense or evasion for a few breaths, strikes land (or miss, if your
+  Spirit is not enough to find the mark), and Deep Breath refills the pool.
+- **The carried techniques show in the fight**, above the loot log, with a
+  countdown and a sweep while they cool down.
+- **Six new stats**, all of them doing something:
+  - **Agility** -- a percent faster swings
+  - **Luck** -- a percent more likely to find an extra drop
+  - **Spirit** -- accuracy: how surely a technique finds its mark
+  - **Evasion** -- a percent of the enemy's blows that never land
+  - **Energy** -- the pool the techniques draw from
+  - **Cooldown Reduction** -- a percent off every technique's wait
+  They come from gear (the boots, the cape, the qi stone, the pendant, the
+  rings) and are listed on the Character panel.
+- **The bag can be ordered** by rarity, by quantity or by name.
+
+### Fixed
+- **The Character panel now follows the masteries.** The levels and the XP
+  bars move the moment you earn them, instead of waiting for a reload.
+- **There is no resting regen any more.** Wounds are closed by medicine, not
+  by standing still: the idle heal of 2% a second is gone.
+
 ## [0.9.18] - 2026-10-20
 ### Fixed
 - **`synergy_bonus` was a dead stat.** It was stored with every player and

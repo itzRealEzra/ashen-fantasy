@@ -1,6 +1,6 @@
 /* Ashen Fantasy — vanilla JS state machine: username -> roots -> main */
 const $ = (id) => document.getElementById(id);
-const CLIENT_VERSION = "0.9.18"; // must match server.py server_version + footer
+const CLIENT_VERSION = "0.9.19"; // must match server.py server_version + footer
 const state = {
   username: localStorage.getItem("af_user") || "",
   rollId: null,
@@ -304,6 +304,9 @@ function normalizePlayer(p) {
   p.spirit_stones = Math.max(0, Math.floor(+p.spirit_stones || 0));
   if (!p.mastery || typeof p.mastery !== "object") p.mastery = {};
   for (const t of MASTERY_TRACKS) p.mastery[t] = Math.max(0, p.mastery[t] | 0);
+  if (!Array.isArray(p.skills)) p.skills = [];
+  p.skills = p.skills.filter(id => typeof id === "string").slice(0, 3);
+  while (p.skills.length < 3) p.skills.push(null);
   p.seclusion = false; // seclusion retired in v0.4.1 (pure idle)
   if (!p.equipment || typeof p.equipment !== "object") p.equipment = {};
   for (const s of EQUIP_SLOT_LIST) if (!(s in p.equipment)) p.equipment[s] = null;
@@ -408,6 +411,7 @@ async function enterMain(p) {
   REALM_TABLE = await fetchRealms();
   await fetchItems();
   await fetchIcons();
+  await fetchSkills();
   normalizePlayer(p);
   const frac = p.cultivation / stageOf(p).cost;
   stageFlags = { half: frac >= 0.5, full: frac >= 1 };
@@ -449,6 +453,12 @@ function renderChar(p) {
     `<div><span>Crit chance</span><b>${d.crit}%</b></div>` +
     `<div><span>Crit dmg</span><b>${d.critDmg}%</b></div>` +
     `<div><span>Qi Rate Bonus</span><b>${d.qi_rate_pct}%</b></div>` +
+    `<div><span>Agility</span><b>${d.agility}%</b></div>` +
+    `<div><span>Luck</span><b>${d.luck}%</b></div>` +
+    `<div><span>Spirit</span><b>${d.spirit}</b></div>` +
+    `<div><span>Evasion</span><b>${d.evasion}%</b></div>` +
+    `<div><span>Energy</span><b>${d.energy}</b></div>` +
+    `<div><span>Cooldown Reduction</span><b>${d.cdr}%</b></div>` +
     `</div>` +
     `<p class="muted">💠 Dao Insight ×${p.dao_insight} · ${esc(st.flavor)}</p>` +
     (p.stats.synergy_bonus
@@ -489,13 +499,22 @@ function derivedStats(p) {
   const b = 1 + 0.01 * Math.max(0, masteryLevel(masteryXp("battle", p)) - 1);
   // Synergy: two roots of one element make the whole body worth more.
   const syn = 1 + (s.synergy_bonus || 0);
+  // A technique that is up right now counts too.
+  const buff = { atk: 0, def: 0, evasion: 0 };
+  for (const x of activeBuffs()) buff[x.stat] = (buff[x.stat] || 0) + x.amount;
   return {
     hp: Math.round((100 + s.physique * 25) * (1 + r * 0.1) * b * syn) + g.hp,
-    atk: Math.round((10 + (s.physique * 2 + s.comprehension * 1.5) * (1 + r * 0.08)) * b * syn) + g.atk,
-    def: Math.round((5 + s.physique * 1.2 + r * 2) * b * syn) + g.def,
+    atk: Math.round((10 + (s.physique * 2 + s.comprehension * 1.5) * (1 + r * 0.08)) * b * syn) + g.atk + buff.atk,
+    def: Math.round((5 + s.physique * 1.2 + r * 2) * b * syn) + g.def + buff.def,
     crit: Math.min(60, Math.round(5 + s.comprehension * 1.2 + s.fortune * 0.5 + g.crit)),
     critDmg: Math.round(150 + s.fortune * 4 + s.comprehension * 1.5) + g.critDmg,
     qi_rate_pct: g.qi_rate_pct,
+    agility: (s.agility || 0) + g.agility,
+    luck: (s.luck || 0) + g.luck,
+    spirit: (s.spirit || 0) + g.spirit,
+    evasion: (s.evasion || 0) + g.evasion + buff.evasion,
+    energy: 100 + (s.energy || 0) + g.energy,
+    cdr: Math.min(75, (s.cdr || 0) + g.cdr),
   };
 }
 
@@ -551,15 +570,7 @@ function startTick() {
     const rate = cultRate(p);
     const gain = dt <= 300 ? rate * dt : rate * 300 + rate * (dt - 300) * OFFLINE_EFF;
     accrue(p, gain);
-    // slow wound recovery whenever no fight is running (even if the
-    // battle view is stale — timer is the single source of "in combat")
-    if (!battle.timer && REALM_TABLE.length) {
-      const max = playerMaxHp(p);
-      // invalid hp (legacy save / null clobber) = full, like clampHp —
-      // never start wound recovery from zero
-      if (!(p.hp > 0)) p.hp = max;
-      else if (p.hp < max) p.hp = Math.min(max, p.hp + max * 0.02 * dt);
-    }
+    // No resting regen: wounds are closed by medicine, not by standing still.
     saveLocal(p);
   }, 1000);
   syncTimer = setInterval(() => syncPlayer(false), 30000);
@@ -597,6 +608,7 @@ async function syncPlayer(initial) {
         equipment: p.equipment, inventory: p.inventory, elixirs: p.elixirs,
         spirit_stones: p.spirit_stones | 0,
         mastery_battle: masteryXp("battle"),
+        skills: p.skills || [],
       }),
     });
     const j = await r.json();
@@ -752,6 +764,7 @@ document.querySelectorAll(".side-btn").forEach(b => b.onclick = () => {
   if (b.dataset.tab === "craft") renderWork("craft-root", "craft");
   if (b.dataset.tab === "alchemy") renderWork("alchemy-root", "alchemy");
   if (b.dataset.tab === "cook") renderWork("cook-root", "cook");
+  if (b.dataset.tab === "skills") renderSkills();
   if (b.dataset.tab === "mail") loadMail();
   pollServerState(); // a fresh panel should never show stale admin state
   document.querySelectorAll(".side-btn").forEach(x => x.classList.remove("active"));
@@ -779,6 +792,30 @@ document.querySelector(".content").addEventListener("click", closeSidebar);
 
 // ---------- inventory + equipment (v0.7.0) ----------
 let invTab = "all";
+let invSort = "rarity";
+
+// How the bag can be ordered.
+const BAG_SORTS = [["rarity", "Rarity"], ["quantity", "Quantity"], ["name", "Name"]];
+
+// Order the bag: the rarest first, or the biggest stack first, or by name.
+function sortBag(entries, p) {
+  const rank = id => {
+    const r = (ITEM_BY_ID[id] || {}).rarity;
+    const i = ITEM_RARITY_ORDER.indexOf(r);
+    return i < 0 ? 0 : i;
+  };
+  if (invSort === "quantity") {
+    entries.sort((a, b) => (p.inventory[b] || 0) - (p.inventory[a] || 0) || a.localeCompare(b));
+  } else if (invSort === "name") {
+    entries.sort((a, b) => {
+      const na = (ITEM_BY_ID[a] || {}).name || a, nb = (ITEM_BY_ID[b] || {}).name || b;
+      return na.localeCompare(nb);
+    });
+  } else {
+    entries.sort((a, b) => rank(b) - rank(a) || a.localeCompare(b));
+  }
+  return entries;
+}
 let tipItem = null, tipHideTimer = null;
 // Item rarity ladder (Common -> Mythic), mirroring ITEM_RARITY_COLORS in
 // server.py. Roots keep their own Mortal -> Primordial ladder; this one is
@@ -934,12 +971,17 @@ function dropsFor(itemName) {
 
 // Equipment uses additive bonuses across every slot. Percentage stats are
 // shown with % because crit is in percentage points and Qi Rate is a bonus.
-const GEAR_STAT_KEYS = ["atk", "def", "hp", "crit", "critDmg", "qi_rate_pct"];
+const GEAR_STAT_KEYS = ["atk", "def", "hp", "crit", "critDmg", "qi_rate_pct",
+  "agility", "luck", "spirit", "evasion", "energy", "cdr"];
 const STAT_DISPLAY_NAMES = {
   atk: "ATK", def: "DEF", hp: "HP", crit: "Crit Chance",
   critDmg: "Crit Damage", qi_rate_pct: "Qi Rate",
+  agility: "Agility", luck: "Luck", spirit: "Spirit", evasion: "Evasion",
+  energy: "Energy", cdr: "Cooldown Reduction",
 };
-const PERCENT_STAT_KEYS = new Set(["crit", "critDmg", "qi_rate_pct"]);
+const PERCENT_STAT_KEYS = new Set(["crit", "critDmg", "qi_rate_pct", "cdr", "agility", "luck", "evasion"]);
+// The rarity ladder, in order, so the bag can sort by it.
+const ITEM_RARITY_ORDER = ["Common", "Uncommon", "Rare", "Epic", "Legendary", "Mythic"];
 
 function formatStatValue(key, value, withSign = false) {
   const n = Number(value) || 0;
@@ -1109,6 +1151,8 @@ function renderInventory() {
   }).join("") + `</div>`;
   const tabs = BAG_TABS
     .map(([v, l]) => `<button class="inv-tab${invTab === v ? " active" : ""}" data-tab="${v}">${l}</button>`).join("");
+  const sorts = BAG_SORTS
+    .map(([v, l]) => `<button class="inv-sort${invSort === v ? " active" : ""}" data-sort="${v}">${l}</button>`).join("");
   // Hidden in bag while equipped: any consumable loaded into an elixir
   // slot, and worn gear with no free slot left (a spare ring still shows
   // while a finger is free so it can be worn too).
@@ -1125,7 +1169,8 @@ function renderInventory() {
     const it = ITEM_BY_ID[id];
     return it && (p.inventory[id] > 0) && !hidden.has(id)
       && (invTab === "all" || bagTabOf(it) === invTab);
-  }).sort();
+  });
+  sortBag(entries, p);
   const grid = entries.map(id => {
     const it = ITEM_BY_ID[id];
     const rc = ITEM_RARITY_COLORS[it.rarity] || ITEM_RARITY_COLORS[ITEM_DEFAULT_RARITY];
@@ -1139,7 +1184,7 @@ function renderInventory() {
     ? `<div class="inv-grid">${grid}</div>`
     : `<div class="inv-empty-msg">Currently no Item Stored</div>`;
   root.innerHTML = `<div class="inv-layout"><div class="inv-doll"><h2>Equipment</h2>${doll}${elix}</div>` +
-    `<div class="inv-bag"><h2>Bag</h2><div class="inv-tabs">${tabs}</div>` +
+    `<div class="inv-bag"><h2>Bag</h2><div class="inv-tabs">${tabs}<span class="inv-sort-label">Sort</span>${sorts}</div>` +
     `${bag}</div></div>`;
   root.querySelectorAll(".slot[data-slot]").forEach(el => {
     // Clicking an equipped slot deliberately does nothing. It used to
@@ -1162,6 +1207,7 @@ function renderInventory() {
     el.onmouseleave = scheduleHideTip;
   });
   root.querySelectorAll(".inv-tab").forEach(el => el.onclick = () => { invTab = el.dataset.tab; renderInventory(); });
+  root.querySelectorAll(".inv-sort").forEach(el => el.onclick = () => { invSort = el.dataset.sort; renderInventory(); });
   root.querySelectorAll(".inv-slot").forEach(el => el.onclick = () => {
     const it = ITEM_BY_ID[el.dataset.item];
     // No equip-on-click in the bag: gear actions live on the tooltip
@@ -1182,6 +1228,8 @@ function equipTargets(it) {
 const STAT_NOTICE_LABELS = {
   hp: "HP", atk: "ATK", def: "DEF", crit: "Crit Chance",
   critDmg: "Crit Damage", qi_rate_pct: "Qi Rate Bonus",
+  agility: "Agility", luck: "Luck", spirit: "Spirit", evasion: "Evasion",
+  energy: "Energy", cdr: "Cooldown Reduction",
 };
 const STAT_NOTICE_KEYS = GEAR_STAT_KEYS;
 
@@ -1306,11 +1354,100 @@ function unloadElixir(itemId) {
   syncPlayer(false);
 }
 
+// ---------- techniques (skills) ----------
+// The server owns the technique table; the player chooses which ones to
+// carry. They fire on their own once their cooldown is up and there is
+// energy for them, so the fight plays itself.
+let SKILLS = {};
+let SKILL_SLOTS = 3;
+
+async function fetchSkills() {
+  try {
+    const r = await fetch("/api/skills", { cache: "max-age=3600" });
+    const j = await r.json();
+    if (j.skills) {
+      SKILLS = {};
+      for (const s of j.skills) SKILLS[s.id] = s;
+    }
+    if (j.slots) SKILL_SLOTS = j.slots;
+  } catch {}
+  return SKILLS;
+}
+
+// The techniques the player carries, in order.
+function equippedSkills(p) {
+  const ids = (p && p.skills) || [];
+  return ids.filter(Boolean).map(id => SKILLS[id]).filter(Boolean);
+}
+
+// The buffs that are up right now.
+function activeBuffs() {
+  const now = battle.clock;
+  return (battle.buffs || []).filter(b => b.until > now);
+}
+
+// A technique's real wait, after the cooldown reduction.
+function skillCooldown(s, d) {
+  const cdr = d ? Math.max(0, Math.min(75, d.cdr || 0)) : 0;
+  return Math.max(1, s.cd * (1 - cdr / 100));
+}
+
+// Techniques fire on their own: cooldown up, energy there, and the moment
+// right. The player chose what to carry, not when to swing it.
+function useSkills(p, m) {
+  const d = derivedStats(p);
+  for (const s of equippedSkills(p)) {
+    if ((battle.cooldowns[s.id] || 0) > 0) continue;
+    if (s.kind === "energy") {
+      if (battle.energy >= d.energy - 1) continue;   // no point when full
+    } else if (battle.energy < (s.energy || 0)) continue;
+    if (s.kind === "buff") {
+      const wanted = Object.keys(s.buff || {});
+      if (activeBuffs().some(b => wanted.indexOf(b.stat) >= 0)) continue;
+    }
+    fireSkill(p, m, s, d);
+  }
+}
+
+// One technique, used.
+function fireSkill(p, m, s, d) {
+  if (s.kind === "buff") {
+    for (const stat of Object.keys(s.buff || {}))
+      battle.buffs.push({ stat, amount: s.buff[stat], until: battle.clock + (s.duration || 5) });
+    cEvent(`${s.name} takes hold.`);
+  } else if (s.kind === "strike") {
+    // Spirit is accuracy: it decides whether the technique finds its mark.
+    const hit = Math.random() * 100 < Math.min(100, 85 + (d.spirit || 0));
+    if (hit) {
+      const hits = s.hits || 1;
+      let total = 0;
+      for (let i = 0; i < hits; i++) {
+        total += Math.max(1, Math.round(d.atk * (s.mult || 1) * (1 + (d.spirit || 0) / 100)
+          * (0.9 + Math.random() * 0.2) - (m.def || 0) * 0.5));
+      }
+      battle.ehp -= total;
+      battle.lastSkill = s.name;
+      flash("side-enemy");
+      cEvent(`${s.name} strikes for ${total}.`);
+    } else {
+      battle.lastSkill = `${s.name} misses`;
+      cEvent(`${s.name} finds only air.`);
+    }
+  } else if (s.kind === "energy") {
+    battle.energy = Math.min(d.energy, battle.energy + (s.energy_gain || 0));
+    battle.lastSkill = s.name;
+    cEvent(`${s.name} fills the dantian.`);
+  }
+  battle.cooldowns[s.id] = skillCooldown(s, d);
+  battle.energy = Math.max(0, battle.energy - (s.energy || 0));
+}
+
 // ---------- battle engine (v0.6.0): areas -> enemies -> auto combat ----------
 const battle = {
   areas: [], view: "areas", area: null, mob: null,
   php: 1, ehp: 1, pbar: 0, ebar: 0, timer: null,
   searching: false, kills: 0, loot: {}, lastQi: 0, lastStones: 0,
+  energy: 100, cooldowns: {}, buffs: [], clock: 0, lastSkill: "",
 };
 
 function lootKey() { return "af_loot_" + (state.username || "guest"); }
@@ -1395,6 +1532,8 @@ function applyMasteryXp(track, xp) {
   p.mastery[track] = Math.max(0, xp | 0);
   const after = masteryLevel(p.mastery[track]);
   if (after > before) masteryPopup(track, before, after);
+  // The character panel shows the masteries: it must not wait for a reload.
+  renderChar(p);
   return after;
 }
 
@@ -1414,6 +1553,57 @@ function masteryPopup(track, fromLevel, toLevel) {
     el.classList.add("toast-out");
     setTimeout(() => { if (el.remove) el.remove(); }, 400);
   }, 3600);
+}
+
+// The techniques panel: what you carry on the left, everything you could
+// carry on the right.
+function renderSkills() {
+  const root = $("skills-root");
+  const p = state.player;
+  if (!root || !p) return;
+  if (!Object.keys(SKILLS).length) {
+    root.innerHTML = `<p class="muted">Consulting the manual…</p>`;
+    fetchSkills().then(() => renderSkills());
+    return;
+  }
+  const carried = (p.skills || []).filter(Boolean);
+  const card = s => `<div class="skill-art-wrap"><img class="skill-art" src="${esc(s.img || "/assets/items/place_holder.jpg")}" alt="" /></div>` +
+    `<div class="skill-text"><b>${esc(s.name)}</b><small class="muted">${s.cd}s cooldown${s.energy ? ` · ${s.energy} energy` : ""}</small><p class="muted">${esc(s.desc)}</p></div>`;
+  const slots = Array.from({ length: SKILL_SLOTS }, (_, i) => {
+    const s = SKILLS[(p.skills || [])[i]];
+    return `<div class="skill-card${s ? " on" : " empty"}" data-slot="${i}">` +
+      (s ? card(s) : `<div class="skill-empty">Empty slot</div>`) + `</div>`;
+  }).join("");
+  const all = Object.values(SKILLS).map(s =>
+    `<div class="skill-card${carried.indexOf(s.id) >= 0 ? " on" : ""}" data-skill="${s.id}">${card(s)}</div>`).join("");
+  root.innerHTML =
+    `<h2>Techniques</h2>` +
+    `<p class="muted">They fire on their own once their cooldown is up and there is energy for them. Carry ${SKILL_SLOTS}.</p>` +
+    `<div class="skill-layout">
+      <div class="skill-side"><h3>Carried</h3><div class="skill-slots">${slots}</div></div>
+      <div class="skill-side"><h3>All techniques</h3><div class="skill-cards">${all}</div></div>
+    </div>`;
+  root.querySelectorAll("[data-skill]").forEach(el => el.onclick = () => toggleSkill(el.dataset.skill));
+}
+
+// Carry a technique, or set it down.
+function toggleSkill(skillId) {
+  const p = state.player;
+  if (!p || !SKILLS[skillId]) return;
+  const list = (p.skills || []).slice(0, SKILL_SLOTS);
+  while (list.length < SKILL_SLOTS) list.push(null);
+  const at = list.indexOf(skillId);
+  if (at >= 0) {
+    list[at] = null;
+  } else {
+    const free = list.indexOf(null);
+    if (free < 0) { toast("All three technique slots are taken."); return; }
+    list[free] = skillId;
+  }
+  p.skills = list;
+  saveLocal(p);
+  renderSkills();
+  syncPlayer(false);
 }
 
 // The three trades ----------
@@ -1822,6 +2012,7 @@ function renderCombat() {
         <div class="atk-bar"><div id="ebar-fill" class="atk-fill"></div></div></div>
     </div>` +
     `<div id="battle-status"></div>` +
+    `<div class="skill-bar" id="equipped-skills"></div>` +
     `<div class="loot-log"><h3>Loot log</h3><div class="loot-rows" id="loot-rows"></div>` +
     `<div class="kill-count" id="kill-count"></div></div>`;
   $("combat-leave").onclick = () => {
@@ -1856,6 +2047,23 @@ function paintBars() {
 function paintCombat() {
   paintBars();
   const m = battle.mob;
+  const p = state.player;
+  // The equipped techniques sit above the loot log, with their cooldowns.
+  const sk = $("equipped-skills");
+  if (sk) {
+    const d = p ? derivedStats(p) : null;
+    const cards = equippedSkills(p).map(s => {
+      const left = battle.cooldowns[s.id] || 0;
+      const total = skillCooldown(s, d);
+      const pct = left > 0 ? Math.max(0, Math.min(100, left / total * 100)) : 0;
+      return `<div class="skill-slot${left > 0 ? " cooling" : ""}" data-skill="${s.id}" title="${esc(s.desc)}">
+        <img class="skill-art" src="${esc(s.img || "/assets/items/place_holder.jpg")}" alt="" />
+        <span class="skill-name">${esc(s.name)}</span>
+        ${left > 0 ? `<span class="skill-cd" style="--pct:${pct}%">${Math.ceil(left)}s</span>` : ""}
+      </div>`;
+    }).join("");
+    sk.innerHTML = cards || `<span class="muted">No techniques carried</span>`;
+  }
   const lr = $("loot-rows");
   if (lr) lr.innerHTML = Object.keys(battle.loot).sort().map(k =>
     `<div><span>${esc(k)}</span><span>${battle.loot[k]}x</span></div>`).join("") ||
@@ -1888,22 +2096,36 @@ function battleTick() {
   if (!p || !m || battle.view !== "combat" || battle.searching) return;
   // a survivor of a mutual kill still falls: check before trading blows
   if (battle.php <= 0) return onPlayerDeath();
-  battle.pbar += 0.1 / 1.0; // base attack: 1 second to fill the bar
+  const d = derivedStats(p);
+  battle.clock += 0.1;
+  // Energy comes back on its own, and the techniques wait out their cooldowns.
+  battle.energy = Math.min(d.energy, battle.energy + 5 * 0.1);
+  for (const id of Object.keys(battle.cooldowns))
+    battle.cooldowns[id] = Math.max(0, battle.cooldowns[id] - 0.1);
+  battle.buffs = (battle.buffs || []).filter(b => b.until > battle.clock);
+  // Agility: the swing comes faster.
+  battle.pbar += 0.1 * (1 + (d.agility || 0) / 100);
   battle.ebar += 0.1 / m.speed;
   if (battle.pbar >= 1) {
     battle.pbar = 0;
-    const d = derivedStats(p);
     const s = strikeDmg(d.atk, d.crit, d.critDmg, m.def);
     battle.ehp -= s.dmg;
     flash("side-enemy");
   }
   if (battle.ebar >= 1 && battle.ehp > 0) {
     battle.ebar = 0;
-    const d = derivedStats(p);
-    const s = strikeDmg(m.atk, m.crit, m.crit_dmg, d.def);
-    battle.php -= s.dmg;
-    flash("side-player");
+    // Evasion: the blow never arrives.
+    if (Math.random() * 100 < (d.evasion || 0)) {
+      battle.lastSkill = "Dodged";
+      flash("side-player");
+    } else {
+      const s = strikeDmg(m.atk, m.crit, m.crit_dmg, d.def);
+      battle.php -= s.dmg;
+      flash("side-player");
+    }
   }
+  // The techniques go on their own.
+  useSkills(p, m);
   // mirror into the save every strike: hiding/reloading/closing mid-hunt
   // keeps the damage (no refresh-heal), and quit-mid-fight keeps the wound
   p.hp = battle.php;
@@ -1953,6 +2175,8 @@ function onMobDeath() {
   // chance of a second roll of the table.
   const bLevel = masteryLevel(masteryXp("battle"));
   if (bLevel > 1 && Math.random() < Math.min(0.5, 0.02 * (bLevel - 1))) rollLoot(m);
+  // Luck finds a little more, too.
+  if (Math.random() * 100 < (derivedStats(p).luck || 0)) rollLoot(m);
   // The kill itself teaches the hunt, and the stronger the beast the more
   // it teaches.
   applyMasteryXp("battle", masteryXp("battle") + masteryKillXp(m));

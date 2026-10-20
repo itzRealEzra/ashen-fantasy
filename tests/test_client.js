@@ -30,7 +30,9 @@ const els = {
   "char-sheet": mkEl(), "p-realm": mkEl(), "cult-rate": mkEl(),
   "battle-root": mkEl(), "char-hp": mkEl(), "char-qi": mkEl(),
   "p-stones": mkEl(), "enemy-back": mkEl(), "craft-root": mkEl(),
-  "alchemy-root": mkEl(), "cook-root": mkEl(),
+  "alchemy-root": mkEl(), "cook-root": mkEl(), "skills-root": mkEl(),
+  "equipped-skills": mkEl(), "loot-rows": mkEl(), "kill-count": mkEl(),
+  "battle-status": mkEl(),
 };
 const calls = { cEvents: [], saves: [], enemies: [], notices: [], renderInv: 0, timeouts: [], fetch: null, toasts: [], popups: [] };
 const state = { username: "tester", player: null };
@@ -83,6 +85,19 @@ const parts = [
   grab(/async function fetchServerPlayer\(username\) \{[\s\S]*?\n\}/, "fetchServerPlayer"),
   grab(/async function syncPlayer\(initial\) \{[\s\S]*?\n\}/, "syncPlayer"),
   grab(/function derivedStats\(p\) \{[\s\S]*?\n\}/, "derivedStats"),
+  grab(/function activeBuffs\(\) \{[\s\S]*?\n\}/, "activeBuffs"),
+  grab(/function skillCooldown\(s, d\) \{[\s\S]*?\n\}/, "skillCooldown"),
+  grab(/function equippedSkills\(p\) \{[\s\S]*?\n\}/, "equippedSkills"),
+  grab(/function useSkills\(p, m\) \{[\s\S]*?\n\}/, "useSkills"),
+  grab(/function fireSkill\(p, m, s, d\) \{[\s\S]*?\n\}/, "fireSkill"),
+  grab(/let invSort = "[a-z]+";/, "invSort"),
+  grab(/let SKILLS = \{\};/, "SKILLS"),
+  grab(/let SKILL_SLOTS = \d+;/, "SKILL_SLOTS"),
+  grab(/function renderSkills\(\) \{[\s\S]*?\n\}/, "renderSkills"),
+  grab(/function toggleSkill\(skillId\) \{[\s\S]*?\n\}/, "toggleSkill"),
+  grab(/function sortBag\(entries, p\) \{[\s\S]*?\n\}/, "sortBag"),
+  grab(/const BAG_SORTS = \[\[[^\n]*\];/, "BAG_SORTS"),
+  grab(/const ITEM_RARITY_ORDER = \[[^\]]*\];/, "ITEM_RARITY_ORDER"),
   grab(/const PAIRED_SLOTS = \[[^\]]*\];/, "PAIRED_SLOTS"),
   grab(/const GEAR_STAT_KEYS = \[[^\]]*\];/, "GEAR_STAT_KEYS"),
   grab(/const PERCENT_STAT_KEYS = new Set\(\[[^\]]*\]\);/, "PERCENT_STAT_KEYS"),
@@ -210,6 +225,10 @@ const lib = new Function("__", prelude + parts + `
     showBattleAreas, showBattleEnemiesCard, battleTick, derivedStats, playerMaxHp, addInv, takeInv,
     craftReady, craftMax, toast, toastBox, renderWork, craftRecipe, fetchRecipes,
     masteryLevel, masteryRank, masteryNumeral, masteryTitle, masteryXp, masteryKillXp,
+    activeBuffs, skillCooldown, equippedSkills, useSkills, fireSkill, sortBag,
+    BAG_SORTS, ITEM_RARITY_ORDER, renderSkills, toggleSkill, SKILL_SLOTS, paintCombat,
+    setSort: s => { invSort = s; },
+    setSkills: s => { SKILLS = s; },
     applyMasteryXp, masteryPopup, masteryPanel, masteryTotalXp, MASTERY_TRACKS,
     closeSidebar,
     setRecipes: r => { RECIPES = r; },
@@ -686,6 +705,79 @@ state.player = basePlayer();
        > lib.cultRate(plainP),
      "qi_mult is not dead: it raises the cultivation rate");
 
+  // ============ 6i. the bag can be ordered ============
+  const bagP = basePlayer();
+  bagP.inventory = { rat_fur: 2, beast_core_fragment: 7, minor_qi_pill: 5, wolf_fang: 1 };
+  const bagIds = () => Object.keys(bagP.inventory);
+  lib.setSort("rarity");
+  let sorted = lib.sortBag(bagIds(), bagP);
+  ok(sorted[0] === "beast_core_fragment", "the rarity sort puts the rarest first");
+  lib.setSort("quantity");
+  sorted = lib.sortBag(bagIds(), bagP);
+  ok(sorted[0] === "beast_core_fragment" && sorted[1] === "minor_qi_pill",
+     "the quantity sort puts the biggest stack first");
+  lib.setSort("name");
+  sorted = lib.sortBag(bagIds(), bagP);
+  ok(sorted[0] === "beast_core_fragment" && sorted[1] === "minor_qi_pill",
+     "the name sort is alphabetical");
+  ok(lib.BAG_SORTS.map(s => s[0]).join(",") === "rarity,quantity,name",
+     "the bag offers rarity, quantity and name");
+
+  // ============ 6j. the new body stats ============
+  const statP = basePlayer();
+  statP.stats = { ...basePlayer().stats, agility: 20, luck: 15, spirit: 8, evasion: 25, energy: 30, cdr: 10 };
+  const statD = lib.derivedStats(statP);
+  ok(statD.agility === 20 && statD.luck === 15 && statD.spirit === 8,
+     "agility, luck and spirit are read");
+  ok(statD.evasion === 25 && statD.energy === 130 && statD.cdr === 10,
+     "evasion, energy and cooldown reduction are read");
+  ok(/\bd\.agility/.test(SRC), "agility speeds the swing");
+  ok(/\bd\.evasion/.test(SRC), "evasion dodges the blow");
+  ok(/\bd\.luck/.test(SRC), "luck finds extra loot");
+  ok(/max \* 0\.02 \* dt/.test(SRC) === false, "there is no resting hp regen any more");
+
+  // ============ 6k. techniques fire on their own ============
+  lib.setSkills({
+    iron_fist: { id: "iron_fist", name: "Iron Fist", cd: 10, energy: 10, kind: "buff",
+      duration: 5, buff: { atk: 5 }, img: "/assets/items/place_holder.jpg", desc: "d" },
+    thunder_palm: { id: "thunder_palm", name: "Thunder Palm", cd: 8, energy: 15, kind: "strike",
+      mult: 1.8, spirit: 20, img: "", desc: "d" },
+  });
+  state.player = basePlayer();
+  state.player.skills = ["iron_fist", "thunder_palm", null];
+  lib.battle.energy = 100;
+  lib.battle.cooldowns = {};
+  lib.battle.buffs = [];
+  lib.battle.clock = 0;
+  const dummy = { name: "Rat", hp: 200, def: 0, atk: 4, crit: 5, crit_dmg: 150, speed: 1 };
+  lib.useSkills(state.player, dummy);
+  ok(lib.activeBuffs().length === 1, "a technique fires on its own");
+  ok(lib.battle.cooldowns.iron_fist > 0, "a used technique goes on cooldown");
+  ok(lib.battle.energy < 100, "a technique costs energy");
+  ok(lib.battle.energy >= 100 - 10 - 15, "the energy spent is the cost of the techniques used");
+  lib.useSkills(state.player, dummy);
+  ok(lib.activeBuffs().length === 1, "a technique already up is not used again");
+  lib.battle.cooldowns = {};
+  lib.battle.buffs = [];
+  lib.battle.clock = 0;
+  lib.battle.energy = 100;
+  const ehpBefore = lib.battle.ehp;
+  lib.useSkills(state.player, dummy);
+  ok(lib.battle.ehp < ehpBefore || lib.battle.energy < 100,
+     "a strike technique lands or costs its energy");
+  // the panel shows what you carry and everything you could
+  lib.renderSkills();
+  const skillsHtml = els["skills-root"].innerHTML;
+  ok(/Iron Fist/.test(skillsHtml), "a carried technique is on the panel");
+  ok(/Thunder Palm/.test(skillsHtml), "every technique is listed");
+  ok(/skill-layout/.test(skillsHtml), "the panel is carried left, available right");
+  lib.battle.mob = dummy;
+  lib.paintCombat();
+  ok(/Iron Fist/.test(els["equipped-skills"].innerHTML),
+     "the carried techniques show in the battle");
+  ok(/<div class="skill-bar" id="equipped-skills"><\/div>[\s\S]*<div class="loot-log">/.test(SRC),
+     "the techniques sit above the loot log");
+
   // ============ 7. leaving the hunt persists HP, stops fight, clears log ============
   state.player = basePlayer();
   state.player.hp = MAXHP;
@@ -832,7 +924,7 @@ state.player = basePlayer();
   ok(/else if \(battle\.view === "areas"\) \{\s*\n\s*showBattleAreas\(\)/.test(SRC), "battle tab refreshes area locks on entry");
   ok(/!battle\.searching \|\| battle\.mob !== m/.test(SRC), "respawn guard checks the live fight");
   ok(/p\.hp = battle\.php;/.test(SRC), "hp mirror present in battleTick");
-  ok(/if \(battle\.php <= 0\) return onPlayerDeath\(\);\n  battle\.pbar/.test(SRC), "zero-HP check runs before trading blows");
+  ok(/if \(battle\.php <= 0\) return onPlayerDeath\(\);\n  const d = derivedStats/.test(SRC), "zero-HP check runs before trading blows");
   ok(!/function log\(/.test(SRC) && !/log\(\{\}, ""\)/.test(SRC), "dead log() leftovers removed");
   ok(/const elix = `<div class="doll-row">` \+ \[0, 1, 2\]\.map/.test(SRC), "elixir row renders 3 slots");
   ok(/name: "Combat Pill"|name: "Protection Pill"/.test(SRC) === false, "unfillable pill labels removed");
@@ -994,6 +1086,9 @@ state.player = basePlayer();
       ],
       DOLL_ROWS: [[{ s: "core", label: "Spirit Core" }, { s: "headpiece", label: "Immortal Crown" }]],
       BAG_TABS: [["all", "All"]],
+      BAG_SORTS: [["rarity", "Rarity"], ["quantity", "Quantity"], ["name", "Name"]],
+      ITEM_RARITY_ORDER: ["Common", "Uncommon", "Rare", "Epic", "Legendary", "Mythic"],
+      invSort: "rarity",
       ITEM_RARITY_COLORS: {}, ITEM_DEFAULT_RARITY: "Common",
       state: { player: { username: "t", equipment: {}, elixirs: [null, null, null], inventory: { minor_qi_pill: 3, roasted_wild_rat_meat: 1 } } },
       invTab: "all",
@@ -1015,7 +1110,7 @@ state.player = basePlayer();
     // neutral "Elixir I" fallback no longer occurs in the live game. Nothing to
     // delete: the fixture matches the shipped item set.
     vm.createContext(sb);
-    for (const fn of ["esc", "pillShape", "elixirSlots", "iconHtml", "artCls", "slotIconHtml", "bagTabOf", "renderInventory", "formatStatValue"]) {
+    for (const fn of ["esc", "pillShape", "elixirSlots", "iconHtml", "artCls", "slotIconHtml", "bagTabOf", "sortBag", "renderInventory", "formatStatValue"]) {
       const src = grabFnSrc(fn);
       if (src) vm.runInContext(src, sb);
     }

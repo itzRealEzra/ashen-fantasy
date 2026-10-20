@@ -513,6 +513,24 @@ try:
     ok(st == 200 and j["player"]["mastery"]["battle"] == 40, "battle mastery is stored")
     st, j = sync("master_hunter", mastery_battle=10)
     ok(j["player"]["mastery"]["battle"] == 40, "battle mastery never rolls back")
+
+    # ============ 10f. techniques: the table and the carried list ============
+    st, j = req("/api/skills")
+    ok(st == 200 and len(j.get("skills", [])) >= 4, "the technique table is served")
+    ok(all(s.get("img") for s in j["skills"]), "every technique has a picture")
+    ok(all(s.get("img") == "/assets/items/place_holder.jpg" for s in j["skills"]),
+       "the techniques wear the placeholder art")
+    ok(j.get("slots") == server.SKILL_SLOTS, "the panel says how many techniques fit")
+    fresh("skiller")
+    st, j = sync("skiller", skills=["iron_fist", "thunder_palm", "iron_fist", "bogus_skill"])
+    carried = j["player"]["skills"]
+    ok(carried[0] == "iron_fist" and carried[1] == "thunder_palm",
+       "known techniques are kept")
+    ok(carried[2] is None, "a duplicate technique is refused")
+    ok(len(carried) == server.SKILL_SLOTS, "the technique list fits the slots")
+    st, j = sync("skiller", skills=["not_a_skill"])
+    ok(all(s is None for s in j["player"]["skills"]),
+       "an unknown technique is refused")
     # The rarer the work, the more it teaches: Common is 10, Uncommon is 20.
     common_xp = server.MASTERY_XP_PER_CRAFT
     uncommon_xp = server.MASTERY_XP_PER_CRAFT * 2

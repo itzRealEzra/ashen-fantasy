@@ -17,8 +17,8 @@ import mimetypes
 # Single source of truth for the build number. Must match CLIENT_VERSION in
 # public/js/app.js and the footer in public/index.html. A player whose saved
 # patch_version differs gets one patch-note mail when they next check mail.
-SERVER_VERSION = "0.9.18"
-CLIENT_VERSION = "0.9.18"  # for /status only; the client keeps its own copy
+SERVER_VERSION = "0.9.19"
+CLIENT_VERSION = "0.9.19"  # for /status only; the client keeps its own copy
 STARTED_AT = time.time()
 RESTARTED_AT = 0
 RESTART_SEQ = 0
@@ -308,10 +308,23 @@ ITEM_RARITY_BANDS = {
     "Epic": (3, 15), "Legendary": (0.5, 3), "Mythic": (0.1, 0.5),
 }
 
+# The stat block every item carries. Beyond the old six (attack, defense, hp,
+# crit, crit damage, qi rate) the body has finer measures:
+#   agility -- attack speed, a percent faster swings
+#   luck    -- a percent more likely to find something extra
+#   spirit  -- accuracy, how surely a technique finds its mark
+#   evasion -- a percent of the enemy's blows that never land
+#   energy  -- the pool the techniques draw from
+#   cdr     -- cooldown reduction, a percent off every technique's wait
+_STAT_KEYS = ("atk", "def", "hp", "crit", "critDmg", "qi_rate_pct",
+              "agility", "luck", "spirit", "evasion", "energy", "cdr")
+
+def _stat_block():
+    return {k: 0 for k in _STAT_KEYS}
+
 def _gear(id, name, slot, glyph, desc, stats=None):
     # qi_rate_pct is a percentage bonus to passive, offline, and manual cultivation.
-    base = {"atk": 0, "def": 0, "hp": 0, "crit": 0, "critDmg": 0,
-            "qi_rate_pct": 0}
+    base = _stat_block()
     if stats:
         base.update(stats)
     return {"id": id, "name": name, "kind": "gear", "slot": slot,
@@ -320,8 +333,7 @@ def _gear(id, name, slot, glyph, desc, stats=None):
 def _con(id, name, glyph, desc, heal_pct=0, qi_pct=0):
     return {"id": id, "name": name, "kind": "consumable", "slot": None,
             "glyph": glyph, "desc": desc,
-            "stats": {"atk": 0, "def": 0, "hp": 0, "crit": 0, "critDmg": 0,
-                      "qi_rate_pct": 0},
+            "stats": _stat_block(),
             "use": {"heal_pct": heal_pct, "qi_pct": qi_pct}}
 
 # Items are added back one at a time. Copy the template below and give the
@@ -338,7 +350,7 @@ GEAR = [
     # way to get these is the starter pack mail.
     _gear("wooden_sword", "Wooden Sword", "main_weapon", "🗡️",
           "A practice blade, notched from a sapling. Every master kept one.",
-          {"atk": 5}),
+          {"atk": 5, "spirit": 1}),
     _gear("leather_helmet", "Leather Helmet", "head", "🧢",
           "Boiled hide, laced tight. Keeps the scalp from splitting.",
           {"def": 2, "hp": 10}),
@@ -353,10 +365,10 @@ GEAR = [
           {"atk": 1, "def": 2}),
     _gear("leather_boots", "Leather Boots", "boots", "👢",
           "Soles thick enough to outlast a wolf's sprint.",
-          {"def": 2, "hp": 10}),
+          {"def": 2, "hp": 10, "agility": 1}),
     _gear("leather_cape", "Leather Cape", "back", "🧣",
           "Travel-worn, ash-stained. It hides nothing, but it catches the wind.",
-          {"def": 1, "crit": 1}),
+          {"def": 1, "crit": 1, "evasion": 2}),
 
     # ---- Second batch. Slots were picked to fill the ones the starter pack
     # left empty (off-hand, core, necklace, accessory) plus a second, weaker
@@ -370,19 +382,19 @@ GEAR = [
           {"def": 1, "hp": 5}),
     _gear("cracked_qi_stone", "Cracked Qi Stone", "core", "🪨",
           "A stone split by a thin seam of living qi. It hums when you breathe.",
-          {"def": 2, "hp": 15, "qi_rate_pct": 5}),
+          {"def": 2, "hp": 15, "qi_rate_pct": 5, "spirit": 2}),
     _gear("chipped_jade_pendant", "Chipped Jade Pendant", "necklace", "📿",
           "Jade with a corner broken off. Still cool against the sternum.",
-          {"hp": 12, "crit": 1}),
+          {"hp": 12, "crit": 1, "energy": 10}),
     _gear("copper_spirit_ring", "Copper Spirit Ring", "ring", "💍",
           "A plain copper band that sharpens the wearer's critical strikes.",
-          {"crit": 2, "critDmg": 5}),
+          {"crit": 2, "critDmg": 5, "luck": 2}),
     _gear("jade_guard_ring", "Jade Guard Ring", "ring", "💎",
           "Dense green jade that steadies the body and turns aside blows.",
-          {"def": 2, "hp": 15}),
+          {"def": 2, "hp": 15, "cdr": 5}),
     _gear("qi_gathering_ring", "Qi Gathering Ring", "ring", "🔹",
           "A spirit-threaded ring that helps draw ambient Qi into the dantian.",
-          {"qi_rate_pct": 5}),
+          {"qi_rate_pct": 5, "energy": 15}),
 ]
 
 # Gear rarity follows root-rarity colors (valley Mortal -> peaks Immortal).
@@ -429,8 +441,7 @@ for _c in CONSUMABLES:
 def _slug(name):
     return re.sub(r"[^a-z0-9]+", "_", name.lower()).strip("_")
 
-_ZERO = {"atk": 0, "def": 0, "hp": 0, "crit": 0, "critDmg": 0,
-         "qi_rate_pct": 0}
+_ZERO = _stat_block()
 
 def _material_rarities():
     """Highest rarity any beast drops each material under."""
@@ -475,6 +486,64 @@ def slot_accepts(item_slot, equip_slot):
     if item_slot == equip_slot:
         return True
     return equip_slot in SLOT_GROUPS.get(item_slot, ())
+
+
+# ----------------------------------------------------------------------------
+# Techniques (skills)
+#
+# A technique is a named move the player wears. They fire on their own once
+# their cooldown is up and there is energy for them, so the fight plays
+# itself: the player chooses what to carry, not when to swing it.
+#
+# These are the test techniques -- they all wear the holder art until the
+# real pictures arrive.
+# ----------------------------------------------------------------------------
+SKILL_SLOTS = 3
+SKILLS = {
+    "iron_fist": {
+        "id": "iron_fist", "name": "Iron Fist", "glyph": "✊",
+        "cd": 12, "energy": 10, "kind": "buff", "duration": 8,
+        "buff": {"atk": 5},
+        "desc": "The fist hardens for a breath. Every blow lands heavier.",
+    },
+    "stone_ward": {
+        "id": "stone_ward", "name": "Stone Ward", "glyph": "🛡",
+        "cd": 18, "energy": 12, "kind": "buff", "duration": 10,
+        "buff": {"def": 5},
+        "desc": "Skin turns to stone. The blow slides off.",
+    },
+    "cloud_step": {
+        "id": "cloud_step", "name": "Cloud Step", "glyph": "☁",
+        "cd": 16, "energy": 14, "kind": "buff", "duration": 6,
+        "buff": {"evasion": 30},
+        "desc": "The body is not where the strike lands.",
+    },
+    "thunder_palm": {
+        "id": "thunder_palm", "name": "Thunder Palm", "glyph": "⚡",
+        "cd": 10, "energy": 15, "kind": "strike", "mult": 1.8, "spirit": 20,
+        "desc": "A palm strike that finds the heart before the guard.",
+    },
+    "sword_rain": {
+        "id": "sword_rain", "name": "Sword Rain", "glyph": "🌧",
+        "cd": 24, "energy": 22, "kind": "strike", "mult": 1.1, "hits": 3, "spirit": 15,
+        "desc": "Three swords fall where the enemy is looking.",
+    },
+    "deep_breath": {
+        "id": "deep_breath", "name": "Deep Breath", "glyph": "🫁",
+        "cd": 20, "energy": 0, "kind": "energy", "energy_gain": 30,
+        "desc": "The dantian fills again. Qi returns to the limbs.",
+    },
+}
+SKILL_IDS = tuple(SKILLS.keys())
+
+def skills_payload():
+    """The technique table, with the placeholder art every skill wears."""
+    out = []
+    for s in SKILLS.values():
+        row = dict(s)
+        row["img"] = "/assets/items/place_holder.jpg"
+        out.append(row)
+    return out
 
 
 # ----------------------------------------------------------------------------
@@ -900,6 +969,7 @@ def load_players():
             for p in data.values():
                 if isinstance(p, dict):
                     p.setdefault("spirit_stones", 0)
+                    p.setdefault("skills", [None] * SKILL_SLOTS)
                     m = p.setdefault("mastery", {})
                     for t in MASTERY_TRACKS:
                         m.setdefault(t, 0)
@@ -966,6 +1036,7 @@ def build_player(username, picks):
         "equipment": {s: None for s in EQUIP_SLOTS},
         "inventory": {},
         "elixirs": [None, None, None],
+        "skills": [None] * SKILL_SLOTS,
         "mail": [],
         # Born into this version, so a new cultivator is not handed a patch
         # note for the build they started on.
@@ -1203,6 +1274,11 @@ class Handler(BaseHTTPRequestHandler):
                     "out_glyph": out_it.get("glyph", "✦"),
                 })
             return self._send_json({"ok": True, "recipes": recipes}, cache="no-store")
+
+        if path == "/api/skills":
+            # The technique table. Static, so it may be cached a while.
+            return self._send_json({"ok": True, "skills": skills_payload(),
+                                    "slots": SKILL_SLOTS}, cache="max-age=3600")
 
         if path == "/api/icons":
             # UI chrome art (tabs, doll slots). Resolved per request so a new
@@ -1629,6 +1705,15 @@ class Handler(BaseHTTPRequestHandler):
                     if x in ITEM_BY_ID and ITEM_BY_ID[x]["kind"] == "consumable" and x not in seen_elix:
                         seen_elix.add(x)
                         elixirs[i] = x
+            # techniques: only known techniques, one per slot, no duplicates
+            skills = [None] * SKILL_SLOTS
+            skill_in = data.get("skills") or []
+            if isinstance(skill_in, list):
+                seen_sk = set()
+                for i, x in enumerate(skill_in[:SKILL_SLOTS]):
+                    if x in SKILLS and x not in seen_sk:
+                        seen_sk.add(x)
+                        skills[i] = x
             stored.update({
                 "realm": stage["name"],
                 "realm_idx": idx,
@@ -1642,6 +1727,7 @@ class Handler(BaseHTTPRequestHandler):
                 "equipment": equipment,
                 "inventory": inventory,
                 "elixirs": elixirs,
+                "skills": skills,
                 "last_seen": now,
             })
             save_players()
