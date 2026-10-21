@@ -2,3 +2,7 @@ __pycache__/
 *.pyc
 players.json
 .env
+
+players.json.bak
+players.json.corrupt
+players.json.tmp

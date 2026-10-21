@@ -1404,9 +1404,8 @@ class Handler(BaseHTTPRequestHandler):
             }, cache="no-store")
 
         if path == "/favicon.ico":
-            self.send_response(204)
-            self.end_headers()
-            return
+            # The sect's own mark, so the tab has an icon.
+            return self._serve_file("favicon.ico", "image/x-icon")
 
         if path == "/api/realms":
             return self._send_json({"realms": REALMS}, cache="max-age=3600")
@@ -1426,7 +1425,8 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/" or path == "/index.html":
             return self._serve_file("index.html", "text/html; charset=utf-8")
         rel = path.lstrip("/")
-        if rel.startswith("css/") or rel.startswith("js/") or rel.startswith("assets/"):
+        if (rel.startswith("css/") or rel.startswith("js/")
+                or rel.startswith("assets/") or rel == "favicon.ico"):
             return self._serve_file(rel, None)
         if path.startswith("/api/"):
             return self._send_json({"error": "not found"}, status=404)
