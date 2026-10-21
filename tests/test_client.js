@@ -189,6 +189,7 @@ const parts = [
   grab(/function fmtSeconds\(v\) \{[\s\S]*?\n\}/, "fmtSeconds"),
   grab(/function masteryNumeral\(level\) \{[^\n]*\}/, "masteryNumeral"),
   grab(/function masteryTitle\(track, level\) \{[\s\S]*?\n\}/, "masteryTitle"),
+  grab(/function masteryRankLabel\(track, level\) \{[\s\S]*?\n\}/, "masteryRankLabel"),
   grab(/function masteryXp\(track, p\) \{[\s\S]*?\n\}/, "masteryXp"),
   grab(/function masteryKillXp\(m\) \{[\s\S]*?\n\}/, "masteryKillXp"),
   grab(/function applyMasteryXp\(track, xp\) \{[\s\S]*?\n\}/, "applyMasteryXp"),
@@ -280,7 +281,8 @@ const lib = new Function("__", prelude + parts + `
     getGathering: () => gathering,
     setMailNewItems: v => { mailNewItems = v; },
     masteryLevel, masteryRank, masteryNumeral, masteryTitle, masteryXp, masteryKillXp,
-    masteryRankOf, masteryBonusText, masteryBodyBonus, fetchMasteryDefs, fmtSeconds,
+    masteryRankOf, masteryRankLabel, masteryBonusText, masteryBodyBonus, fetchMasteryDefs, fmtSeconds,
+    setMasteryDefs: d => { MASTERY_DEFS = d; },
     activeBuffs, skillCooldown, equippedSkills, useSkills, fireSkill, sortBag,
     BAG_SORTS, ITEM_RARITY_ORDER, renderSkills, toggleSkill, SKILL_SLOTS, paintCombat,
     paintBattleKit, iconUrl, iconImg, fetchSkills, setSkillsLoaded: v => { SKILLS_LOADED = v; },
@@ -704,6 +706,21 @@ state.player = basePlayer();
   ok(/Novice Hunter I/.test(masteryHtml), "the hunt track has a rank name too");
   ok(/1\/10/.test(masteryHtml), "the level inside the rank is counted out of ten");
 
+  // The rank name and the numeral are written once -- not "Novice Cook II II".
+  calls.fetch = async () => ({ ok: true, json: async () => ({ ok: true, tracks: {
+    cooking: { label: "Cooking", gift: "chance to duplicate the meal", bonus_cap: 25,
+      ranks: [{ rank: 1, name: "Novice Cook", bonus: 1 },
+              { rank: 2, name: "Apprentice Cook", bonus: 1 }] } } }) });
+  await lib.fetchMasteryDefs();
+  calls.fetch = null;
+  state.player = basePlayer();
+  state.player.mastery = { cooking: 5500, alchemy: 0, crafting: 0, battle: 0, herbs: 0 };
+  lib.renderChar(state.player);
+  const onceHtml = els["char-sheet"].innerHTML;
+  ok(/Apprentice Cook I(?!I)/.test(onceHtml), "a track the client knows only as XP still names its rank once");
+  ok(!/Cook I I/.test(onceHtml), "the numeral inside the rank is never written twice");
+  lib.setMasteryDefs({});   // the standing names again, for the tests below
+
   state.player = basePlayer();
   state.player.mastery = { cooking: 0, alchemy: 0, crafting: 0, battle: 0 };
   calls.popups.length = 0;
@@ -896,6 +913,11 @@ state.player = basePlayer();
   ok(/Earth · /.test(gatherHtml), "the card shows the element and the time");
 
   ok(/Common/.test(gatherHtml) && /Rare/.test(gatherHtml), "the card shows the rarity");
+  ok(/class="gather-rarity"/.test(gatherHtml), "the rarity wears the brush face");
+  ok(/\.gather-card \.gather-rarity \{[^}]*font-family: var\(--font-brush\)/.test(cssNow),
+     "the brush face (Ma Shan Zheng) is on the rarity");
+  ok(/\.gather-card \.craft-out-name b \{[^}]*font-family: inherit/.test(cssNow),
+     "the herb name keeps the plain face -- the brush is not on the name");
   ok(/Earth · 5\.4s/.test(gatherHtml),
      "the card shows the time the player actually waits, rank bonus included");
 

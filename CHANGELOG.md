@@ -11,6 +11,18 @@ and push to `main` on https://github.com/itzRealEzra/ashen-fantasy.
 
 ## [Unreleased]
 
+## [0.9.30] - 2026-10-21
+### Fixed
+- **The masteries were written twice.** The panel read "Novice Cook II II",
+  "Novice Alchemist I I" -- the rank's name already carried the numeral, and
+  the panel added it again. The rank name and the level inside it are now
+  written once: "Novice Cook II".
+- **The brush face is on the rarity, not on the name.** The Gather cards
+  wore the brush face (Ma Shan Zheng) across the herb's name, where a long
+  name like "Thousand-Year Jade Ginseng" is hard to read. The name keeps
+  the plain face and the rarity -- "Legendary" -- wears the brush, in its
+  own colour.
+
 ## [0.9.29] - 2026-10-21
 ### Fixed
 - **The tooltip stayed open.** It used to vanish the moment the cursor

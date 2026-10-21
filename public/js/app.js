@@ -1,6 +1,6 @@
 /* Ashen Fantasy — vanilla JS state machine: username -> roots -> main */
 const $ = (id) => document.getElementById(id);
-const CLIENT_VERSION = "0.9.29"; // must match server.py server_version + footer
+const CLIENT_VERSION = "0.9.30"; // must match server.py server_version + footer
 const state = {
   username: localStorage.getItem("af_user") || "",
   rollId: null,
@@ -491,7 +491,8 @@ function masteryRows(p) {
     const lvl = Math.max(1, track && track.level ? track.level : masteryLevel(xp));
     const rank = track && track.rank ? track.rank : 1;
     const within = track && track.within ? track.within : ((lvl - 1) % 10) + 1;
-    const name = (track && track.rank_name) || masteryTitle(t, lvl);
+    // The rank's name, and the level inside it -- the numeral is added once.
+    const name = (track && track.rank_name) || masteryRankLabel(t, lvl);
     const base = masteryTotalXp(lvl);
     const need = Math.max(1, masteryTotalXp(lvl + 1) - base);
     const into = Math.max(0, xp - base);
@@ -1659,15 +1660,21 @@ function masteryRank(level) {
 
 function masteryNumeral(level) { return MASTERY_NUMERALS[(level - 1) % 10]; }
 
-// "Adept Cook IV" -- the rank's own name, and the level inside it.
-function masteryTitle(track, level) {
+// The rank's own name, WITHOUT the level inside it: "Novice Cook".
+// The numeral is added once, by whoever shows it.
+function masteryRankLabel(track, level) {
   const r = masteryRankOf(track, level);
   const def = MASTERY_DEFS[track];
   // The server's rank names carry the track already ("Adept Cook"); the
   // standing fallback names do not, so the track is put in front of them.
-  const base = def ? r.name
-    : `${(def && def.label) || (track[0].toUpperCase() + track.slice(1))} ${r.name}`;
-  return `${base} ${MASTERY_NUMERALS[r.within - 1]}`;
+  if (def) return r.name;
+  return `${(def && def.label) || (track[0].toUpperCase() + track.slice(1))} ${r.name}`;
+}
+
+// "Adept Cook IV" -- the rank's own name, and the level inside it.
+function masteryTitle(track, level) {
+  const r = masteryRankOf(track, level);
+  return `${masteryRankLabel(track, level)} ${MASTERY_NUMERALS[r.within - 1]}`;
 }
 
 // What the track's level buys, in words.
@@ -1895,8 +1902,8 @@ function renderGather() {
     return `<div class="craft-card gather-card${locked ? " locked" : ""}">
       <div class="craft-out">
         <div class="craft-out-text">
-          <div class="craft-out-name"><b style="color:${color}">${esc(h.name)}</b></div>
-          <small class="muted">${esc(h.rarity)}</small>
+          <div class="craft-out-name"><b>${esc(h.name)}</b></div>
+          <small class="gather-rarity" style="color:${color}">${esc(h.rarity)}</small>
         </div>
         <span class="craft-xp">${esc(h.element)} · ${fmtSeconds(secs)}s</span>
       </div>

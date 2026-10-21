@@ -289,8 +289,12 @@ input { background: #0e0e14; border: 1px solid var(--line); color: var(--ink); p
 /* gathering panel */
 .gather-status { border: 1px solid var(--line); background: var(--panel2); padding: 10px 14px; margin: 10px 0; display: flex; align-items: center; gap: 10px; }
 .gather-status .btn { margin-left: auto; }
-/* The herb list reads like the craft bench: one card per herb, all of them. */
-.gather-card .craft-out-name b { font-size: 15px; }
+/* The herb list reads like the craft bench: one card per herb, all of them.
+   The brush face (Ma Shan Zheng) belongs to the RARITY, not to the name: a
+   long herb name in brush strokes is hard to read, while the short tier word
+   looks right in it. */
+.gather-card .craft-out-name b { font-family: inherit; font-size: 15px; }
+.gather-card .gather-rarity { font-family: var(--font-brush); font-size: 13px; letter-spacing: 2px; }
 .gather-card.locked { opacity: .55; }
 .gather-card.locked:hover { border-color: var(--line); }
 .herb-lock { font-size: 11px; color: var(--red); letter-spacing: 1px; white-space: nowrap; }
