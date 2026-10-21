@@ -224,16 +224,20 @@ try:
     # ============ 2c. item rarity ladder ============
     # Items use Common -> Mythic; the Mortal -> Primordial ladder belongs to
     # Spiritual Roots only and must never leak into item data.
-    tiers = ["Common", "Uncommon", "Rare", "Epic", "Legendary", "Mythic"]
+    tiers = ["Common", "Uncommon", "Rare", "Epic", "Legendary", "Mythic", "Divine", "Primordial"]
     colors = {"Common": "#9aa0a6", "Uncommon": "#7cb342", "Rare": "#42a5f5",
-              "Epic": "#ab47bc", "Legendary": "#ffb300", "Mythic": "#ff3d00"}
-    ok(server.ITEM_RARITY_ORDER == tiers, "item rarity order is Common -> Mythic")
-    ok(server.ITEM_RARITY_COLORS == colors, "item rarity colors match the spec")
-    ok(not (set(server.ITEM_RARITY_ORDER) & set(server.RARITY_ORDER)),
-       "the item ladder and the root ladder share no names")
+              "Epic": "#ab47bc", "Legendary": "#ffb300", "Mythic": "#ff3d00",
+              "Divine": "#00e5ff", "Primordial": "#ff2fd0"}
+    ok(server.ITEM_RARITY_ORDER == tiers, "item rarity order is Common -> Primordial")
+    ok(server.ITEM_RARITY_COLORS == colors, "rarity colors match the spec")
+    # The herbs carry the two top names, so those are the only names the two
+    # ladders may share; the root-only names must never leak into item data.
+    shared = set(server.ITEM_RARITY_ORDER) & set(server.RARITY_ORDER)
+    ok(shared == {"Divine", "Primordial"},
+       "the item ladder and the root ladder share only the herb tiers")
     st, j = req("/api/items")
     ok(all(i["rarity"] in tiers for i in j["items"]),
-       "every item carries a valid Common->Mythic rarity")
+       "every item carries a valid rarity")
     ok(all(i["rarity"] == "Common" or i.get("color") == colors[i["rarity"]] for i in j["items"]),
        "every item ships its rarity color")
     mats = [i for i in j["items"] if i["kind"] == "material"]
@@ -522,8 +526,8 @@ try:
     st, j = req("/api/skills")
     ok(st == 200 and len(j.get("skills", [])) >= 4, "the technique table is served")
     ok(all(s.get("img") for s in j["skills"]), "every technique has a picture")
-    ok(all(s.get("img") == "/assets/items/place_holder.jpg" for s in j["skills"]),
-       "the techniques wear the placeholder art")
+    ok(all(s.get("img") == "/assets/icons/skill_icon.png" for s in j["skills"]),
+       "the techniques wear the skill icon")
     ok(j.get("slots") == server.SKILL_SLOTS, "the panel says how many techniques fit")
     fresh("skiller")
     st, j = sync("skiller", skills=["iron_fist", "thunder_palm", "iron_fist", "bogus_skill"])
@@ -537,6 +541,42 @@ try:
        "an unknown technique is refused")
 
     # ============ 10g. values, selling, and the legendary rates ============
+    # ============ 10h. herbs, gathering, and the data files ============
+    ok(len(server.HERBS) == 40, "the herb table loads from data/herbs_data.json")
+    ok(len(server.HERB_RANKS) == 12, "the herb mastery has twelve ranks")
+    ok(len(server.SKILLS) == 6, "the technique table loads from data/skills_data.json")
+    ok(all(i["kind"] == "herb" for i in server.ITEMS if i["id"] in server.HERBS),
+       "the herbs are items")
+    st, j = req("/api/herbs?username=gatherer")
+    ok(st == 200 and len(j["herbs"]) == 40, "the herb list is served")
+    ok(any(h["locked"] for h in j["herbs"]), "the rarer herbs are locked at first")
+
+    fresh("gatherer", mastery={"herbs": 0})
+    st, j = req("/api/gather", {"username": "gatherer", "herb_id": "herb_wild_ginseng"})
+    ok(st == 200 and j.get("ok") is True, "a common herb can be gathered at once")
+    ok(j["player"]["inventory"].get("herb_wild_ginseng", 0) >= 1,
+       "the gathered herb lands in the bag")
+    ok(j["player"]["mastery"]["herbs"] > 0, "gathering teaches the herbalist track")
+    ok(0 < j["next_ms"] <= 6000, "the next gathering is timed")
+    st, j = req("/api/gather", {"username": "gatherer", "herb_id": "herb_crimson_ginseng"})
+    ok(st == 400 and j.get("error"), "a rare herb is refused until the rank opens it")
+    st, j = req("/api/gather", {"username": "gatherer", "herb_id": "not_a_herb"})
+    ok(st == 404, "there is no such herb")
+
+    # A higher herbalist rank gathers faster and reaches further.
+    server.PLAYERS["gatherer"]["mastery"]["herbs"] = 50 * 21 * 20
+    st, j = req("/api/gather", {"username": "gatherer", "herb_id": "herb_wild_ginseng"})
+    ok(st == 200, "the rare herb opens with the rank")
+    fast = j["next_ms"]
+    server.PLAYERS["gatherer"]["mastery"]["herbs"] = 0
+    st, j = req("/api/gather", {"username": "gatherer", "herb_id": "herb_wild_ginseng"})
+    ok(j["next_ms"] > fast, "a higher rank gathers faster")
+
+    # The badge is live: the health poll carries the mail count.
+    fresh("watcher", inventory={"rat_fur": 3})
+    server.PLAYERS["watcher"]["mail"] = [server._new_mail("starter", "gift", "b", {"rat_fur": 3})]
+    st, j = req("/api/health?username=watcher")
+    ok(st == 200 and j.get("mail_new") == 3, "the health poll carries the new mail count")
     ok(all(i.get("value", 0) > 0 for i in server.ITEMS), "every item has a value")
     ok(server.ITEM_BY_ID["rat_fur"]["value"] < server.ITEM_BY_ID["corrupted_fang"]["value"],
        "a rarer item is worth more")

@@ -34,7 +34,7 @@ const els = {
   "alchemy-root": mkEl(), "cook-root": mkEl(), "skills-root": mkEl(),
   "equipped-skills": mkEl(), "loot-rows": mkEl(), "kill-count": mkEl(),
   "battle-status": mkEl(), "battle-kit": mkEl(), "item-tip": mkEl(),
-  "mail-badge": mkEl(),
+  "mail-badge": mkEl(), "gather-root": mkEl(),
 };
 const calls = { cEvents: [], saves: [], enemies: [], notices: [], renderInv: 0, timeouts: [], fetch: null, toasts: [], popups: [], fetches: 0 };
 const state = { username: "tester", player: null };
@@ -105,6 +105,15 @@ const parts = [
   grab(/function iconUrl\(name\) \{[\s\S]*?\n\}/, "iconUrl"),
   grab(/function iconImg\(name, cls\) \{[\s\S]*?\n\}/, "iconImg"),
   grab(/let SKILLS = \{\};/, "SKILLS"),
+  grab(/let HERBS = \[\];/, "HERBS"),
+  grab(/let herbRank = 1, herbLevel = 1, herbRankName = "";/, "herbState"),
+  grab(/let gathering = null;/, "gathering"),
+  grab(/async function fetchHerbs\(\) \{[\s\S]*?\n\}/, "fetchHerbs"),
+  grab(/function renderGather\(\) \{[\s\S]*?\n\}/, "renderGather"),
+  grab(/async function startGathering\(herbId\) \{[\s\S]*?\n\}/, "startGathering"),
+  grab(/async function gatherOnce\(herbId\) \{[\s\S]*?\n\}/, "gatherOnce"),
+  grab(/function stopGathering\(\) \{[\s\S]*?\n\}/, "stopGathering"),
+  grab(/async function pollServerState\(\) \{[\s\S]*?\n\}/, "pollServerState"),
   grab(/let SKILLS_LOADED = false;/, "SKILLS_LOADED"),
   grab(/let SKILL_SLOTS = \d+;/, "SKILL_SLOTS"),
   grab(/async function fetchSkills\(\) \{[\s\S]*?\n\}/, "fetchSkills"),
@@ -248,6 +257,11 @@ const lib = new Function("__", prelude + parts + `
     showBattleAreas, showBattleEnemiesCard, battleTick, derivedStats, playerMaxHp, addInv, takeInv,
     craftReady, craftMax, toast, toastBox, renderWork, craftRecipe, fetchRecipes,
     crafting, sellItem, paintMailBadge,
+    fetchHerbs, renderGather, startGathering, gatherOnce, stopGathering, pollServerState,
+    setHerbs: h => { HERBS = h; },
+    setHerbRank: (r, l, n) => { herbRank = r; herbLevel = l; herbRankName = n; },
+    setGathering: g => { gathering = g; },
+    getGathering: () => gathering,
     setMailNewItems: v => { mailNewItems = v; },
     masteryLevel, masteryRank, masteryNumeral, masteryTitle, masteryXp, masteryKillXp,
     activeBuffs, skillCooldown, equippedSkills, useSkills, fireSkill, sortBag,
@@ -679,6 +693,7 @@ state.player = basePlayer();
   ok(/Battle Artisan I -> Battle Artisan II/.test(calls.popups[0]),
      "the notice names the rank even when only the numeral turns");
   state.player.mastery.battle = 0;
+  lib.renderChar(state.player);
 
   lib.renderChar(state.player);
   const charHtml = els["char-sheet"].innerHTML;
@@ -820,6 +835,45 @@ state.player = basePlayer();
 
   // ============ 6l. the elixir, the pill and the meal are in the fight ============
   const cssNow = fs.readFileSync(path.join(__dirname, "..", "public", "css", "style.css"), "utf8").replace(/\r\n/g, "\n");
+  // ============ 6n. gathering, and the live mail badge ============
+  state.player = basePlayer();
+  state.player.inventory = {};
+  lib.setHerbs([
+    { id: "herb_wild_ginseng", name: "Wild Ginseng", rarity: "Common", element: "Earth", time: 6, need_rank: 1, locked: false },
+    { id: "herb_crimson_ginseng", name: "Crimson Ginseng", rarity: "Rare", element: "Fire", time: 16, need_rank: 4, locked: true },
+  ]);
+  lib.setHerbRank(2, 3, "Apprentice Herbalist");
+  lib.renderGather();
+  const gatherHtml = els["gather-root"].innerHTML;
+  ok(/Wild Ginseng/.test(gatherHtml), "the gather panel lists the herbs");
+  ok(/Crimson Ginseng/.test(gatherHtml), "a locked herb is still listed");
+  ok(/Needs rank 4/.test(gatherHtml), "a locked herb says which rank opens it");
+  ok(/data-herb="herb_wild_ginseng"/.test(gatherHtml), "a herb you can gather has a button");
+
+  // Gathering runs by itself until the player stops it.
+  calls.fetch = async (url, opts) => {
+    const body = JSON.parse(opts.body);
+    ok(body.herb_id === "herb_wild_ginseng", "the forge is asked for the right herb");
+    return { ok: true, json: async () => ({ ok: true, gathered: { herb_wild_ginseng: 1 },
+      next_ms: 1000, mastery: { herbs: { xp: 20, level: 1, rank: 1, rank_name: "Novice Herbalist", within: 1 } },
+      player: { ...state.player, inventory: { herb_wild_ginseng: 1 } } }) };
+  };
+  calls.cEvents.length = 0;
+  await lib.startGathering("herb_wild_ginseng");
+  ok(state.player.inventory.herb_wild_ginseng === 1, "the gathered herb lands in the bag");
+  ok(calls.cEvents.some(m => /Gathered/.test(m)), "the gathering is reported");
+  lib.stopGathering();
+  ok(lib.getGathering() === null, "stopping ends the gathering");
+
+  // The mail badge is live: the health poll carries the count.
+  lib.setMailNewItems(0);
+  calls.fetch = async () => ({ ok: true, json: async () => ({ ok: true, roots: 21,
+    version: "AshenFantasy/0.9.7", maintenance: { on: false, message: "" },
+    announcement: "", restart_seq: 0, mail_unread: 1, mail_new: 3 }) });
+  await lib.pollServerState();
+  ok(String(els["mail-badge"].textContent) === "3", "the mail badge follows the server");
+  calls.fetch = null;
+
   // ============ 6m. selling, the mail badge, the difficulty colour ============
   state.player = basePlayer();
   state.player.inventory = { rat_fur: 4 };

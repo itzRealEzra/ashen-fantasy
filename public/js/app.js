@@ -1,6 +1,6 @@
 /* Ashen Fantasy — vanilla JS state machine: username -> roots -> main */
 const $ = (id) => document.getElementById(id);
-const CLIENT_VERSION = "0.9.25"; // must match server.py server_version + footer
+const CLIENT_VERSION = "0.9.26"; // must match server.py server_version + footer
 const state = {
   username: localStorage.getItem("af_user") || "",
   rollId: null,
@@ -473,17 +473,32 @@ function renderChar(p) {
 function masteryPanel(p) {
   const m = (p && p.mastery) || {};
   const rows = MASTERY_TRACKS.map(t => {
-    const xp = Math.max(0, m[t] | 0);
-    const lvl = masteryLevel(xp);
-    const base = masteryTotalXp(lvl);
-    const need = Math.max(1, masteryTotalXp(lvl + 1) - base);
-    const into = Math.max(0, xp - base);
+    const raw = m[t];
+    // The local track is a plain XP figure; the server sends the whole track.
+    const track = raw && typeof raw === "object" ? raw : null;
+    const xp = Math.max(0, track ? (track.xp | 0) : (raw | 0));
+    let title, lvl, base, need, into;
+    if (t === "herbs" && track && track.rank_name) {
+      // The herbalist track has its own twelve ranks of ten levels, and the
+      // server names the rank.
+      lvl = track.within || 1;
+      title = `${track.rank_name} ${MASTERY_NUMERALS[Math.min(9, lvl - 1)]}`;
+      base = masteryTotalXp(track.level || 1);
+      need = Math.max(1, masteryTotalXp((track.level || 1) + 1) - base);
+      into = Math.max(0, xp - base);
+    } else {
+      lvl = masteryLevel(xp);
+      base = masteryTotalXp(lvl);
+      need = Math.max(1, masteryTotalXp(lvl + 1) - base);
+      into = Math.max(0, xp - base);
+      title = masteryTitle(t, lvl);
+    }
     const pct = Math.max(0, Math.min(100, into / need * 100));
     return `<div class="mastery-row">
-      <div class="mastery-top"><b>${esc(masteryTitle(t, lvl))}</b><span class="muted">${lvl}/${MASTERY_MAX_LEVEL}</span></div>
+      <div class="mastery-top"><b>${esc(title)}</b><span class="muted">${lvl}${t === "herbs" ? "/10" : "/" + MASTERY_MAX_LEVEL}</span></div>
       <div class="mastery-bar"><div class="mastery-fill" style="width:${pct}%"></div></div>
       <div class="mastery-xp muted">${into} / ${need} XP</div>
-      <div class="mastery-bonus muted">${esc(MASTERY_BONUS_TEXT[t](lvl))}</div>
+      <div class="mastery-bonus muted">${esc(MASTERY_BONUS_TEXT[t] ? MASTERY_BONUS_TEXT[t](lvl) : "")}</div>
     </div>`;
   }).join("");
   return `<h3 class="mastery-title">Mastery</h3><div class="mastery-list">${rows}</div>`;
@@ -765,6 +780,7 @@ document.querySelectorAll(".side-btn").forEach(b => b.onclick = () => {
   if (b.dataset.tab === "alchemy") renderWork("alchemy-root", "alchemy");
   if (b.dataset.tab === "cook") renderWork("cook-root", "cook");
   if (b.dataset.tab === "skills") renderSkills();
+  if (b.dataset.tab === "gather") renderGather();
   if (b.dataset.tab === "mail") loadMail();
   pollServerState(); // a fresh panel should never show stale admin state
   document.querySelectorAll(".side-btn").forEach(x => x.classList.remove("active"));
@@ -851,7 +867,7 @@ const DOLL_ROWS = [
 // everything protective lives under Armor and every hand-held piece under
 // Weapon.
 const BAG_TABS = [
-  ["all", "All"], ["material", "Materials"], ["consumable", "Consumable"],
+  ["all", "All"], ["material", "Materials"], ["herb", "Herbs"], ["consumable", "Consumable"],
   ["armor", "Armor"], ["weapon", "Weapon"], ["artifact", "Artifact"],
   ["accessory", "Accessory"],
 ];
@@ -867,6 +883,7 @@ const SLOT_BAG_TAB = {
 function bagTabOf(it) {
   if (!it) return "";
   if (it.kind === "gear") return SLOT_BAG_TAB[it.slot] || "artifact";
+  if (it.kind === "herb") return "herb";
   return it.kind === "material" ? "material" : "consumable";
 }
 // Elixir slots are positional and keyed by what a pill does, not by name:
@@ -920,7 +937,7 @@ function itemTypeLabel(it) {
     const e = elixirSlots().find(x => x.name === it.name);
     return e ? e.type : "Consumable";
   }
-  return it.kind === "material" ? "Material" : "Item";
+  return it.kind === "material" ? "Material" : it.kind === "herb" ? "Herb" : "Item";
 }
 
 // Art for an item or enemy: the server sends `img` when a file matches the
@@ -1499,7 +1516,7 @@ async function fetchAreas() {
 // Four tracks, each levelling to 99. Every ten levels the track changes rank
 // ("Cooking Beginner X" becomes "Cooking Artisan I"), and every level of a
 // trade buys a chance to duplicate what you made.
-const MASTERY_TRACKS = ["cooking", "alchemy", "crafting", "battle"];
+const MASTERY_TRACKS = ["cooking", "alchemy", "crafting", "battle", "herbs"];
 const MASTERY_RANKS = ["Beginner", "Artisan", "Master", "Grandmaster", "Sage", "Elder", "Immortal", "Legendary", "Mythic", "Transcendent"];
 const MASTERY_NUMERALS = ["I", "II", "III", "IV", "V", "VI", "VII", "VIII", "IX", "X"];
 const MASTERY_MAX_LEVEL = 99;
@@ -1509,6 +1526,7 @@ const MASTERY_BONUS_TEXT = {
   alchemy: lvl => `${Math.max(0, lvl - 1)}% chance to duplicate the brew`,
   crafting: lvl => `${Math.max(0, lvl - 1)}% chance to duplicate the work`,
   battle: lvl => `${(lvl - 1) * 2}% chance of an extra drop · +${lvl - 1}% HP, Attack, Defense`,
+  herbs: lvl => "gathers faster, and finds more",
 };
 
 function masteryTotalXp(level) { return 50 * level * (level - 1); }
@@ -1662,6 +1680,125 @@ async function sellItem(itemId, count) {
     updateQi(p);
     renderInventory();
   }
+}
+
+// ---------- gathering ----------
+// The player picks a herb node and the gathering goes on by itself: the
+// server works out the time and the yield, and the client keeps asking
+// until the player stops.
+let HERBS = [];
+let herbRank = 1, herbLevel = 1, herbRankName = "";
+let gathering = null;   // { herbId, timer }
+
+async function fetchHerbs() {
+  const p = state.player;
+  try {
+    const url = p && p.username
+      ? "/api/herbs?username=" + encodeURIComponent(p.username)
+      : "/api/herbs";
+    const r = await fetch(url, { cache: "no-store" });
+    const j = await r.json();
+    if (j.herbs) {
+      HERBS = j.herbs;
+      herbRank = j.rank || 1;
+      herbLevel = j.level || 1;
+      herbRankName = j.rank_name || "";
+    }
+  } catch {}
+  return HERBS;
+}
+
+function renderGather() {
+  const root = $("gather-root");
+  const p = state.player;
+  if (!root || !p) return;
+  if (!HERBS.length) {
+    root.innerHTML = `<p class="muted">Looking for a herb patch…</p>`;
+    fetchHerbs().then(() => renderGather());
+    return;
+  }
+  const byRarity = {};
+  for (const h of HERBS) (byRarity[h.rarity] = byRarity[h.rarity] || []).push(h);
+  const groups = Object.keys(byRarity).map(rarity => {
+    const rows = byRarity[rarity].map(h => {
+      const locked = h.locked;
+      const active = gathering && gathering.herbId === h.id;
+      return `<div class="herb-row${locked ? " locked" : ""}">
+        <div class="herb-name"><b>${esc(h.name)}</b><small class="muted">${esc(h.element)} · ${h.time}s</small></div>
+        ${locked
+          ? `<span class="herb-lock">Needs rank ${h.need_rank}</span>`
+          : `<button class="btn" data-herb="${h.id}"${active ? " disabled" : ""}>${active ? "Gathering…" : "Gather"}</button>`}
+      </div>`;
+    }).join("");
+    return `<div class="herb-group"><h3>${esc(rarity)}</h3>${rows}</div>`;
+  }).join("");
+  const status = gathering
+    ? `<div class="gather-status">Gathering — <b>${esc((HERBS.find(h => h.id === gathering.herbId) || {}).name || "")}</b> <button class="btn" id="gather-stop">Stop</button></div>`
+    : `<div class="gather-status muted">Pick a node and the gathering goes on by itself. Stop it whenever you like.</div>`;
+  root.innerHTML =
+    `<h2>Gathering</h2>` +
+    `<p class="muted">Herbalist rank ${herbRank} · ${esc(herbRankName)} · level ${herbLevel}</p>` +
+    status +
+    `<div class="herb-groups">${groups}</div>`;
+  root.querySelectorAll("[data-herb]").forEach(el => el.onclick = () => startGathering(el.dataset.herb));
+  const stop = $("gather-stop");
+  if (stop) stop.onclick = () => stopGathering();
+}
+
+// Start (or keep) gathering one herb. It repeats until the player stops.
+async function startGathering(herbId) {
+  const p = state.player;
+  if (!p || !herbId) return;
+  if (gathering && gathering.herbId !== herbId) stopGathering();
+  gathering = { herbId, timer: null };
+  renderGather();
+  await gatherOnce(herbId);
+}
+
+async function gatherOnce(herbId) {
+  const p = state.player;
+  if (!p || !gathering || gathering.herbId !== herbId) return;
+  let j = null;
+  try {
+    const r = await fetch("/api/gather", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ username: p.username, herb_id: herbId }),
+    });
+    j = await r.json();
+  } catch {
+    cEvent("The patch is out of reach for now.");
+    stopGathering();
+    return;
+  }
+  if (!j || j.error) {
+    cEvent("The gathering stops: " + (j && j.error ? j.error : "unknown reason"));
+    stopGathering();
+    return;
+  }
+  if (j.ok && j.player) {
+    p.inventory = j.player.inventory;
+    const names = Object.keys(j.gathered || {}).map(id =>
+      `${j.gathered[id]}x ${(ITEM_BY_ID[id] || {}).name || id}`);
+    if (names.length) cEvent("Gathered " + names.join(", ") + ".");
+    saveLocal(p);
+    renderInventory();
+    // the herbalist rank moved
+    if (j.mastery && j.mastery.herbs) {
+      const h = j.mastery.herbs;
+      if (h.rank !== herbRank || h.within !== herbLevel) {
+        herbRank = h.rank; herbLevel = h.within; herbRankName = h.rank_name || "";
+        cEvent(`${herbRankName}, level ${herbLevel}.`);
+      }
+    }
+    // and again, until the player stops it
+    gathering.timer = setTimeout(() => gatherOnce(herbId), Math.max(200, j.next_ms || 1000));
+  }
+}
+
+function stopGathering() {
+  if (gathering && gathering.timer) clearTimeout(gathering.timer);
+  gathering = null;
+  renderGather();
 }
 
 // The three trades ----------
@@ -1869,6 +2006,8 @@ const TAB_ICONS = {
   craft: "craft_icon",
   alchemy: "alchemy_icon",
   cook: "cook_icon",
+  skills: "skill_icon",
+  gather: "herb_icon",
   mail: "mail_icon",
 };
 
@@ -2578,8 +2717,19 @@ function paintServerBanner() {
 async function pollServerState() {
   if (document.hidden) return; // hidden tabs get throttled; we catch up on show
   try {
-    const r = await fetch("/api/health", { cache: "no-store" });
-    applyServerState(await r.json());
+    const p = state.player;
+    const url = p && p.username
+      ? "/api/health?username=" + encodeURIComponent(p.username)
+      : "/api/health";
+    const r = await fetch(url, { cache: "no-store" });
+    const j = await r.json();
+    // The mail badge is live: new mail shows up without a reload. It is
+    // painted before the banner, so a banner problem cannot mute it.
+    if (typeof j.mail_new === "number") {
+      mailNewItems = j.mail_new;
+      paintMailBadge();
+    }
+    applyServerState(j);
   } catch {}
 }
 

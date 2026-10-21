@@ -17,8 +17,8 @@ import mimetypes
 # Single source of truth for the build number. Must match CLIENT_VERSION in
 # public/js/app.js and the footer in public/index.html. A player whose saved
 # patch_version differs gets one patch-note mail when they next check mail.
-SERVER_VERSION = "0.9.25"
-CLIENT_VERSION = "0.9.25"  # for /status only; the client keeps its own copy
+SERVER_VERSION = "0.9.26"
+CLIENT_VERSION = "0.9.26"  # for /status only; the client keeps its own copy
 STARTED_AT = time.time()
 RESTARTED_AT = 0
 RESTART_SEQ = 0
@@ -285,6 +285,43 @@ AREAS = [
 
 
 # ----------------------------------------------------------------------------
+# ----------------------------------------------------------------------------
+# Data files
+#
+# The tables that grow fastest live in data/ as JSON, and the server reads
+# them at start-up: one place, no copy of the same list in this file.
+# ----------------------------------------------------------------------------
+DATA_DIR = os.path.join(BASE_DIR, "data")
+
+def _load_data(name, fallback):
+    try:
+        with open(os.path.join(DATA_DIR, name), encoding="utf-8") as f:
+            return json.load(f)
+    except (OSError, ValueError):
+        return fallback
+
+HERB_DATA = _load_data("herbs_data.json", {"herbs": []})
+HERB_MASTERY_DATA = _load_data("herb_mastery_data.json", {"ranks": [], "unlocks": {}})
+SKILL_DATA = _load_data("skills_data.json", {"skills": [], "slots": 3})
+
+# The herb table: id -> the herb it is.
+HERBS = {h["id"]: h for h in HERB_DATA.get("herbs", [])}
+HERB_IDS = tuple(HERBS.keys())
+HERB_RARITY_ORDER = HERB_DATA.get("rarities") or ITEM_RARITY_ORDER
+
+# The herb mastery: twelve ranks of ten levels.
+HERB_RANKS = HERB_MASTERY_DATA.get("ranks", [])
+HERB_UNLOCKS = HERB_MASTERY_DATA.get("unlocks", {})
+HERB_LEVELS_PER_RANK = int(HERB_MASTERY_DATA.get("levels_per_rank", 10))
+HERB_TIME_CAP = float(HERB_MASTERY_DATA.get("time_reduction_cap", 0.5))
+HERB_BONUS_CAP = float(HERB_MASTERY_DATA.get("bonus_chance_cap", 0.25))
+HERB_MAX_LEVEL = max(1, len(HERB_RANKS) * HERB_LEVELS_PER_RANK)
+
+# The technique table, from data/skills_data.json.
+SKILL_SLOTS = int(SKILL_DATA.get("slots", 3))
+SKILLS = {s["id"]: s for s in SKILL_DATA.get("skills", [])}
+SKILL_IDS = tuple(SKILLS.keys())
+
 # Item database (single source of truth; served via GET /api/items)
 # kind: gear (equippable) / consumable (usable) / material (future crafting)
 #
@@ -293,7 +330,8 @@ AREAS = [
 # Rarity and drop chance are independent: a Rare item can drop often if it is
 # meant to be a routine progression material.
 # ----------------------------------------------------------------------------
-ITEM_RARITY_ORDER = ["Common", "Uncommon", "Rare", "Epic", "Legendary", "Mythic"]
+ITEM_RARITY_ORDER = ["Common", "Uncommon", "Rare", "Epic", "Legendary", "Mythic",
+                     "Divine", "Primordial"]
 ITEM_RARITY_COLORS = {
     "Common": "#9aa0a6",     # gray
     "Uncommon": "#7cb342",   # green
@@ -301,11 +339,14 @@ ITEM_RARITY_COLORS = {
     "Epic": "#ab47bc",       # purple
     "Legendary": "#ffb300",  # gold
     "Mythic": "#ff3d00",     # crimson
+    "Divine": "#00e5ff",     # bright cyan
+    "Primordial": "#ff2fd0", # magenta
 }
 # Typical drop-chance band per rarity, used only to sanity-check a drop table.
 ITEM_RARITY_BANDS = {
     "Common": (60, 90), "Uncommon": (30, 59), "Rare": (10, 29),
     "Epic": (3, 15), "Legendary": (0.5, 3), "Mythic": (0.1, 0.5),
+    "Divine": (0.05, 0.5), "Primordial": (0.01, 0.05),
 }
 # What an item sells for, in spirit stones, by rarity.
 ITEM_VALUE_BY_RARITY = {
@@ -471,7 +512,16 @@ MATERIALS = [{"id": _slug(name), "name": name, "kind": "material", "slot": None,
               "stats": dict(_ZERO)}
              for name in sorted({l["item"] for a in AREAS for m in a["mobs"] for l in m["loot"]})]
 
-ITEMS = GEAR + CONSUMABLES + MATERIALS
+# The herbs are items: a herb in the bag is an item in the bag. They come
+# from data/herbs_data.json, so the world of herbs lives in one file.
+HERB_ITEMS = [{"id": h["id"], "name": h["name"], "kind": "herb", "slot": None,
+               "glyph": "🌿", "rarity": h.get("rarity", "Common"),
+               "desc": "A %s herb of the %s. Gathered, never found lying about."
+                                          % (h.get("rarity", "humble").lower(), h.get("element", "wild").lower()),
+               "element": h.get("element", ""), "time": h.get("time", 10),
+               "stats": _stat_block()} for h in HERBS.values()]
+
+ITEMS = GEAR + CONSUMABLES + MATERIALS + HERB_ITEMS
 ITEM_BY_ID = {it["id"]: it for it in ITEMS}
 # Every item carries its rarity colour, not just materials, so the client can
 # colour a slot from the payload alone.
@@ -491,11 +541,44 @@ EQUIP_SLOTS = ("head", "sec_weapon", "chest", "main_weapon", "core", "arm",
 SLOT_GROUPS = {"ring": ("ring1", "ring2")}
 
 
-def slot_accepts(item_slot, equip_slot):
-    """True if a piece with `item_slot` may be worn in `equip_slot`."""
-    if item_slot == equip_slot:
-        return True
-    return equip_slot in SLOT_GROUPS.get(item_slot, ())
+def herb_level(xp):
+    """Level for a total herb XP figure (the same curve the other tracks use)."""
+    lvl = 1
+    xp = max(0, int(xp or 0))
+    while lvl < HERB_MAX_LEVEL and 50 * (lvl + 1) * lvl <= xp:
+        lvl += 1
+    return lvl
+
+def herb_rank_of(xp):
+    """(rank number, level within the rank, rank name) for a herb XP figure."""
+    lvl = herb_level(xp)
+    if not HERB_RANKS:
+        return 1, 1, "Novice Herbalist"
+    idx = min(len(HERB_RANKS) - 1, (lvl - 1) // HERB_LEVELS_PER_RANK)
+    within = (lvl - 1) % HERB_LEVELS_PER_RANK + 1
+    return idx + 1, within, HERB_RANKS[idx]["name"]
+
+def herb_bonuses(xp):
+    """The bonuses the current herb rank buys: faster gathering, more herbs,
+    and the chance of turning up something rarer."""
+    rank, within, _ = herb_rank_of(xp)
+    if not HERB_RANKS:
+        return 0.0, 0.0, None, 0.0
+    r = HERB_RANKS[min(len(HERB_RANKS) - 1, rank - 1)]
+    time_red = min(HERB_TIME_CAP, r.get("time_reduction", 0.0) / 100.0 * within)
+    bonus = min(HERB_BONUS_CAP, r.get("bonus_chance", 0.0) / 100.0 * within)
+    disc = r.get("discovery") or None
+    disc_chance = (disc.get("bonus", 0.0) / 100.0 * within) if disc else 0.0
+    return time_red, bonus, disc, disc_chance
+
+def skills_payload():
+    """The technique table, ready for the client."""
+    out = []
+    for s in SKILLS.values():
+        row = dict(s)
+        row.setdefault("img", "/assets/icons/skill_icon.png")
+        out.append(row)
+    return out
 
 
 # ----------------------------------------------------------------------------
@@ -505,55 +588,15 @@ def slot_accepts(item_slot, equip_slot):
 # their cooldown is up and there is energy for them, so the fight plays
 # itself: the player chooses what to carry, not when to swing it.
 #
-# These are the test techniques -- they all wear the holder art until the
-# real pictures arrive.
+# The table lives in data/skills_data.json.
 # ----------------------------------------------------------------------------
-SKILL_SLOTS = 3
-SKILLS = {
-    "iron_fist": {
-        "id": "iron_fist", "name": "Iron Fist", "glyph": "✊",
-        "cd": 12, "energy": 10, "kind": "buff", "duration": 8,
-        "buff": {"atk": 5},
-        "desc": "The fist hardens for a breath. Every blow lands heavier.",
-    },
-    "stone_ward": {
-        "id": "stone_ward", "name": "Stone Ward", "glyph": "🛡",
-        "cd": 18, "energy": 12, "kind": "buff", "duration": 10,
-        "buff": {"def": 5},
-        "desc": "Skin turns to stone. The blow slides off.",
-    },
-    "cloud_step": {
-        "id": "cloud_step", "name": "Cloud Step", "glyph": "☁",
-        "cd": 16, "energy": 14, "kind": "buff", "duration": 6,
-        "buff": {"evasion": 30},
-        "desc": "The body is not where the strike lands.",
-    },
-    "thunder_palm": {
-        "id": "thunder_palm", "name": "Thunder Palm", "glyph": "⚡",
-        "cd": 10, "energy": 15, "kind": "strike", "mult": 1.8, "spirit": 20,
-        "desc": "A palm strike that finds the heart before the guard.",
-    },
-    "sword_rain": {
-        "id": "sword_rain", "name": "Sword Rain", "glyph": "🌧",
-        "cd": 24, "energy": 22, "kind": "strike", "mult": 1.1, "hits": 3, "spirit": 15,
-        "desc": "Three swords fall where the enemy is looking.",
-    },
-    "deep_breath": {
-        "id": "deep_breath", "name": "Deep Breath", "glyph": "🫁",
-        "cd": 20, "energy": 0, "kind": "energy", "energy_gain": 30,
-        "desc": "The dantian fills again. Qi returns to the limbs.",
-    },
-}
-SKILL_IDS = tuple(SKILLS.keys())
+def slot_accepts(item_slot, equip_slot):
+    """True if a piece with `item_slot` may be worn in `equip_slot`."""
+    if item_slot == equip_slot:
+        return True
+    return equip_slot in SLOT_GROUPS.get(item_slot, ())
 
-def skills_payload():
-    """The technique table, with the placeholder art every skill wears."""
-    out = []
-    for s in SKILLS.values():
-        row = dict(s)
-        row["img"] = "/assets/items/place_holder.jpg"
-        out.append(row)
-    return out
+
 
 
 # ----------------------------------------------------------------------------
@@ -653,7 +696,8 @@ RECIPE_BY_ID = {r["id"]: r for r in RECIPES}
 # and every level of a trade buys a chance to duplicate what you made. Battle
 # XP is earned on the kill and reported with the save.
 # ----------------------------------------------------------------------------
-MASTERY_TRACKS = ("cooking", "alchemy", "crafting", "battle")
+HERB_XP_PER_GATHER = 20  # per gather, doubled for every rarity above Common
+MASTERY_TRACKS = ("cooking", "alchemy", "crafting", "battle", "herbs")
 MASTERY_RANKS = ["Beginner", "Artisan", "Master", "Grandmaster", "Sage",
                  "Elder", "Immortal", "Legendary", "Mythic", "Transcendent"]
 MASTERY_NUMERALS = ["I", "II", "III", "IV", "V", "VI", "VII", "VIII", "IX", "X"]
@@ -695,6 +739,13 @@ def mastery_payload(stored):
     out = {}
     for t in MASTERY_TRACKS:
         xp = _mastery_xp(stored, t)
+        if t == "herbs":
+            # The herbalist track has its own twelve ranks of ten levels.
+            rank, within, name = herb_rank_of(xp)
+            out[t] = {"xp": xp, "level": herb_level(xp), "rank": rank,
+                      "rank_name": name, "within": within,
+                      "next": mastery_total_xp(herb_level(xp) + 1) - xp}
+            continue
         lvl = mastery_level(xp)
         out[t] = {"xp": xp, "level": lvl, "rank": mastery_rank(lvl),
                   "numeral": mastery_numeral(lvl),
@@ -1304,6 +1355,25 @@ class Handler(BaseHTTPRequestHandler):
             return self._send_json({"ok": True, "skills": skills_payload(),
                                     "slots": SKILL_SLOTS}, cache="max-age=3600")
 
+        if path == "/api/herbs":
+            # The herb table and where the player's herbalist rank stands.
+            qs = parse_qs(parsed.query)
+            username = (qs.get("username") or [""])[0].strip()
+            stored = PLAYERS.get(username)
+            xp = _mastery_xp(stored, "herbs") if stored else 0
+            rank, within, rank_name = herb_rank_of(xp)
+            herbs = []
+            for h in HERBS.values():
+                need = int(HERB_UNLOCKS.get(h.get("rarity", "Common"), 1))
+                herbs.append({"id": h["id"], "name": h["name"], "rarity": h.get("rarity", "Common"),
+                              "element": h.get("element", ""), "time": h.get("time", 10),
+                              "need_rank": need, "locked": rank < need})
+            return self._send_json({
+                "ok": True, "herbs": herbs, "rank": rank, "level": within,
+                "rank_name": rank_name, "xp": xp,
+                "levels_per_rank": HERB_LEVELS_PER_RANK,
+            }, cache="no-store")
+
         if path == "/api/icons":
             # UI chrome art (tabs, doll slots). Resolved per request so a new
             # PNG shows up on refresh, like item and enemy art.
@@ -1311,6 +1381,16 @@ class Handler(BaseHTTPRequestHandler):
                                    cache="no-store")
 
         if path == "/api/health":
+            # The mail count rides along with the poll, so the badge is live
+            # without a second request.
+            mail_unread = 0
+            mail_new = 0
+            qs = parse_qs(parsed.query)
+            who = (qs.get("username") or [""])[0].strip()
+            stored = PLAYERS.get(who)
+            if stored:
+                mail_unread = _mail_unread(stored)
+                mail_new = _mail_pending_items(stored)
             return self._send_json({
                 "ok": True, "roots": len(ROOTS_WITH_CHANCE),
                 "version": self.server_version,
@@ -1318,6 +1398,7 @@ class Handler(BaseHTTPRequestHandler):
                                 "message": MAINTENANCE["message"]},
                 "announcement": ANNOUNCEMENT["text"],
                 "restart_seq": RESTART_SEQ,
+                "mail_unread": mail_unread, "mail_new": mail_new,
             })
 
         if path == "/api/mail":
@@ -1554,6 +1635,58 @@ class Handler(BaseHTTPRequestHandler):
             save_players()
             return self._send_json({
                 "ok": True, "sold": item_id, "count": count, "earned": earned,
+                "player": {k: v for k, v in stored.items() if k != "hp"},
+            }, cache="no-store")
+
+        if path == "/api/gather":
+            # Gathering is server-side: the player picks a node, the server
+            # checks the herbalist rank, works out the time and the yield,
+            # and hands the herbs over.
+            data = self._read_json()
+            username = str(data.get("username") or "").strip()
+            if not USERNAME_RE.match(username):
+                return self._send_json({"error": "Bad username"}, status=400)
+            stored = PLAYERS.get(username)
+            if not stored:
+                return self._send_json({"error": "Unknown cultivator"}, status=404)
+            herb_id = str(data.get("herb_id") or "")
+            herb = HERBS.get(herb_id)
+            if not herb:
+                return self._send_json({"error": "No such herb"}, status=404)
+            xp = _mastery_xp(stored, "herbs")
+            rank, within, rank_name = herb_rank_of(xp)
+            need_rank = int(HERB_UNLOCKS.get(herb.get("rarity", "Common"), 1))
+            if rank < need_rank:
+                return self._send_json(
+                    {"error": "%s needs a %s rank" % (herb["name"], rank_name)},
+                    status=400)
+            time_red, bonus, disc, disc_chance = herb_bonuses(xp)
+            base = float(herb.get("time", 10) or 10)
+            seconds = max(0.5, base * (1.0 - time_red))
+            inv = dict(stored.get("inventory") or {})
+            gathered = {herb_id: 1}
+            # Bonus herbs: the rank may find a second one.
+            if bonus > 0 and random.random() < bonus:
+                gathered[herb_id] = gathered.get(herb_id, 0) + 1
+            # A discovery: something rarer turns up at the node.
+            if disc and disc_chance > 0 and random.random() < disc_chance:
+                pool = [h for h in HERBS.values() if h.get("rarity") == disc.get("rarity")]
+                if pool:
+                    found = random.choice(pool)
+                    gathered[found["id"]] = gathered.get(found["id"], 0) + 1
+            for iid, n in gathered.items():
+                inv[iid] = max(0, min(int(inv.get(iid, 0) or 0) + n, 9999))
+            stored["inventory"] = inv
+            # The gathering itself teaches the herbalist track; rarer herbs
+            # teach more.
+            tier = HERB_RARITY_ORDER.index(herb.get("rarity", "Common")) \
+                if herb.get("rarity") in HERB_RARITY_ORDER else 0
+            _grant_mastery(stored, "herbs", HERB_XP_PER_GATHER * (2 ** tier))
+            stored["last_seen"] = time.time()
+            save_players()
+            return self._send_json({
+                "ok": True, "gathered": gathered, "next_ms": int(seconds * 1000),
+                "mastery": mastery_payload(stored),
                 "player": {k: v for k, v in stored.items() if k != "hp"},
             }, cache="no-store")
 

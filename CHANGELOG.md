@@ -11,6 +11,35 @@ and push to `main` on https://github.com/itzRealEzra/ashen-fantasy.
 
 ## [Unreleased]
 
+## [0.9.26] - 2026-10-20
+### Added
+- **Herbs, and the gathering that finds them.** A `Gather` tab lists the
+  forty herbs of the world, by rarity, each with its element and its gather
+  time. Pick a node and the gathering goes on **by itself** -- the server
+  works out the time and the yield, and the herbs keep coming until the
+  player presses Stop. The herbs are items: they land in the bag, under
+  their own tab.
+- **The herb mastery.** Twelve ranks of ten levels, from Novice Herbalist to
+  Primordial Herb Deity, shown on the Character panel. Every rank gathers
+  faster (1% to 7% per level, capped at 50%), finds a bonus herb (0.5% to
+  2.5% per level, capped at 25%) and opens the rarer herbs: Common from the
+  start, Uncommon at Skilled Herbalist, Rare at Adept, Epic at Master,
+  Legendary at Spirit Herb Sage, Mythic at Immortal Herb Sovereign, Divine at
+  Divine Herb Ancestor and Primordial only at the last rank. A discovery
+  bonus can turn up something rarer at the node you are working.
+- **A data folder.** The tables that grow fastest now live in `data/` as
+  JSON -- `herbs_data.json`, `herb_mastery_data.json`, `skills_data.json` --
+  and the server reads them at start-up. The technique table left
+  `server.py` entirely; there is one copy of each list, and it is the file.
+- The new icons are in place: the **skill icon** on the techniques and the
+  Skills tab, the **herb icon** on the Gather tab. All the icons from the
+  "new asset" folder were **moved** into `assets/icons/`, not copied.
+
+### Fixed
+- **The mail badge is live.** The health poll now carries the mail count, so
+  new mail lights the badge within seconds instead of waiting for the mailbox
+  to be opened.
+
 ## [0.9.25] - 2026-10-20
 ### Added
 - **Items have a value, and you can sell them.** Every item carries a price

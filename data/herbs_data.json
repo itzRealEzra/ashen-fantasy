@@ -1,0 +1,53 @@
+{
+  "comment": "The herb table: every herb in the world, by rarity. The server loads this file at start-up; the ids are the item ids, so a herb in the bag is a herb in the bag. 'element' is the element it carries. 'time' is the base gathering time in seconds -- the higher the rarity, the longer it takes.",
+  "rarities": ["Common", "Uncommon", "Rare", "Epic", "Legendary", "Mythic", "Divine", "Primordial"],
+  "herbs": [
+    { "id": "herb_wild_ginseng", "name": "Wild Ginseng", "rarity": "Common", "element": "Earth", "time": 6 },
+    { "id": "herb_common_healing_grass", "name": "Common Healing Grass", "rarity": "Common", "element": "Wood", "time": 6 },
+    { "id": "herb_blue_dew_flower", "name": "Blue Dew Flower", "rarity": "Common", "element": "Water", "time": 7 },
+    { "id": "herb_bitterleaf", "name": "Bitterleaf Herb", "rarity": "Common", "element": "Wood", "time": 6 },
+    { "id": "herb_earthroot_tuber", "name": "Earthroot Tuber", "rarity": "Common", "element": "Earth", "time": 7 },
+
+    { "id": "herb_spirit_dew_grass", "name": "Spirit Dew Grass", "rarity": "Uncommon", "element": "Water", "time": 10 },
+    { "id": "herb_ironleaf_grass", "name": "Ironleaf Grass", "rarity": "Uncommon", "element": "Metal", "time": 10 },
+    { "id": "herb_bloodroot_herb", "name": "Bloodroot Herb", "rarity": "Uncommon", "element": "Blood", "time": 11 },
+    { "id": "herb_frostmint_flower", "name": "Frostmint Flower", "rarity": "Uncommon", "element": "Ice", "time": 10 },
+    { "id": "herb_windwhisper_grass", "name": "Windwhisper Grass", "rarity": "Uncommon", "element": "Wind", "time": 11 },
+
+    { "id": "herb_crimson_ginseng", "name": "Crimson Ginseng", "rarity": "Rare", "element": "Fire", "time": 16 },
+    { "id": "herb_spirit_veined_orchid", "name": "Spirit-veined Orchid", "rarity": "Rare", "element": "Wood", "time": 16 },
+    { "id": "herb_golden_core_flower", "name": "Golden Core Flower", "rarity": "Rare", "element": "Metal", "time": 17 },
+    { "id": "herb_thunderbud_herb", "name": "Thunderbud Herb", "rarity": "Rare", "element": "Lightning", "time": 16 },
+    { "id": "herb_three_leaf_spirit_grass", "name": "Three-Leaf Spirit Grass", "rarity": "Rare", "element": "Wood", "time": 17 },
+
+    { "id": "herb_dragonblood_ginseng", "name": "Dragonblood Ginseng", "rarity": "Epic", "element": "Blood", "time": 24 },
+    { "id": "herb_five_element_petal", "name": "Five-Element Petal", "rarity": "Epic", "element": "Five Elements", "time": 24 },
+    { "id": "herb_soul_nourishing_grass", "name": "Soul Nourishing Grass", "rarity": "Epic", "element": "Soul", "time": 25 },
+    { "id": "herb_heavenly_meridian_vine", "name": "Heavenly Meridian Vine", "rarity": "Epic", "element": "Wood", "time": 24 },
+    { "id": "herb_voiddew_flower", "name": "Voiddew Flower", "rarity": "Epic", "element": "Space", "time": 25 },
+
+    { "id": "herb_thousand_year_jade_ginseng", "name": "Thousand-Year Jade Ginseng", "rarity": "Legendary", "element": "Wood", "time": 36 },
+    { "id": "herb_phoenix_feather_flower", "name": "Phoenix Feather Flower", "rarity": "Legendary", "element": "Fire", "time": 36 },
+    { "id": "herb_profound_dao_orchid", "name": "Profound Dao Orchid", "rarity": "Legendary", "element": "Dao", "time": 37 },
+    { "id": "herb_five_colored_heavenly_lotus", "name": "Five-Colored Heavenly Lotus", "rarity": "Legendary", "element": "Five Elements", "time": 36 },
+    { "id": "herb_dragon_vein_mushroom", "name": "Dragon Vein Mushroom", "rarity": "Legendary", "element": "Earth", "time": 37 },
+
+    { "id": "herb_heaven_reversal_root", "name": "Heaven-Reversal Root", "rarity": "Mythic", "element": "Dao", "time": 50 },
+    { "id": "herb_golden_soul_lotus", "name": "Golden Soul Lotus", "rarity": "Mythic", "element": "Soul", "time": 50 },
+    { "id": "herb_nine_suns_sacred_fruit", "name": "Nine Suns Sacred Fruit", "rarity": "Mythic", "element": "Fire", "time": 51 },
+    { "id": "herb_voidheart_flower", "name": "Voidheart Flower", "rarity": "Mythic", "element": "Space", "time": 50 },
+    { "id": "herb_dao_heart_sacred_flower", "name": "Dao-Heart Sacred Flower", "rarity": "Mythic", "element": "Dao", "time": 51 },
+
+    { "id": "herb_heavenly_dao_vine", "name": "Heavenly Dao Vine", "rarity": "Divine", "element": "Dao", "time": 70 },
+    { "id": "herb_worldtree_blossom", "name": "Worldtree Blossom", "rarity": "Divine", "element": "Life", "time": 70 },
+    { "id": "herb_timeweaver_orchid", "name": "Timeweaver Orchid", "rarity": "Divine", "element": "Time", "time": 71 },
+    { "id": "herb_undying_soulflower", "name": "Undying Soulflower", "rarity": "Divine", "element": "Soul", "time": 70 },
+    { "id": "herb_nine_colored_immortal_lotus", "name": "Nine-Colored Immortal Lotus", "rarity": "Divine", "element": "Five Elements", "time": 71 },
+
+    { "id": "herb_chaos_origin_lotus", "name": "Chaos-Origin Lotus", "rarity": "Primordial", "element": "Chaos", "time": 100 },
+    { "id": "herb_world_creation_flower", "name": "World Creation Flower", "rarity": "Primordial", "element": "Creation", "time": 100 },
+    { "id": "herb_eternal_genesis_root", "name": "Eternal Genesis Root", "rarity": "Primordial", "element": "Origin", "time": 101 },
+    { "id": "herb_ten_thousand_dao_flower", "name": "Ten-Thousand Dao Flower", "rarity": "Primordial", "element": "Dao", "time": 100 },
+    { "id": "herb_dao_transcending_flower", "name": "Dao-Transcending Flower", "rarity": "Primordial", "element": "Dao", "time": 101 }
+  ]
+}
