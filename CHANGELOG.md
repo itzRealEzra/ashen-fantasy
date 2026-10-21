@@ -11,6 +11,16 @@ and push to `main` on https://github.com/itzRealEzra/ashen-fantasy.
 
 ## [Unreleased]
 
+## [0.9.31] - 2026-10-21
+### Added
+- **The herbs have their own pictures.** The fifteen plant illustrations now
+  live in `public/assets/herb/`, named after the herb they draw
+  (`herb_wild_ginseng.png` and so on), and they are drawn on the Gather
+  cards, in the bag and in the tooltips. A herb with no picture of its own
+  keeps its leaf glyph rather than the holder, so the list never shows the
+  same picture forty times. Drop a PNG named after a herb id into that
+  folder and it appears on the next refresh.
+
 ## [0.9.30] - 2026-10-21
 ### Fixed
 - **The masteries were written twice.** The panel read "Novice Cook II II",

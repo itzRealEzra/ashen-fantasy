@@ -184,13 +184,16 @@ try:
     st, j = req("/api/items")
     with_art = [i for i in j["items"] if i.get("img")]
     ok(len(with_art) > 0, "items resolve art files")
-    # Art comes from assets/items/<id>.png, or from a declared icons/ override
-    # for the handful of items whose picture lives with the UI icons. An item
-    # with no picture of its own is drawn with the holder.
+    # Art comes from assets/items/<id>.png, from assets/herb/<id>.png for the
+    # herbs, or from a declared icons/ override for the handful of items whose
+    # picture lives with the UI icons. An item with no picture of its own is
+    # drawn with the holder.
     holder = server._asset_cache().get("items/" + server._PLACEHOLDER_ITEM)
     ok(holder is not None, "the holder picture is on disk")
     def art_ok(i):
         if i["img"] == "/assets/items/%s.png" % i["id"]:
+            return True
+        if i.get("kind") == "herb" and i["img"] == "/assets/herb/%s.png" % i["id"]:
             return True
         over = server._ITEM_ICON_FILES.get(i["id"])
         if over and i["img"] == "/assets/icons/%s.png" % over:
@@ -574,6 +577,18 @@ try:
     ok(all(h.get("element") and h.get("time") for h in j["herbs"]),
        "every herb says its element and its time")
     ok(all(h.get("now") for h in j["herbs"]), "every herb says the time it takes to gather")
+    # The herbs keep their pictures in assets/herb, and only the herbs that
+    # really have one show it.
+    st, j = req("/api/items")
+    herb_items = [i for i in j["items"] if i.get("kind") == "herb"]
+    with_art = [i for i in herb_items if i.get("own_art")]
+    ok(len(with_art) == 15, "fifteen herbs have a picture of their own")
+    ok(all(i["img"].startswith("/assets/herb/") for i in with_art),
+       "the herb pictures live in the herb folder")
+    st, j = req("/api/herbs?username=gatherer")
+    ok(any(h.get("img") for h in j["herbs"]), "the gather list carries the pictures")
+    ok(all(h["img"] == "" or h["img"].startswith("/assets/herb/") for h in j["herbs"]),
+       "a herb with no picture of its own shows no picture at all")
 
     fresh("gatherer", mastery={"herbs": 0})
     st, j = req("/api/gather", {"username": "gatherer", "herb_id": "herb_wild_ginseng"})

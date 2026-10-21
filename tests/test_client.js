@@ -894,7 +894,8 @@ state.player = basePlayer();
   state.player.inventory = {};
   lib.setHerbs([
     { id: "herb_wild_ginseng", name: "Wild Ginseng", rarity: "Common", element: "Earth", time: 6, now: 5.4,
-      desc: "The root every beginner pulls first.", need_rank: 1, locked: false },
+      desc: "The root every beginner pulls first.", img: "/assets/herb/herb_wild_ginseng.png",
+      need_rank: 1, locked: false },
     { id: "herb_crimson_ginseng", name: "Crimson Ginseng", rarity: "Rare", element: "Fire", time: 16, now: 12.8,
       desc: "Red as a banked coal.", need_rank: 4, locked: true },
   ]);
@@ -914,6 +915,8 @@ state.player = basePlayer();
 
   ok(/Common/.test(gatherHtml) && /Rare/.test(gatherHtml), "the card shows the rarity");
   ok(/class="gather-rarity"/.test(gatherHtml), "the rarity wears the brush face");
+  ok(/src="\/assets\/herb\/herb_wild_ginseng\.png"/.test(gatherHtml),
+     "the card draws the plant's own picture");
   ok(/\.gather-card \.gather-rarity \{[^}]*font-family: var\(--font-brush\)/.test(cssNow),
      "the brush face (Ma Shan Zheng) is on the rarity");
   ok(/\.gather-card \.craft-out-name b \{[^}]*font-family: inherit/.test(cssNow),

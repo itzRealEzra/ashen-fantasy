@@ -1,6 +1,6 @@
 /* Ashen Fantasy — vanilla JS state machine: username -> roots -> main */
 const $ = (id) => document.getElementById(id);
-const CLIENT_VERSION = "0.9.30"; // must match server.py server_version + footer
+const CLIENT_VERSION = "0.9.31"; // must match server.py server_version + footer
 const state = {
   username: localStorage.getItem("af_user") || "",
   rollId: null,
@@ -1901,6 +1901,7 @@ function renderGather() {
       : `<button class="btn" data-herb="${h.id}"${active ? " disabled" : ""}>${active ? "Gathering…" : "Gather"}</button>`;
     return `<div class="craft-card gather-card${locked ? " locked" : ""}">
       <div class="craft-out">
+        ${iconHtml(h.img, h.glyph || "🌿", "art-craft-out")}
         <div class="craft-out-text">
           <div class="craft-out-name"><b>${esc(h.name)}</b></div>
           <small class="gather-rarity" style="color:${color}">${esc(h.rarity)}</small>

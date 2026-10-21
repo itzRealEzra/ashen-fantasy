@@ -17,8 +17,8 @@ import mimetypes
 # Single source of truth for the build number. Must match CLIENT_VERSION in
 # public/js/app.js and the footer in public/index.html. A player whose saved
 # patch_version differs gets one patch-note mail when they next check mail.
-SERVER_VERSION = "0.9.30"
-CLIENT_VERSION = "0.9.30"  # for /status only; the client keeps its own copy
+SERVER_VERSION = "0.9.31"
+CLIENT_VERSION = "0.9.31"  # for /status only; the client keeps its own copy
 STARTED_AT = time.time()
 RESTARTED_AT = 0
 RESTART_SEQ = 0
@@ -698,7 +698,7 @@ def mastery_definitions():
 # Resolved per request, not at import: dropping a new picture into the folder
 # must show up on refresh without restarting the server.
 # ----------------------------------------------------------------------------
-_ASSET_DIRS = ("enemies", "items", "icons")
+_ASSET_DIRS = ("enemies", "items", "icons", "herb")
 # Pictures the client can show. Both PNG and JPEG are picked up, so art can be
 # dropped in either format.
 _ASSET_EXTS = (".png", ".jpg", ".jpeg")
@@ -739,11 +739,19 @@ def _apply_art(art):
             else:
                 m.pop("img", None)
     for it in ITEMS:
-        # assets/items/<id>.png first, then the icons/ override if this item
-        # has one. Art from icons/ is white line art rather than a colour
-        # illustration, so it is flagged `lineArt` and the client dims it to
+        # The herbs keep their pictures in assets/herb, the rest in
+        # assets/items. Then the icons/ override if this item has one. Art
+        # from icons/ is white line art rather than a colour illustration, so
+        # it is flagged `lineArt` and the client dims it to
         # match the other slot icons instead of rendering it as solid white.
+        own = False
         p = art.get("items/" + it["id"])
+        if p:
+            own = True
+        if not p and it.get("kind") == "herb":
+            p = art.get("herb/" + it["id"])
+            if p:
+                own = True
         over = _ITEM_ICON_FILES.get(it["id"])
         if not p and over:
             p = art.get("icons/" + over)
@@ -763,6 +771,10 @@ def _apply_art(art):
         else:
             it.pop("img", None)
             it.pop("lineArt", None)
+        # Whether the picture is the item's own or the holder standing in for
+        # it: the client shows the holder in a bag, but a list that means
+        # something (the herbs) would rather have the leaf glyph.
+        it["own_art"] = bool(own)
 
 
 def icons_map():
@@ -1327,6 +1339,8 @@ class Handler(BaseHTTPRequestHandler):
 
         if path == "/api/herbs":
             # The herb table and where the player's herbalist rank stands.
+            # The pictures are resolved live, like every other picture.
+            _apply_art(_asset_cache())
             qs = parse_qs(parsed.query)
             username = (qs.get("username") or [""])[0].strip()
             stored = PLAYERS.get(username)
@@ -1339,10 +1353,12 @@ class Handler(BaseHTTPRequestHandler):
             for h in HERBS.values():
                 need = int(HERB_UNLOCKS.get(h.get("rarity", "Common"), 1))
                 base = float(h.get("time", 10) or 10)
+                item = ITEM_BY_ID.get(h["id"]) or {}
                 herbs.append({"id": h["id"], "name": h["name"], "rarity": h.get("rarity", "Common"),
                               "element": h.get("element", ""), "time": base,
                               "now": round(max(0.5, base * (1.0 - time_red)), 1),
                               "desc": h.get("desc") or "",
+                              "img": item.get("img", "") if item.get("own_art") else "",
                               "need_rank": need, "locked": rank < need})
             return self._send_json({
                 "ok": True, "herbs": herbs, "rank": rank, "level": within,
