@@ -550,6 +550,9 @@ try:
     st, j = req("/api/herbs?username=gatherer")
     ok(st == 200 and len(j["herbs"]) == 40, "the herb list is served")
     ok(any(h["locked"] for h in j["herbs"]), "the rarer herbs are locked at first")
+    ok(all(h.get("desc") for h in j["herbs"]), "every herb says what it is")
+    ok(all(h.get("element") and h.get("time") for h in j["herbs"]),
+       "every herb says its element and its time")
 
     fresh("gatherer", mastery={"herbs": 0})
     st, j = req("/api/gather", {"username": "gatherer", "herb_id": "herb_wild_ginseng"})

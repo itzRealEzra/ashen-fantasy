@@ -289,15 +289,10 @@ input { background: #0e0e14; border: 1px solid var(--line); color: var(--ink); p
 /* gathering panel */
 .gather-status { border: 1px solid var(--line); background: var(--panel2); padding: 10px 14px; margin: 10px 0; display: flex; align-items: center; gap: 10px; }
 .gather-status .btn { margin-left: auto; }
-.herb-groups { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 10px; }
-.herb-group { border: 1px solid var(--line); background: var(--panel); padding: 10px 12px; }
-.herb-group h3 { margin: 0 0 8px; font-size: 14px; color: var(--gold2); font-family: var(--font-brush); letter-spacing: 2px; }
-.herb-row { display: flex; align-items: center; gap: 8px; padding: 4px 0; border-bottom: 1px dashed var(--line); }
-.herb-row:last-child { border-bottom: none; }
-.herb-name { flex: 1; }
-.herb-name b { font-size: 14px; }
-.herb-name small { display: block; font-size: 11px; letter-spacing: 1px; }
-.herb-row.locked { opacity: .55; }
+/* The herb list reads like the craft bench: one card per herb, all of them. */
+.gather-card .craft-out-name b { font-size: 15px; }
+.gather-card.locked { opacity: .55; }
+.gather-card.locked:hover { border-color: var(--line); }
 .herb-lock { font-size: 11px; color: var(--red); letter-spacing: 1px; white-space: nowrap; }
 
 /* bottom-right notices (the forge and friends) */
@@ -305,6 +300,11 @@ input { background: #0e0e14; border: 1px solid var(--line); color: var(--ink); p
 .toast { background: #0e0e15; border: 1px solid var(--gold); color: var(--gold2); padding: 10px 18px; font-size: 15px; font-family: var(--font-brush); letter-spacing: 1px; box-shadow: 0 6px 22px rgba(0,0,0,.65); animation: toast-in .25s ease; }
 .toast-out { opacity: 0; transition: opacity .35s ease; }
 @keyframes toast-in { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
+/* A herb lands: the name in its own rarity colour, with the count. */
+.herb-toast { display: flex; align-items: center; gap: 10px; border-color: var(--line); }
+.herb-toast-glyph { font-size: 18px; }
+.herb-toast-name { font-size: 16px; }
+.herb-toast-count { color: var(--gold2); font-size: 15px; }
 .art-craft { width: 20px; height: 20px; }
 .art-craft-out { width: 40px; height: 40px; }
 .inv-stats { color: var(--gold2); font-size: 13px; }

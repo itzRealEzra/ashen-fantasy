@@ -1,6 +1,6 @@
 /* Ashen Fantasy — vanilla JS state machine: username -> roots -> main */
 const $ = (id) => document.getElementById(id);
-const CLIENT_VERSION = "0.9.26"; // must match server.py server_version + footer
+const CLIENT_VERSION = "0.9.27"; // must match server.py server_version + footer
 const state = {
   username: localStorage.getItem("af_user") || "",
   rollId: null,
@@ -303,7 +303,13 @@ function normalizePlayer(p) {
   p.dao_insight = p.dao_insight | 0;
   p.spirit_stones = Math.max(0, Math.floor(+p.spirit_stones || 0));
   if (!p.mastery || typeof p.mastery !== "object") p.mastery = {};
-  for (const t of MASTERY_TRACKS) p.mastery[t] = Math.max(0, p.mastery[t] | 0);
+  for (const t of MASTERY_TRACKS) {
+    const raw = p.mastery[t];
+    // A track the server sent whole (xp, level, rank) keeps its shape; a
+    // plain XP figure stays a plain figure.
+    if (raw && typeof raw === "object") p.mastery[t] = { ...raw, xp: Math.max(0, raw.xp | 0) };
+    else p.mastery[t] = Math.max(0, raw | 0);
+  }
   if (!Array.isArray(p.skills)) p.skills = [];
   p.skills = p.skills.filter(id => typeof id === "string").slice(0, 3);
   while (p.skills.length < 3) p.skills.push(null);
@@ -470,9 +476,9 @@ function renderChar(p) {
 
 // The four mastery tracks, on the character panel: rank, level, the road to
 // the next level and what that level buys.
-function masteryPanel(p) {
+function masteryRows(p) {
   const m = (p && p.mastery) || {};
-  const rows = MASTERY_TRACKS.map(t => {
+  return MASTERY_TRACKS.map(t => {
     const raw = m[t];
     // The local track is a plain XP figure; the server sends the whole track.
     const track = raw && typeof raw === "object" ? raw : null;
@@ -501,7 +507,20 @@ function masteryPanel(p) {
       <div class="mastery-bonus muted">${esc(MASTERY_BONUS_TEXT[t] ? MASTERY_BONUS_TEXT[t](lvl) : "")}</div>
     </div>`;
   }).join("");
-  return `<h3 class="mastery-title">Mastery</h3><div class="mastery-list">${rows}</div>`;
+}
+
+function masteryPanel(p) {
+  return `<h3 class="mastery-title">Mastery</h3><div class="mastery-list" id="mastery-list">${masteryRows(p)}</div>`;
+}
+
+// The masteries move while the player is doing something else -- gathering
+// teaches the herbalist track every few seconds. The bars must follow
+// without waiting for a reload, so the rows are repainted in place.
+function refreshMasteryPanel() {
+  const p = state.player;
+  const host = $("mastery-list");
+  if (!host || !p) return;
+  host.innerHTML = masteryRows(p);
 }
 
 // Combat stats derived from spiritual-root foundation + realm + gear.
@@ -833,11 +852,12 @@ function sortBag(entries, p) {
   return entries;
 }
 let tipItem = null, tipHideTimer = null;
-// Item rarity ladder (Common -> Mythic), mirroring ITEM_RARITY_COLORS in
+// Item rarity ladder (Common -> Primordial), mirroring ITEM_RARITY_COLORS in
 // server.py. Roots keep their own Mortal -> Primordial ladder; this one is
 // only for items.
 const ITEM_RARITY_COLORS = { Common: "#9aa0a6", Uncommon: "#7cb342", Rare: "#42a5f5",
-  Epic: "#ab47bc", Legendary: "#ffb300", Mythic: "#ff3d00" };
+  Epic: "#ab47bc", Legendary: "#ffb300", Mythic: "#ff3d00",
+  Divine: "#00e5ff", Primordial: "#ff2fd0" };
 // Default item rarity when the server sends none.
 const ITEM_DEFAULT_RARITY = "Common";
 // Slots worn in pairs. Two rings are the same slot worn twice, not two
@@ -998,7 +1018,7 @@ const STAT_DISPLAY_NAMES = {
 };
 const PERCENT_STAT_KEYS = new Set(["crit", "critDmg", "qi_rate_pct", "cdr", "agility", "luck", "evasion"]);
 // The rarity ladder, in order, so the bag can sort by it.
-const ITEM_RARITY_ORDER = ["Common", "Uncommon", "Rare", "Epic", "Legendary", "Mythic"];
+const ITEM_RARITY_ORDER = ["Common", "Uncommon", "Rare", "Epic", "Legendary", "Mythic", "Divine", "Primordial"];
 
 function formatStatValue(key, value, withSign = false) {
   const n = Number(value) || 0;
@@ -1083,8 +1103,11 @@ function itemTipHtml(itemId, ctx) {
     else acts += `<button data-act="use">Use</button><button data-act="elixir">Equip</button>`;
   }
   // Selling is a bag thing: what is worn or loaded is not for sale.
+  // "Sell all" only earns its place when there is more than one to sell;
+  // with a single copy it would say the same thing as "Sell".
   if (!ctx.plain && !ctx.unequip && ctx.unload == null && owned > 0 && it.value) {
-    acts += `<button data-act="sell">Sell</button><button data-act="sell-all">Sell all</button>`;
+    acts += `<button data-act="sell">Sell</button>`;
+    if (owned > 1) acts += `<button data-act="sell-all">Sell all</button>`;
   }
   if (acts) h += `<div class="tip-actions">${acts}</div>`;
   return h;
@@ -1552,7 +1575,11 @@ function masteryTitle(track, level) {
 function masteryXp(track, p) {
   const pl = p || (state && state.player);
   const m = (pl && pl.mastery) || {};
-  return Math.max(0, m[track] | 0);
+  const raw = m[track];
+  // The server sends the whole track (xp, level, rank); the local copy may be
+  // a plain XP figure. Both are read the same way.
+  if (raw && typeof raw === "object") return Math.max(0, raw.xp | 0);
+  return Math.max(0, raw | 0);
 }
 
 // How much a kill teaches: the stronger the beast, the more it teaches.
@@ -1571,7 +1598,7 @@ function applyMasteryXp(track, xp) {
   const after = masteryLevel(p.mastery[track]);
   if (after > before) masteryPopup(track, before, after);
   // The character panel shows the masteries: it must not wait for a reload.
-  renderChar(p);
+  refreshMasteryPanel();
   return after;
 }
 
@@ -1717,29 +1744,35 @@ function renderGather() {
     fetchHerbs().then(() => renderGather());
     return;
   }
-  const byRarity = {};
-  for (const h of HERBS) (byRarity[h.rarity] = byRarity[h.rarity] || []).push(h);
-  const groups = Object.keys(byRarity).map(rarity => {
-    const rows = byRarity[rarity].map(h => {
-      const locked = h.locked;
-      const active = gathering && gathering.herbId === h.id;
-      return `<div class="herb-row${locked ? " locked" : ""}">
-        <div class="herb-name"><b>${esc(h.name)}</b><small class="muted">${esc(h.element)} · ${h.time}s</small></div>
-        ${locked
-          ? `<span class="herb-lock">Needs rank ${h.need_rank}</span>`
-          : `<button class="btn" data-herb="${h.id}"${active ? " disabled" : ""}>${active ? "Gathering…" : "Gather"}</button>`}
-      </div>`;
-    }).join("");
-    return `<div class="herb-group"><h3>${esc(rarity)}</h3>${rows}</div>`;
+  // Every herb gets its own card, the whole list, the way the craft bench
+  // shows every recipe: nothing is folded away behind a heading.
+  const cards = HERBS.map(h => {
+    const locked = h.locked;
+    const active = gathering && gathering.herbId === h.id;
+    const color = ITEM_RARITY_COLORS[h.rarity] || ITEM_RARITY_COLORS[ITEM_DEFAULT_RARITY];
+    const action = locked
+      ? `<span class="herb-lock">Needs rank ${h.need_rank}</span>`
+      : `<button class="btn" data-herb="${h.id}"${active ? " disabled" : ""}>${active ? "Gathering…" : "Gather"}</button>`;
+    return `<div class="craft-card gather-card${locked ? " locked" : ""}">
+      <div class="craft-out">
+        <div class="craft-out-text">
+          <div class="craft-out-name"><b style="color:${color}">${esc(h.name)}</b></div>
+          <small class="muted">${esc(h.rarity)}</small>
+        </div>
+        <span class="craft-xp">${esc(h.element)} · ${h.time}s</span>
+      </div>
+      <p class="craft-note muted">${esc(h.desc || "")}</p>
+      <div class="craft-actions">${action}</div>
+    </div>`;
   }).join("");
   const status = gathering
     ? `<div class="gather-status">Gathering — <b>${esc((HERBS.find(h => h.id === gathering.herbId) || {}).name || "")}</b> <button class="btn" id="gather-stop">Stop</button></div>`
     : `<div class="gather-status muted">Pick a node and the gathering goes on by itself. Stop it whenever you like.</div>`;
   root.innerHTML =
     `<h2>Gathering</h2>` +
-    `<p class="muted">Herbalist rank ${herbRank} · ${esc(herbRankName)} · level ${herbLevel}</p>` +
+    `<p class="muted" id="gather-rank">Herbalist rank ${herbRank} · ${esc(herbRankName)} · level ${herbLevel}</p>` +
     status +
-    `<div class="herb-groups">${groups}</div>`;
+    `<div class="craft-list">${cards}</div>`;
   root.querySelectorAll("[data-herb]").forEach(el => el.onclick = () => startGathering(el.dataset.herb));
   const stop = $("gather-stop");
   if (stop) stop.onclick = () => stopGathering();
@@ -1777,18 +1810,30 @@ async function gatherOnce(herbId) {
   }
   if (j.ok && j.player) {
     p.inventory = j.player.inventory;
-    const names = Object.keys(j.gathered || {}).map(id =>
-      `${j.gathered[id]}x ${(ITEM_BY_ID[id] || {}).name || id}`);
+    const names = [];
+    for (const id of Object.keys(j.gathered || {})) {
+      const n = j.gathered[id];
+      names.push(`${n}x ${(ITEM_BY_ID[id] || {}).name || id}`);
+      // The herb says so in the bottom-right corner, in its own colour.
+      herbToast(id, n);
+    }
     if (names.length) cEvent("Gathered " + names.join(", ") + ".");
     saveLocal(p);
     renderInventory();
-    // the herbalist rank moved
+    // The herbalist track moved: the masteries must show it at once, not on
+    // the next reload.
     if (j.mastery && j.mastery.herbs) {
       const h = j.mastery.herbs;
+      p.mastery = p.mastery || {};
+      p.mastery.herbs = h;
       if (h.rank !== herbRank || h.within !== herbLevel) {
         herbRank = h.rank; herbLevel = h.within; herbRankName = h.rank_name || "";
         cEvent(`${herbRankName}, level ${herbLevel}.`);
       }
+      refreshMasteryPanel();
+      const rankLine = $("gather-rank");
+      if (rankLine) rankLine.textContent =
+        `Herbalist rank ${herbRank} · ${herbRankName} · level ${herbLevel}`;
     }
     // and again, until the player stops it
     gathering.timer = setTimeout(() => gatherOnce(herbId), Math.max(200, j.next_ms || 1000));
@@ -1920,6 +1965,24 @@ function renderWork(rootId, kind) {
       if (n > 0) craftRecipe(r.id, n);
     };
   });
+}
+
+// A herb lands: the bottom-right corner says so, in the herb's own colour.
+// The bag changes under the cursor, so the notice cannot wait for the log.
+function herbToast(itemId, count) {
+  const it = ITEM_BY_ID[itemId] || {};
+  const color = ITEM_RARITY_COLORS[it.rarity] || "var(--gold2)";
+  const el = document.createElement("div");
+  el.className = "toast herb-toast";
+  el.innerHTML =
+    `<span class="herb-toast-glyph">${esc(it.glyph || "🌿")}</span>` +
+    `<span class="herb-toast-name" style="color:${color}">${esc(it.name || itemId)}</span>` +
+    `<span class="herb-toast-count">+${count | 0}</span>`;
+  toastBox().appendChild(el);
+  setTimeout(() => {
+    el.classList.add("toast-out");
+    setTimeout(() => { if (el.remove) el.remove(); }, 400);
+  }, 3200);
 }
 
 // One craft at a time: a second click while the first is still at the forge

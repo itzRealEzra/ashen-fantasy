@@ -34,7 +34,7 @@ const els = {
   "alchemy-root": mkEl(), "cook-root": mkEl(), "skills-root": mkEl(),
   "equipped-skills": mkEl(), "loot-rows": mkEl(), "kill-count": mkEl(),
   "battle-status": mkEl(), "battle-kit": mkEl(), "item-tip": mkEl(),
-  "mail-badge": mkEl(), "gather-root": mkEl(),
+  "mail-badge": mkEl(), "gather-root": mkEl(), "mastery-list": mkEl(),
 };
 const calls = { cEvents: [], saves: [], enemies: [], notices: [], renderInv: 0, timeouts: [], fetch: null, toasts: [], popups: [], fetches: 0 };
 const state = { username: "tester", player: null };
@@ -49,6 +49,7 @@ const ITEM_FIXTURE = {
   rat_fur: { id: "rat_fur", name: "Rat Fur", kind: "material", slot: null, glyph: "✦", rarity: "Common", desc: "", stats: { ...ZERO_STATS } },
   wolf_fang: { id: "wolf_fang", name: "Wolf Fang", kind: "material", slot: null, glyph: "✦", rarity: "Uncommon", desc: "", stats: { ...ZERO_STATS } },
   beast_core_fragment: { id: "beast_core_fragment", name: "Beast Core Fragment", kind: "material", slot: null, glyph: "✦", rarity: "Rare", desc: "", stats: { ...ZERO_STATS } },
+  herb_wild_ginseng: { id: "herb_wild_ginseng", name: "Wild Ginseng", kind: "herb", slot: null, glyph: "🌿", rarity: "Common", desc: "", value: 6, element: "Earth", time: 6, stats: { ...ZERO_STATS } },
 };
 const mkRealm = (idx, o) => ({
   idx, name: o.name || ("R" + idx), realm: o.name || ("R" + idx), layer: 0,
@@ -140,7 +141,8 @@ const parts = [
   grab(/const ELIXIR_SHAPES = \[[\s\S]*?\n\];/, "ELIXIR_SHAPES"),
   grab(/function elixirPreferredSlot\(it\) \{[\s\S]*?\n\}/, "elixirPreferredSlot"),
   grab(/function elixirSlots\(\) \{[\s\S]*?\n\}/, "elixirSlots"),
-  grab(/const ITEM_RARITY_COLORS = \{[\s\S]*?Mythic: "#ff3d00" \};/, "ITEM_RARITY_COLORS"),
+  grab(/const ITEM_RARITY_COLORS = \{[\s\S]*?Primordial: "#ff2fd0" \};/, "ITEM_RARITY_COLORS"),
+  grab(/const ITEM_DEFAULT_RARITY = "[A-Za-z]+";/, "ITEM_DEFAULT_RARITY"),
   grab(/const SLOT_TYPE_LABELS = \{[\s\S]*?\n\};/, "SLOT_TYPE_LABELS"),
   grab(/function slotTypeLabel\(s\) \{[\s\S]*?\n\}/, "slotTypeLabel"),
   grab(/function bagTabOf\(it\) \{[\s\S]*?\n\}/, "bagTabOf"),
@@ -181,6 +183,9 @@ const parts = [
   grab(/function applyMasteryXp\(track, xp\) \{[\s\S]*?\n\}/, "applyMasteryXp"),
   grab(/function masteryPopup\(track, fromLevel, toLevel\) \{[\s\S]*?\n\}/, "masteryPopup"),
   grab(/function masteryPanel\(p\) \{[\s\S]*?\n\}/, "masteryPanel"),
+  grab(/function masteryRows\(p\) \{[\s\S]*?\n\}/, "masteryRows"),
+  grab(/function refreshMasteryPanel\(\) \{[\s\S]*?\n\}/, "refreshMasteryPanel"),
+  grab(/function herbToast\(itemId, count\) \{[\s\S]*?\n\}/, "herbToast"),
   grab(/function closeSidebar\(\) \{[\s\S]*?\n\}/, "closeSidebar"),
   grab(/function renderWork\(rootId, kind\) \{[\s\S]*?\n\}/, "renderWork"),
   grab(/let crafting = false;/, "crafting"),
@@ -839,8 +844,10 @@ state.player = basePlayer();
   state.player = basePlayer();
   state.player.inventory = {};
   lib.setHerbs([
-    { id: "herb_wild_ginseng", name: "Wild Ginseng", rarity: "Common", element: "Earth", time: 6, need_rank: 1, locked: false },
-    { id: "herb_crimson_ginseng", name: "Crimson Ginseng", rarity: "Rare", element: "Fire", time: 16, need_rank: 4, locked: true },
+    { id: "herb_wild_ginseng", name: "Wild Ginseng", rarity: "Common", element: "Earth", time: 6,
+      desc: "The root every beginner pulls first.", need_rank: 1, locked: false },
+    { id: "herb_crimson_ginseng", name: "Crimson Ginseng", rarity: "Rare", element: "Fire", time: 16,
+      desc: "Red as a banked coal.", need_rank: 4, locked: true },
   ]);
   lib.setHerbRank(2, 3, "Apprentice Herbalist");
   lib.renderGather();
@@ -849,6 +856,13 @@ state.player = basePlayer();
   ok(/Crimson Ginseng/.test(gatherHtml), "a locked herb is still listed");
   ok(/Needs rank 4/.test(gatherHtml), "a locked herb says which rank opens it");
   ok(/data-herb="herb_wild_ginseng"/.test(gatherHtml), "a herb you can gather has a button");
+  // The list is not compacted: every herb is a card of its own, the whole
+  // list, the way the craft bench shows every recipe.
+  ok((gatherHtml.match(/gather-card/g) || []).length === 2, "every herb gets its own card");
+  ok(!/herb-group/.test(gatherHtml), "the herbs are not folded into rarity groups");
+  ok(/The root every beginner pulls first\./.test(gatherHtml), "the card tells what the herb is");
+  ok(/Earth · 6s/.test(gatherHtml), "the card shows the element and the time");
+  ok(/Common/.test(gatherHtml) && /Rare/.test(gatherHtml), "the card shows the rarity");
 
   // Gathering runs by itself until the player stops it.
   calls.fetch = async (url, opts) => {
@@ -859,9 +873,19 @@ state.player = basePlayer();
       player: { ...state.player, inventory: { herb_wild_ginseng: 1 } } }) };
   };
   calls.cEvents.length = 0;
+  calls.popups.length = 0;
+  els["mastery-list"].innerHTML = "";
   await lib.startGathering("herb_wild_ginseng");
   ok(state.player.inventory.herb_wild_ginseng === 1, "the gathered herb lands in the bag");
   ok(calls.cEvents.some(m => /Gathered/.test(m)), "the gathering is reported");
+  // The herb says so in the bottom-right corner.
+  ok(calls.popups.some(h => /Wild Ginseng/.test(h) && /\+1/.test(h)),
+     "the herb pops up in the corner");
+  // And the masteries move while the player watches.
+  ok(state.player.mastery.herbs && state.player.mastery.herbs.xp === 20,
+     "the herbalist track is updated at once");
+  ok(/Novice Herbalist/.test(els["mastery-list"].innerHTML),
+     "the mastery panel is repainted live");
   lib.stopGathering();
   ok(lib.getGathering() === null, "stopping ends the gathering");
 
@@ -875,6 +899,16 @@ state.player = basePlayer();
   calls.fetch = null;
 
   // ============ 6m. selling, the mail badge, the difficulty colour ============
+  // ============ 6o. "Sell all" only when there is more than one ============
+  state.player = basePlayer();
+  state.player.inventory = { herb_wild_ginseng: 1 };
+  const oneTip = lib.itemTipHtml("herb_wild_ginseng", {});
+  ok(/data-act="sell"/.test(oneTip), "a single copy can still be sold");
+  ok(!/data-act="sell-all"/.test(oneTip),
+     "one copy has no 'Sell all' to click -- it would say the same thing");
+  state.player.inventory = { herb_wild_ginseng: 3 };
+  const manyTip = lib.itemTipHtml("herb_wild_ginseng", {});
+  ok(/data-act="sell-all"/.test(manyTip), "several copies can be sold in one go");
   state.player = basePlayer();
   state.player.inventory = { rat_fur: 4 };
   state.player.spirit_stones = 0;
@@ -1110,11 +1144,11 @@ state.player = basePlayer();
      /<span class="glyph">/.test(lib.iconHtml(null, "✦", "art-slot")),
     "icon renders art when present, emoji otherwise");
 
-  // ============ 12. item rarity ladder (Common -> Mythic) ============
+  // ============ 12. item rarity ladder (Common -> Primordial) ============
   const RARITY_KEYS = Object.keys(lib.ITEM_RARITY_COLORS);
-  ok(["Common", "Uncommon", "Rare", "Epic", "Legendary", "Mythic"].every(k => RARITY_KEYS.includes(k)),
-    "item rarity ladder is Common -> Mythic");
-  ok(!RARITY_KEYS.some(k => k === "Mortal" || k === "Primordial"),
+  ok(["Common", "Uncommon", "Rare", "Epic", "Legendary", "Mythic", "Divine", "Primordial"].every(k => RARITY_KEYS.includes(k)),
+    "item rarity ladder is Common -> Primordial");
+  ok(!RARITY_KEYS.some(k => k === "Mortal"),
     "the old root rarity names are gone from the item ladder");
   ok(lib.ITEM_RARITY_COLORS.Mythic === "#ff3d00" && lib.ITEM_RARITY_COLORS.Legendary === "#ffb300" &&
      lib.ITEM_RARITY_COLORS.Epic === "#ab47bc",

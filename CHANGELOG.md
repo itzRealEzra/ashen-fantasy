@@ -11,6 +11,30 @@ and push to `main` on https://github.com/itzRealEzra/ashen-fantasy.
 
 ## [Unreleased]
 
+## [0.9.27] - 2026-10-21
+### Added
+- **The herb says so in the corner.** Every herb that lands pops up in the
+  bottom-right stack, in its own rarity colour, with the count -- the bag
+  changes under the cursor, so the notice cannot wait for the log.
+- **The herbs say what they are.** Every one of the forty herbs now carries
+  a line of its own in `data/herbs_data.json`, and the gather panel shows it
+  under the name.
+
+### Fixed
+- **The masteries now move while you watch.** The herbalist track is written
+  into the character panel the moment a herb is gathered, instead of waiting
+  for a reload -- the same for every other track.
+- **The gather list is no longer compacted.** The herbs were folded into
+  eight rarity groups; now every herb is a card of its own, the whole list,
+  the way the craft bench shows every recipe:
+  name and rarity, what the herb is, its element and its time, and the
+  Gather button.
+- **"Sell all" only shows when there is something to sell all.** With a
+  single copy the button said the same thing as "Sell", so it is gone; with
+  several copies it stays.
+- The client's item rarity ladder learned the two new rungs: Divine and
+  Primordial, so the rarest herbs carry their own colour.
+
 ## [0.9.26] - 2026-10-20
 ### Added
 - **Herbs, and the gathering that finds them.** A `Gather` tab lists the

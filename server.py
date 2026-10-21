@@ -17,8 +17,8 @@ import mimetypes
 # Single source of truth for the build number. Must match CLIENT_VERSION in
 # public/js/app.js and the footer in public/index.html. A player whose saved
 # patch_version differs gets one patch-note mail when they next check mail.
-SERVER_VERSION = "0.9.26"
-CLIENT_VERSION = "0.9.26"  # for /status only; the client keeps its own copy
+SERVER_VERSION = "0.9.27"
+CLIENT_VERSION = "0.9.27"  # for /status only; the client keeps its own copy
 STARTED_AT = time.time()
 RESTARTED_AT = 0
 RESTART_SEQ = 0
@@ -516,8 +516,8 @@ MATERIALS = [{"id": _slug(name), "name": name, "kind": "material", "slot": None,
 # from data/herbs_data.json, so the world of herbs lives in one file.
 HERB_ITEMS = [{"id": h["id"], "name": h["name"], "kind": "herb", "slot": None,
                "glyph": "🌿", "rarity": h.get("rarity", "Common"),
-               "desc": "A %s herb of the %s. Gathered, never found lying about."
-                                          % (h.get("rarity", "humble").lower(), h.get("element", "wild").lower()),
+               "desc": h.get("desc") or ("A %s herb of the %s. Gathered, never found lying about."
+                                        % (h.get("rarity", "humble").lower(), h.get("element", "wild").lower())),
                "element": h.get("element", ""), "time": h.get("time", 10),
                "stats": _stat_block()} for h in HERBS.values()]
 
@@ -1367,6 +1367,7 @@ class Handler(BaseHTTPRequestHandler):
                 need = int(HERB_UNLOCKS.get(h.get("rarity", "Common"), 1))
                 herbs.append({"id": h["id"], "name": h["name"], "rarity": h.get("rarity", "Common"),
                               "element": h.get("element", ""), "time": h.get("time", 10),
+                              "desc": h.get("desc") or "",
                               "need_rank": need, "locked": rank < need})
             return self._send_json({
                 "ok": True, "herbs": herbs, "rank": rank, "level": within,
