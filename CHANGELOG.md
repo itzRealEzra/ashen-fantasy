@@ -11,6 +11,15 @@ and push to `main` on https://github.com/itzRealEzra/ashen-fantasy.
 
 ## [Unreleased]
 
+## [0.9.21] - 2026-10-20
+### Added
+- **The elixir, the pill and the meal are in the fight.** The three
+  consumable slots now sit in the battle panel -- under the techniques, above
+  the loot log -- each showing its own picture, its name and how many are
+  left. A slot with something in it is lit and can be clicked to drink it
+  without leaving the hunt; an empty one shows its own art and stays quiet.
+  The counts follow the bag as you use them.
+
 ## [0.9.20] - 2026-10-20
 ### Fixed
 - **The Skills tab froze the page.** When the technique table came back empty

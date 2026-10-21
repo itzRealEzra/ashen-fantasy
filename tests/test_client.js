@@ -32,7 +32,7 @@ const els = {
   "p-stones": mkEl(), "enemy-back": mkEl(), "craft-root": mkEl(),
   "alchemy-root": mkEl(), "cook-root": mkEl(), "skills-root": mkEl(),
   "equipped-skills": mkEl(), "loot-rows": mkEl(), "kill-count": mkEl(),
-  "battle-status": mkEl(),
+  "battle-status": mkEl(), "battle-kit": mkEl(),
 };
 const calls = { cEvents: [], saves: [], enemies: [], notices: [], renderInv: 0, timeouts: [], fetch: null, toasts: [], popups: [], fetches: 0 };
 const state = { username: "tester", player: null };
@@ -91,6 +91,9 @@ const parts = [
   grab(/function useSkills\(p, m\) \{[\s\S]*?\n\}/, "useSkills"),
   grab(/function fireSkill\(p, m, s, d\) \{[\s\S]*?\n\}/, "fireSkill"),
   grab(/let invSort = "[a-z]+";/, "invSort"),
+  grab(/function paintBattleKit\(\) \{[\s\S]*?\n\}/, "paintBattleKit"),
+  grab(/function iconUrl\(name\) \{[\s\S]*?\n\}/, "iconUrl"),
+  grab(/function iconImg\(name, cls\) \{[\s\S]*?\n\}/, "iconImg"),
   grab(/let SKILLS = \{\};/, "SKILLS"),
   grab(/let SKILLS_LOADED = false;/, "SKILLS_LOADED"),
   grab(/let SKILL_SLOTS = \d+;/, "SKILL_SLOTS"),
@@ -210,6 +213,7 @@ const prelude = `
     body: { appendChild(el) { if (el.innerHTML) calls.popups.push(el.innerHTML); } },
   };
   const setTimeout = (fn, ms) => { calls.timeouts.push({ fn, ms }); return calls.timeouts.length; };
+  let ICON = {};
   const fetch = (...a) => { calls.fetches++; return calls.fetch ? calls.fetch(...a) : Promise.resolve({ ok: false, json: async () => ({ ok: false }) }); };
 `;
 
@@ -229,7 +233,7 @@ const lib = new Function("__", prelude + parts + `
     masteryLevel, masteryRank, masteryNumeral, masteryTitle, masteryXp, masteryKillXp,
     activeBuffs, skillCooldown, equippedSkills, useSkills, fireSkill, sortBag,
     BAG_SORTS, ITEM_RARITY_ORDER, renderSkills, toggleSkill, SKILL_SLOTS, paintCombat,
-    fetchSkills, setSkillsLoaded: v => { SKILLS_LOADED = v; },
+    paintBattleKit, iconUrl, iconImg, fetchSkills, setSkillsLoaded: v => { SKILLS_LOADED = v; },
     setSort: s => { invSort = s; },
     setSkills: s => { SKILLS = s; },
     applyMasteryXp, masteryPopup, masteryPanel, masteryTotalXp, MASTERY_TRACKS,
@@ -780,6 +784,21 @@ state.player = basePlayer();
      "the carried techniques show in the battle");
   ok(/<div class="skill-bar" id="equipped-skills"><\/div>[\s\S]*<div class="loot-log">/.test(SRC),
      "the techniques sit above the loot log");
+
+  // ============ 6l. the elixir, the pill and the meal are in the fight ============
+  state.player = basePlayer();
+  state.player.elixirs = ["minor_vitality_elixir", "minor_qi_pill", "roasted_wild_rat_meat"];
+  state.player.inventory = {
+    minor_vitality_elixir: 2, minor_qi_pill: 3, roasted_wild_rat_meat: 1,
+  };
+  lib.paintBattleKit();
+  const kitHtml = els["battle-kit"].innerHTML;
+  ok(/Minor Vitality Elixir/.test(kitHtml), "the elixir is in the fight");
+  ok(/Minor Qi Pill/.test(kitHtml), "the pill is in the fight");
+  ok(/Roasted Wild Rat Meat/.test(kitHtml), "the meal is in the fight");
+  ok(/data-elixir="0"/.test(kitHtml) && /data-elixir="2"/.test(kitHtml),
+     "each kit slot knows which one it is");
+  ok(/2x/.test(kitHtml) && /3x/.test(kitHtml), "the kit counts what is left");
 
   // The skills panel must never spin: one ask for the manual, then an answer.
   lib.setSkills({});

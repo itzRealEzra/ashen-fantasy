@@ -1,6 +1,6 @@
 /* Ashen Fantasy — vanilla JS state machine: username -> roots -> main */
 const $ = (id) => document.getElementById(id);
-const CLIENT_VERSION = "0.9.20"; // must match server.py server_version + footer
+const CLIENT_VERSION = "0.9.21"; // must match server.py server_version + footer
 const state = {
   username: localStorage.getItem("af_user") || "",
   rollId: null,
@@ -1324,6 +1324,7 @@ function useConsumable(itemId) {
   renderChar(p);
   refreshCultPanel();
   updateQi(p);
+  paintBattleKit();   // the kit in the fight shows the new count
   syncPlayer(false);
 }
 
@@ -2023,6 +2024,7 @@ function renderCombat() {
     </div>` +
     `<div id="battle-status"></div>` +
     `<div class="skill-bar" id="equipped-skills"></div>` +
+    `<div class="battle-kit" id="battle-kit"></div>` +
     `<div class="loot-log"><h3>Loot log</h3><div class="loot-rows" id="loot-rows"></div>` +
     `<div class="kill-count" id="kill-count"></div></div>`;
   $("combat-leave").onclick = () => {
@@ -2054,6 +2056,30 @@ function paintBars() {
   setBar("ebar-fill", battle.ebar, true);
 }
 
+// The three consumable slots, as they stand right now: the elixir, the pill
+// and the meal. They sit in the fight so a hungry or wounded cultivator can
+// reach for them without leaving the hunt.
+function paintBattleKit() {
+  const root = $("battle-kit");
+  const p = state.player;
+  if (!root || !p) return;
+  const slots = elixirSlots();
+  root.innerHTML = slots.map((slot, i) => {
+    const iid = p.elixirs && p.elixirs[i];
+    const it = iid && ITEM_BY_ID[iid];
+    const n = iid ? (p.inventory[iid] || 0) : 0;
+    const usable = !!it && n > 0;
+    return `<div class="kit-slot${usable ? " ready" : ""}" data-elixir="${i}"${usable ? ` data-tip="${iid}"` : ` data-slot-name="${esc(slot.name)}" data-slot-type="${esc(slot.type)}"`}>` +
+      (it ? iconHtml(it.img, it.glyph, artCls(it, "art-slot")) : iconImg(slot.icon, "slot-icon")) +
+      `<span class="kit-name">${esc(it ? it.name : slot.name)}</span>` +
+      (it ? `<span class="kit-count">${n}x</span>` : "") +
+      `</div>`;
+  }).join("");
+  root.querySelectorAll("[data-elixir]").forEach(el => {
+    el.onclick = () => useElixir(+el.dataset.elixir);
+  });
+}
+
 function paintCombat() {
   paintBars();
   const m = battle.mob;
@@ -2074,6 +2100,7 @@ function paintCombat() {
     }).join("");
     sk.innerHTML = cards || `<span class="muted">No techniques carried</span>`;
   }
+  paintBattleKit();
   const lr = $("loot-rows");
   if (lr) lr.innerHTML = Object.keys(battle.loot).sort().map(k =>
     `<div><span>${esc(k)}</span><span>${battle.loot[k]}x</span></div>`).join("") ||

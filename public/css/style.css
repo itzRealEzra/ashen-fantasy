@@ -269,6 +269,14 @@ input { background: #0e0e14; border: 1px solid var(--line); color: var(--ink); p
 .skill-text p { font-size: 12px; line-height: 1.5; margin: 4px 0 0; }
 .skill-empty { color: var(--muted); font-size: 13px; padding: 10px 2px; }
 .skill-bar { display: flex; gap: 8px; flex-wrap: wrap; margin: 8px 0 2px; align-items: center; }
+.battle-kit { display: flex; gap: 8px; flex-wrap: wrap; margin: 6px 0 2px; }
+.kit-slot { position: relative; border: 1px solid var(--line); background: var(--panel2); padding: 4px 10px 4px 6px; display: flex; align-items: center; gap: 6px; cursor: default; }
+.kit-slot.ready { border-color: var(--gold); cursor: pointer; }
+.kit-slot.ready:hover { box-shadow: 0 0 6px rgba(240,212,154,.3); }
+.kit-slot .slot-icon, .kit-slot .art-slot { width: 22px; height: 22px; }
+.kit-name { font-size: 12px; color: var(--muted); letter-spacing: 1px; }
+.kit-slot.ready .kit-name { color: var(--gold2); }
+.kit-count { font-size: 11px; color: var(--gold2); }
 .skill-slot { position: relative; border: 1px solid var(--line); background: var(--panel2); padding: 4px 8px; min-width: 92px; overflow: hidden; }
 .skill-slot .skill-art { width: 26px; height: 26px; display: block; }
 .skill-name { font-size: 11px; letter-spacing: 1px; color: var(--gold2); }
