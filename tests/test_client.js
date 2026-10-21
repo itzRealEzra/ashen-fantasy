@@ -132,6 +132,7 @@ const parts = [
   grab(/function formatStatEntry\(key, value\) \{[\s\S]*?\n\}/, "formatStatEntry"),
   grab(/function playerMaxHp\(p\) \{ return derivedStats\(p\)\.hp; \}/, "playerMaxHp"),
   grab(/function equipTargets\(it\) \{[^}]*\}/, "equipTargets"),
+  grab(/function hiddenFromBag\(p\) \{[\s\S]*?\n\}/, "hiddenFromBag"),
   grab(/function bagGearAction\(itemId\) \{[\s\S]*?\n\}/, "bagGearAction"),
   grab(/function equipItem\(itemId\) \{[\s\S]*?\n\}/, "equipItem"),
   grab(/function unequipSlot\(slot\) \{[\s\S]*?\n\}/, "unequipSlot"),
@@ -168,7 +169,7 @@ const parts = [
   grab(/function toastBox\(\) \{[\s\S]*?\n\}/, "toastBox"),
   grab(/function toast\(msg\) \{[\s\S]*?\n\}/, "toast"),
   grab(/const MASTERY_TRACKS = \[[^\]]*\];/, "MASTERY_TRACKS"),
-  grab(/const MASTERY_RANKS = \[[^\]]*\];/, "MASTERY_RANKS"),
+  grab(/let MASTERY_DEFS = \{\};[\s\S]*?const MASTERY_FALLBACK_RANKS = \[[\s\S]*?\];/, "MASTERY_DEFS"),
   grab(/const MASTERY_NUMERALS = \[[^\]]*\];/, "MASTERY_NUMERALS"),
   grab(/const MASTERY_MAX_LEVEL = \d+;/, "MASTERY_MAX_LEVEL"),
   grab(/const MASTERY_XP_PER_KILL = \d+;/, "MASTERY_XP_PER_KILL"),
@@ -176,6 +177,11 @@ const parts = [
   grab(/function masteryTotalXp\(level\) \{[^\n]*\}/, "masteryTotalXp"),
   grab(/function masteryLevel\(xp\) \{[\s\S]*?\n\}/, "masteryLevel"),
   grab(/function masteryRank\(level\) \{[\s\S]*?\n\}/, "masteryRank"),
+  grab(/function masteryRankOf\(track, level\) \{[\s\S]*?\n\}/, "masteryRankOf"),
+  grab(/function masteryBonusText\(track, lvl\) \{[\s\S]*?\n\}/, "masteryBonusText"),
+  grab(/function masteryBodyBonus\(track, xp\) \{[\s\S]*?\n\}/, "masteryBodyBonus"),
+  grab(/async function fetchMasteryDefs\(\) \{[\s\S]*?\n\}/, "fetchMasteryDefs"),
+  grab(/function fmtSeconds\(v\) \{[\s\S]*?\n\}/, "fmtSeconds"),
   grab(/function masteryNumeral\(level\) \{[^\n]*\}/, "masteryNumeral"),
   grab(/function masteryTitle\(track, level\) \{[\s\S]*?\n\}/, "masteryTitle"),
   grab(/function masteryXp\(track, p\) \{[\s\S]*?\n\}/, "masteryXp"),
@@ -227,7 +233,7 @@ const prelude = `
   const cEvent = msg => calls.cEvents.push(msg);
   const saveLocal = p => calls.saves.push(p);
   const renderInventory = () => { calls.renderInv++; };
-  const notifyStatChange = (b, a) => calls.notices.push([b, a]);
+  const notifyStatChange = (b, a, title) => calls.notices.push([b, a, title]);
   const showBattleEnemies = msg => calls.enemies.push(msg);
   const document = {
     getElementById: () => null,
@@ -269,6 +275,7 @@ const lib = new Function("__", prelude + parts + `
     getGathering: () => gathering,
     setMailNewItems: v => { mailNewItems = v; },
     masteryLevel, masteryRank, masteryNumeral, masteryTitle, masteryXp, masteryKillXp,
+    masteryRankOf, masteryBonusText, masteryBodyBonus, fetchMasteryDefs, fmtSeconds,
     activeBuffs, skillCooldown, equippedSkills, useSkills, fireSkill, sortBag,
     BAG_SORTS, ITEM_RARITY_ORDER, renderSkills, toggleSkill, SKILL_SLOTS, paintCombat,
     paintBattleKit, iconUrl, iconImg, fetchSkills, setSkillsLoaded: v => { SKILLS_LOADED = v; },
@@ -281,6 +288,7 @@ const lib = new Function("__", prelude + parts + `
     setRecipes: r => { RECIPES = r; },
     mobStones, rollStones, onMobDeath,
     itemTipHtml, itemTypeLabel, bagTabOf, dropsFor, iconHtml, artCls, BAG_TABS, slotTypeLabel,
+    hiddenFromBag, advanceRealm,
     ITEM_BY_ID, gearBonus, derivedStats,
     ITEM_RARITY_COLORS,
     clickBreakthrough: () => els["breakthrough-btn"].onclick(),
@@ -664,13 +672,31 @@ state.player = basePlayer();
   ok(lib.masteryLevel(0) === 1, "mastery starts at level 1");
   ok(lib.masteryLevel(100) === 2, "100 XP is level 2");
   ok(lib.masteryLevel(300) === 3, "300 XP is level 3");
-  ok(lib.masteryLevel(485100) === 99, "mastery stops at level 99");
+  ok(lib.masteryLevel(485100) === 99, "485100 XP is level 99");
+  ok(lib.masteryLevel(714000) === 120, "mastery stops at level 120");
   ok(lib.masteryTitle("cooking", 10) === "Cooking Beginner X",
      "level 10 is Cooking Beginner X");
   ok(lib.masteryTitle("cooking", 11) === "Cooking Artisan I",
      "level 11 is Cooking Artisan I");
   ok(lib.masteryTitle("battle", 1) === "Battle Beginner I", "a fresh track is a Beginner I");
   ok(lib.masteryRank(99) === "Transcendent", "level 99 is the last rank");
+
+  // Every track reads like the herbalist track: a named rank, and the level
+  // inside it out of ten.
+  state.player = basePlayer();
+  state.player.mastery = {
+    cooking: { xp: 5500, level: 11, rank: 2, rank_name: "Apprentice Cook", within: 1, next: 100 },
+    alchemy: { xp: 0, level: 1, rank: 1, rank_name: "Novice Alchemist", within: 1, next: 100 },
+    crafting: { xp: 0, level: 1, rank: 1, rank_name: "Novice Smith", within: 1, next: 100 },
+    battle: { xp: 0, level: 1, rank: 1, rank_name: "Novice Hunter", within: 1, next: 100 },
+    herbs: { xp: 0, level: 1, rank: 1, rank_name: "Novice Herbalist", within: 1, next: 100 },
+  };
+  lib.renderChar(state.player);
+  const masteryHtml = els["char-sheet"].innerHTML;
+  ok(/Apprentice Cook I/.test(masteryHtml), "a track shows its own rank name");
+  ok(/Novice Alchemist I/.test(masteryHtml), "every track has a rank name");
+  ok(/Novice Hunter I/.test(masteryHtml), "the hunt track has a rank name too");
+  ok(/1\/10/.test(masteryHtml), "the level inside the rank is counted out of ten");
 
   state.player = basePlayer();
   state.player.mastery = { cooking: 0, alchemy: 0, crafting: 0, battle: 0 };
@@ -844,9 +870,9 @@ state.player = basePlayer();
   state.player = basePlayer();
   state.player.inventory = {};
   lib.setHerbs([
-    { id: "herb_wild_ginseng", name: "Wild Ginseng", rarity: "Common", element: "Earth", time: 6,
+    { id: "herb_wild_ginseng", name: "Wild Ginseng", rarity: "Common", element: "Earth", time: 6, now: 5.4,
       desc: "The root every beginner pulls first.", need_rank: 1, locked: false },
-    { id: "herb_crimson_ginseng", name: "Crimson Ginseng", rarity: "Rare", element: "Fire", time: 16,
+    { id: "herb_crimson_ginseng", name: "Crimson Ginseng", rarity: "Rare", element: "Fire", time: 16, now: 12.8,
       desc: "Red as a banked coal.", need_rank: 4, locked: true },
   ]);
   lib.setHerbRank(2, 3, "Apprentice Herbalist");
@@ -861,8 +887,11 @@ state.player = basePlayer();
   ok((gatherHtml.match(/gather-card/g) || []).length === 2, "every herb gets its own card");
   ok(!/herb-group/.test(gatherHtml), "the herbs are not folded into rarity groups");
   ok(/The root every beginner pulls first\./.test(gatherHtml), "the card tells what the herb is");
-  ok(/Earth · 6s/.test(gatherHtml), "the card shows the element and the time");
+  ok(/Earth · /.test(gatherHtml), "the card shows the element and the time");
+
   ok(/Common/.test(gatherHtml) && /Rare/.test(gatherHtml), "the card shows the rarity");
+  ok(/Earth · 5\.4s/.test(gatherHtml),
+     "the card shows the time the player actually waits, rank bonus included");
 
   // Gathering runs by itself until the player stops it.
   calls.fetch = async (url, opts) => {
@@ -909,6 +938,41 @@ state.player = basePlayer();
   state.player.inventory = { herb_wild_ginseng: 3 };
   const manyTip = lib.itemTipHtml("herb_wild_ginseng", {});
   ok(/data-act="sell-all"/.test(manyTip), "several copies can be sold in one go");
+
+  // ============ 6p. the bag keeps the spares, the realm reports its gains ============
+  // Equipping one of four must leave three in the bag, not empty it.
+  const bagPlayer = {
+    equipment: { chest: "linen_robe", ring1: "copper_ring", ring2: null },
+    elixirs: [], inventory: { linen_robe: 3, copper_ring: 4 },
+  };
+  ok(!lib.hiddenFromBag(bagPlayer).has("linen_robe"),
+     "the spares of a worn piece stay in the bag");
+  ok(!lib.hiddenFromBag(bagPlayer).has("copper_ring"),
+     "a ring with a free finger stays in the bag");
+  bagPlayer.inventory.linen_robe = 0;
+  ok(lib.hiddenFromBag(bagPlayer).has("linen_robe"),
+     "a worn piece with nothing left in the bag is out of sight");
+
+  // A new realm reports the stat gains it brings.
+  state.player = basePlayer();
+  state.player.cultivation = 5000;
+  calls.notices.length = 0;
+  lib.advanceRealm(state.player, "Breakthrough!");
+  ok(calls.notices.length > 0, "the new realm reports its stat gains");
+  ok(calls.notices.some(n => /New Realm/.test(n[2] || "")),
+     "the report names the realm that was reached");
+
+  // The popup notices are words, not cards: no border, no plate behind them.
+  ok(/\.toast \{[^}]*background: none/.test(cssNow) && !/\.toast \{[^}]*border: 1px/.test(cssNow),
+     "the corner notices have no border and no background");
+  ok(/#stat-notice \{[^}]*background: none/.test(cssNow) && !/#stat-notice \{[^}]*border: 1px/.test(cssNow),
+     "the stat notice has no border and no background");
+  // A tooltip must never swallow the click under it (the mailbox Claim).
+  ok(/#item-tip \{[^}]*pointer-events: none/.test(cssNow),
+     "the tooltip lets clicks through");
+  ok(/#item-tip \.tip-actions \{[^}]*pointer-events: auto/.test(cssNow),
+     "the tooltip's own buttons still take the pointer");
+
   state.player = basePlayer();
   state.player.inventory = { rat_fur: 4 };
   state.player.spirit_stones = 0;
@@ -1351,7 +1415,7 @@ state.player = basePlayer();
     // neutral "Elixir I" fallback no longer occurs in the live game. Nothing to
     // delete: the fixture matches the shipped item set.
     vm.createContext(sb);
-    for (const fn of ["esc", "pillShape", "elixirSlots", "iconHtml", "artCls", "slotIconHtml", "bagTabOf", "sortBag", "renderInventory", "formatStatValue"]) {
+    for (const fn of ["esc", "pillShape", "elixirSlots", "iconHtml", "artCls", "slotIconHtml", "bagTabOf", "sortBag", "equipTargets", "hiddenFromBag", "renderInventory", "formatStatValue"]) {
       const src = grabFnSrc(fn);
       if (src) vm.runInContext(src, sb);
     }

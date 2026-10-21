@@ -1,6 +1,6 @@
 /* Ashen Fantasy — vanilla JS state machine: username -> roots -> main */
 const $ = (id) => document.getElementById(id);
-const CLIENT_VERSION = "0.9.27"; // must match server.py server_version + footer
+const CLIENT_VERSION = "0.9.28"; // must match server.py server_version + footer
 const state = {
   username: localStorage.getItem("af_user") || "",
   rollId: null,
@@ -438,9 +438,13 @@ async function enterMain(p) {
   updateQi(p);
   saveLocal(p);
   battle.areas = await fetchAreas();
+  // The rank tables come first: the character panel draws its masteries
+  // from them, and they must be in hand before the panel is painted.
+  await fetchMasteryDefs();
   loadLoot();
   showBattleAreas();
   renderInventory();
+  renderChar(p);
   startTick();
   syncPlayer(true);
 }
@@ -483,28 +487,20 @@ function masteryRows(p) {
     // The local track is a plain XP figure; the server sends the whole track.
     const track = raw && typeof raw === "object" ? raw : null;
     const xp = Math.max(0, track ? (track.xp | 0) : (raw | 0));
-    let title, lvl, base, need, into;
-    if (t === "herbs" && track && track.rank_name) {
-      // The herbalist track has its own twelve ranks of ten levels, and the
-      // server names the rank.
-      lvl = track.within || 1;
-      title = `${track.rank_name} ${MASTERY_NUMERALS[Math.min(9, lvl - 1)]}`;
-      base = masteryTotalXp(track.level || 1);
-      need = Math.max(1, masteryTotalXp((track.level || 1) + 1) - base);
-      into = Math.max(0, xp - base);
-    } else {
-      lvl = masteryLevel(xp);
-      base = masteryTotalXp(lvl);
-      need = Math.max(1, masteryTotalXp(lvl + 1) - base);
-      into = Math.max(0, xp - base);
-      title = masteryTitle(t, lvl);
-    }
+    // Every track is a rank of ten levels, so every track reads the same way.
+    const lvl = Math.max(1, track && track.level ? track.level : masteryLevel(xp));
+    const rank = track && track.rank ? track.rank : 1;
+    const within = track && track.within ? track.within : ((lvl - 1) % 10) + 1;
+    const name = (track && track.rank_name) || masteryTitle(t, lvl);
+    const base = masteryTotalXp(lvl);
+    const need = Math.max(1, masteryTotalXp(lvl + 1) - base);
+    const into = Math.max(0, xp - base);
     const pct = Math.max(0, Math.min(100, into / need * 100));
     return `<div class="mastery-row">
-      <div class="mastery-top"><b>${esc(title)}</b><span class="muted">${lvl}${t === "herbs" ? "/10" : "/" + MASTERY_MAX_LEVEL}</span></div>
+      <div class="mastery-top"><b>${esc(name)} ${esc(MASTERY_NUMERALS[Math.min(9, within - 1)])}</b><span class="muted">${within}/10</span></div>
       <div class="mastery-bar"><div class="mastery-fill" style="width:${pct}%"></div></div>
       <div class="mastery-xp muted">${into} / ${need} XP</div>
-      <div class="mastery-bonus muted">${esc(MASTERY_BONUS_TEXT[t] ? MASTERY_BONUS_TEXT[t](lvl) : "")}</div>
+      <div class="mastery-bonus muted">${esc(masteryBonusText(t, lvl))}</div>
     </div>`;
   }).join("");
 }
@@ -530,7 +526,7 @@ function derivedStats(p) {
   const g = gearBonus(p);
   // Battle mastery hardens the body: every level past the first adds a
   // percent to the flesh, the swing and the guard. Gear stays flat on top.
-  const b = 1 + 0.01 * Math.max(0, masteryLevel(masteryXp("battle", p)) - 1);
+  const b = 1 + masteryBodyBonus("battle", masteryXp("battle", p));
   // Synergy: two roots of one element make the whole body worth more.
   const syn = 1 + (s.synergy_bonus || 0);
   // A technique that is up right now counts too.
@@ -767,6 +763,9 @@ $("breakthrough-btn").onclick = () => {
 };
 
 function advanceRealm(p, msg) {
+  // The new realm hardens the body: the stat gains are shown in the corner
+  // as they happen, the same way a new piece of gear reports itself.
+  const before = derivedStats(p);
   // Consume only the old stage cost — surplus Qi carries into the new stage.
   const cost = stageOf(p).cost;
   p.cultivation = Math.max(0, p.cultivation - cost);
@@ -782,10 +781,14 @@ function advanceRealm(p, msg) {
   renderChar(p);
   refreshCultPanel();
   updateQi(p);
+  notifyStatChange(before, derivedStats(p), `New Realm — ${p.realm}`);
   syncPlayer(false);
 }
 
 document.querySelectorAll(".side-btn").forEach(b => b.onclick = () => {
+  // A tooltip left over from the last panel would float over this one and
+  // swallow the clicks underneath it.
+  hideTip();
   if (b.dataset.tab !== "battle") {
     // Leaving the battle panel mid-hunt auto-leaves the fight:
     // persist HP, stop ticks, clear the loot log, reset to the area list.
@@ -1203,15 +1206,7 @@ function renderInventory() {
   // Hidden in bag while equipped: any consumable loaded into an elixir
   // slot, and worn gear with no free slot left (a spare ring still shows
   // while a finger is free so it can be worn too).
-  const eq = p.equipment || {};
-  const hidden = new Set((p.elixirs || []).filter(Boolean));
-  Object.keys(eq).forEach(s => {
-    const id = eq[s];
-    const it = id && ITEM_BY_ID[id];
-    if (!it) return;
-    const t = equipTargets(it);
-    if (t.some(x => eq[x] === id) && !t.some(x => !eq[x])) hidden.add(id);
-  });
+  const hidden = hiddenFromBag(p);
   const entries = Object.keys(p.inventory || {}).filter(id => {
     const it = ITEM_BY_ID[id];
     return it && (p.inventory[id] > 0) && !hidden.has(id)
@@ -1271,6 +1266,30 @@ function equipTargets(it) {
   return it.slot === "ring" ? ["ring1", "ring2"] : [it.slot];
 }
 
+// What the bag keeps out of sight: what the player is wearing, and what is
+// loaded into an elixir slot.
+//
+// A worn copy does not hide the rest of the stack: three spares are still
+// three spares, and they must stay in the bag where the player can see them,
+// sell them, or wear a second one. Only a stack with nothing left in it
+// disappears.
+function hiddenFromBag(p) {
+  const hidden = new Set();
+  const inv = (p && p.inventory) || {};
+  const eq = (p && p.equipment) || {};
+  (p.elixirs || []).filter(Boolean).forEach(id => {
+    if (!(inv[id] > 0)) hidden.add(id);
+  });
+  Object.keys(eq).forEach(s => {
+    const id = eq[s];
+    const it = id && ITEM_BY_ID[id];
+    if (!it) return;
+    const t = equipTargets(it);
+    if (t.some(x => eq[x] === id) && !t.some(x => !eq[x]) && !(inv[id] > 0)) hidden.add(id);
+  });
+  return hidden;
+}
+
 // ---------- stats notification: bottom-center popup on gear change ----------
 const STAT_NOTICE_LABELS = {
   hp: "HP", atk: "ATK", def: "DEF", crit: "Crit Chance",
@@ -1295,16 +1314,16 @@ function statNoticeHtml(before, after) {
 }
 
 let statNoticeTimer = null;
-function notifyStatChange(before, after) {
+function notifyStatChange(before, after, title) {
   const html = statNoticeHtml(before, after);
-  if (!html) return;
+  if (!html && !title) return;
   let el = $("stat-notice");
   if (!el) {
     el = document.createElement("div");
     el.id = "stat-notice";
     document.body.appendChild(el);
   }
-  el.innerHTML = html;
+  el.innerHTML = (title ? `<div class="stat-notice-title">${esc(title)}</div>` : "") + html;
   el.classList.remove("show");
   void el.offsetWidth; // restart the fade-in
   el.classList.add("show");
@@ -1536,14 +1555,19 @@ async function fetchAreas() {
 }
 
 // ---------- mastery ----------
-// Four tracks, each levelling to 99. Every ten levels the track changes rank
-// ("Cooking Beginner X" becomes "Cooking Artisan I"), and every level of a
-// trade buys a chance to duplicate what you made.
+// Five tracks, and every one of them works the same way: twelve ranks of ten
+// levels (I-X), a named rank, and a bonus bought with each level. The herbs
+// did it first; the trades and the hunt follow the same shape. The rank
+// tables come from the server (/api/mastery), so a rank can never read one
+// way here and another way there.
 const MASTERY_TRACKS = ["cooking", "alchemy", "crafting", "battle", "herbs"];
-const MASTERY_RANKS = ["Beginner", "Artisan", "Master", "Grandmaster", "Sage", "Elder", "Immortal", "Legendary", "Mythic", "Transcendent"];
 const MASTERY_NUMERALS = ["I", "II", "III", "IV", "V", "VI", "VII", "VIII", "IX", "X"];
-const MASTERY_MAX_LEVEL = 99;
+const MASTERY_MAX_LEVEL = 120;
 const MASTERY_XP_PER_KILL = 5;
+let MASTERY_DEFS = {};        // track -> { label, ranks: [{name, bonus}], caps }
+// The standing names, used only until the server's rank tables arrive.
+const MASTERY_FALLBACK_RANKS = ["Beginner", "Artisan", "Master", "Grandmaster", "Sage",
+  "Elder", "Immortal", "Legendary", "Mythic", "Transcendent"];
 const MASTERY_BONUS_TEXT = {
   cooking: lvl => `${Math.max(0, lvl - 1)}% chance to duplicate the meal`,
   alchemy: lvl => `${Math.max(0, lvl - 1)}% chance to duplicate the brew`,
@@ -1551,6 +1575,16 @@ const MASTERY_BONUS_TEXT = {
   battle: lvl => `${(lvl - 1) * 2}% chance of an extra drop · +${lvl - 1}% HP, Attack, Defense`,
   herbs: lvl => "gathers faster, and finds more",
 };
+
+// The rank tables, from the server. Until they arrive the old names are used.
+async function fetchMasteryDefs() {
+  try {
+    const r = await fetch("/api/mastery", { cache: "no-store" });
+    const j = await r.json();
+    if (j.tracks) MASTERY_DEFS = j.tracks;
+  } catch {}
+  return MASTERY_DEFS;
+}
 
 function masteryTotalXp(level) { return 50 * level * (level - 1); }
 
@@ -1561,15 +1595,67 @@ function masteryLevel(xp) {
   return lvl;
 }
 
+// The rank a level stands in, and the level inside it.
+function masteryRankOf(track, level) {
+  const def = MASTERY_DEFS[track];
+  const ranks = (def && def.ranks) || [];
+  if (ranks.length) {
+    const idx = Math.min(ranks.length - 1, Math.floor((level - 1) / 10));
+    const within = (level - 1) % 10 + 1;
+    return { rank: idx + 1, within, name: ranks[idx].name || "", def: ranks[idx] };
+  }
+  // Before the server answers, the old standing names are used.
+  const idx = Math.min(MASTERY_FALLBACK_RANKS.length - 1, Math.floor((level - 1) / 10));
+  const within = (level - 1) % 10 + 1;
+  return { rank: idx + 1, within, name: MASTERY_FALLBACK_RANKS[idx], def: null };
+}
+
 function masteryRank(level) {
-  return MASTERY_RANKS[Math.min(MASTERY_RANKS.length - 1, Math.floor((level - 1) / 10))];
+  return masteryRankOf("cooking", level).name;
 }
 
 function masteryNumeral(level) { return MASTERY_NUMERALS[(level - 1) % 10]; }
 
+// "Adept Cook IV" -- the rank's own name, and the level inside it.
 function masteryTitle(track, level) {
-  const name = track[0].toUpperCase() + track.slice(1);
-  return `${name} ${masteryRank(level)} ${masteryNumeral(level)}`;
+  const r = masteryRankOf(track, level);
+  const def = MASTERY_DEFS[track];
+  // The server's rank names carry the track already ("Adept Cook"); the
+  // standing fallback names do not, so the track is put in front of them.
+  const base = def ? r.name
+    : `${(def && def.label) || (track[0].toUpperCase() + track.slice(1))} ${r.name}`;
+  return `${base} ${MASTERY_NUMERALS[r.within - 1]}`;
+}
+
+// What the track's level buys, in words.
+function masteryBonusText(track, lvl) {
+  const def = MASTERY_DEFS[track];
+  if (!def || !def.ranks || !def.ranks.length) {
+    return MASTERY_BONUS_TEXT[track] ? MASTERY_BONUS_TEXT[track](lvl) : "";
+  }
+  const r = masteryRankOf(track, lvl);
+  const row = r.def || {};
+  const cap = def.bonus_cap != null ? def.bonus_cap : 100;
+  const bonus = Math.min(cap, (row.bonus || 0) * r.within);
+  if (track === "battle") {
+    const body = Math.min(def.body_cap != null ? def.body_cap : 100,
+      (def.body_per_level || 0) * Math.max(0, lvl - 1));
+    return `${bonus.toFixed(1).replace(/\.0$/, "")}% chance of an extra drop · +${body.toFixed(0)}% HP, Attack, Defense`;
+  }
+  if (track === "herbs") {
+    const red = Math.min(def.time_reduction_cap || 0, (row.time_reduction || 0) * r.within);
+    return `${red.toFixed(1).replace(/\.0$/, "")}% faster gathers · ${bonus.toFixed(1).replace(/\.0$/, "")}% chance of a second herb`;
+  }
+  return `${bonus.toFixed(1).replace(/\.0$/, "")}% ${def.gift || ""}`;
+}
+
+// The body the hunt's mastery hardens.
+function masteryBodyBonus(track, xp) {
+  const def = MASTERY_DEFS[track];
+  const lvl = masteryLevel(xp);
+  if (!def) return 0.01 * Math.max(0, lvl - 1);
+  const cap = (def.body_cap != null ? def.body_cap : 100) / 100;
+  return Math.min(cap, ((def.body_per_level || 0) * Math.max(0, lvl - 1)) / 100);
 }
 
 function masteryXp(track, p) {
@@ -1606,7 +1692,8 @@ function applyMasteryXp(track, xp) {
 // over, the old name and the new one. It joins the bottom-right stack and
 // fades away on its own.
 function masteryPopup(track, fromLevel, toLevel) {
-  const name = track[0].toUpperCase() + track.slice(1);
+  const name = (MASTERY_DEFS[track] && MASTERY_DEFS[track].label)
+    || (track[0].toUpperCase() + track.slice(1));
   const el = document.createElement("div");
   el.className = "toast mastery-toast";
   const rankLine = masteryTitle(track, fromLevel) !== masteryTitle(track, toLevel)
@@ -1717,6 +1804,13 @@ let HERBS = [];
 let herbRank = 1, herbLevel = 1, herbRankName = "";
 let gathering = null;   // { herbId, timer }
 
+// A wait in seconds, as the player reads it: 6s, 5.4s, 70s.
+function fmtSeconds(v) {
+  const n = +v || 0;
+  if (n >= 10) return String(Math.round(n));
+  return String(Math.round(n * 10) / 10);
+}
+
 async function fetchHerbs() {
   const p = state.player;
   try {
@@ -1750,6 +1844,8 @@ function renderGather() {
     const locked = h.locked;
     const active = gathering && gathering.herbId === h.id;
     const color = ITEM_RARITY_COLORS[h.rarity] || ITEM_RARITY_COLORS[ITEM_DEFAULT_RARITY];
+    // The time the player actually waits: the herbalist rank gathers faster.
+    const secs = h.now != null ? h.now : h.time;
     const action = locked
       ? `<span class="herb-lock">Needs rank ${h.need_rank}</span>`
       : `<button class="btn" data-herb="${h.id}"${active ? " disabled" : ""}>${active ? "Gathering…" : "Gather"}</button>`;
@@ -1759,7 +1855,7 @@ function renderGather() {
           <div class="craft-out-name"><b style="color:${color}">${esc(h.name)}</b></div>
           <small class="muted">${esc(h.rarity)}</small>
         </div>
-        <span class="craft-xp">${esc(h.element)} · ${h.time}s</span>
+        <span class="craft-xp">${esc(h.element)} · ${fmtSeconds(secs)}s</span>
       </div>
       <p class="craft-note muted">${esc(h.desc || "")}</p>
       <div class="craft-actions">${action}</div>
@@ -1829,6 +1925,9 @@ async function gatherOnce(herbId) {
       if (h.rank !== herbRank || h.within !== herbLevel) {
         herbRank = h.rank; herbLevel = h.within; herbRankName = h.rank_name || "";
         cEvent(`${herbRankName}, level ${herbLevel}.`);
+        // A new rank gathers faster, and opens new herbs: the panel asks
+        // the server for the times and the locks as they stand now.
+        fetchHerbs().then(() => renderGather());
       }
       refreshMasteryPanel();
       const rankLine = $("gather-rank");
@@ -2157,12 +2256,18 @@ function stopBattle() {
 
 // Exit whatever hunt is running (panel switch): save hp, stop the fight,
 // wipe the loot log, and land back on the area list.
+//
+// The drops themselves are not lost: every drop went into the bag the
+// moment it fell, so leaving says so rather than leaving the player to
+// wonder.
 function leaveActiveHunt() {
   if (battle.timer) persistBattleHp(false);
+  const drops = Object.keys(battle.loot || {}).length;
   stopBattle();
   battle.mob = null;
   clearLootLog();
   showBattleAreas();
+  if (drops) cEvent(`The hunt is over — ${drops} kind${drops === 1 ? "" : "s"} of loot are in your Bag.`);
 }
 
 function playerMaxHp(p) { return derivedStats(p).hp; }

@@ -488,13 +488,25 @@ try:
     # ============ 10e. mastery: levels, ranks, and the trade bonuses ============
     ok(server.mastery_level(0) == 1, "mastery starts at level 1")
     ok(server.mastery_level(100) == 2, "100 XP is level 2")
-    ok(server.mastery_level(485100) == server.MASTERY_MAX_LEVEL,
+    ok(server.mastery_level(server.mastery_total_xp(server.MASTERY_MAX_LEVEL)) == server.MASTERY_MAX_LEVEL,
        "mastery stops at level %d" % server.MASTERY_MAX_LEVEL)
-    ok(server.mastery_rank(10) == "Beginner" and server.mastery_rank(11) == "Artisan",
+    # Every track is a rank of ten levels, with a name of its own -- the
+    # herbalist track first, and the rest of them the same shape.
+    for track in server.MASTERY_TRACKS:
+        rank, within, name = server.mastery_rank_of(track, 0)
+        ok(rank == 1 and within == 1 and name,
+           "the %s track opens at its first rank" % track)
+        ok(len(server.track_ranks(track)) == 12,
+           "the %s track has twelve ranks" % track)
+    ok(server.mastery_rank_of("cooking", 5500)[0] == 2,
        "the rank turns over every ten levels")
     ok(server.mastery_numeral(10) == "X" and server.mastery_numeral(11) == "I",
        "the numeral counts inside the rank")
     ok(server.mastery_total_xp(11) == 5500, "level 11 costs 5500 XP")
+    st, j = req("/api/mastery")
+    ok(st == 200 and len(j["tracks"]) == 5, "the rank tables are served to the client")
+    ok(all(t["ranks"] and t["ranks"][0]["name"] for t in j["tracks"].values()),
+       "every track names its first rank")
 
     fresh("master_crafter", inventory={"rat_tail": 4, "raw_meat": 4})
     st, j = req("/api/craft", {"username": "master_crafter", "recipe_id": "roast_meat", "count": 1})
@@ -545,6 +557,11 @@ try:
     ok(len(server.HERBS) == 40, "the herb table loads from data/herbs_data.json")
     ok(len(server.HERB_RANKS) == 12, "the herb mastery has twelve ranks")
     ok(len(server.SKILLS) == 6, "the technique table loads from data/skills_data.json")
+    ok(len(server.AREAS) == 1 and server.AREAS[0]["mobs"], "the hunting grounds load from data/areas_data.json")
+    ok(all(m.get("loot") for m in server.AREAS[0]["mobs"]), "every beast carries its drop table")
+    ok(len(server.RECIPES) == 20, "the forge loads from data/recipes_data.json")
+    ok(all(r.get("kind") in ("craft", "alchemy", "cook") for r in server.RECIPES),
+       "every recipe knows its bench")
     ok(all(i["kind"] == "herb" for i in server.ITEMS if i["id"] in server.HERBS),
        "the herbs are items")
     st, j = req("/api/herbs?username=gatherer")
@@ -553,6 +570,7 @@ try:
     ok(all(h.get("desc") for h in j["herbs"]), "every herb says what it is")
     ok(all(h.get("element") and h.get("time") for h in j["herbs"]),
        "every herb says its element and its time")
+    ok(all(h.get("now") for h in j["herbs"]), "every herb says the time it takes to gather")
 
     fresh("gatherer", mastery={"herbs": 0})
     st, j = req("/api/gather", {"username": "gatherer", "herb_id": "herb_wild_ginseng"})
@@ -574,6 +592,15 @@ try:
     server.PLAYERS["gatherer"]["mastery"]["herbs"] = 0
     st, j = req("/api/gather", {"username": "gatherer", "herb_id": "herb_wild_ginseng"})
     ok(j["next_ms"] > fast, "a higher rank gathers faster")
+    # And the panel is told the time the player actually waits.
+    st, j = req("/api/herbs?username=gatherer")
+    plain = [h for h in j["herbs"] if h["id"] == "herb_wild_ginseng"][0]
+    ok(plain["now"] <= plain["time"], "the herb list carries the reduced time")
+    server.PLAYERS["gatherer"]["mastery"]["herbs"] = 50 * 51 * 50   # level 51
+    st, j = req("/api/herbs?username=gatherer")
+    ranked = [h for h in j["herbs"] if h["id"] == "herb_wild_ginseng"][0]
+    ok(ranked["now"] < plain["now"], "the rank's faster gather is shown live")
+    server.PLAYERS["gatherer"]["mastery"]["herbs"] = 0
 
     # The badge is live: the health poll carries the mail count.
     fresh("watcher", inventory={"rat_fur": 3})
@@ -859,6 +886,26 @@ try:
     inv2 = server.PLAYERS["mailer"]["inventory"]
     ok(all(inv2.get(i) == n for i, n in server.STARTER_PACK.items()),
        "the refused claim granted nothing extra")
+
+    # ---- a bag that has not caught up yet must not wipe the claim.
+    # The client syncs the bag it had a moment ago, so a grant that the bag
+    # does not know about yet has to survive that sync.
+    fresh("late_bag")
+    st, j = mail_get("late_bag")
+    lm = [m for m in j["mail"] if m["kind"] == "starter"][0]
+    st, j = mail_post("/api/mail/claim", "late_bag", lm["id"])
+    ok(st == 200 and j["ok"] is True, "the claim lands")
+    st, j = req("/api/sync", {"username": "late_bag", "inventory": {},
+                              "cultivation": 0, "spirit_stones": 0, "mastery_battle": 0})
+    ok(st == 200 and j["ok"] is True, "the stale bag syncs")
+    late = server.PLAYERS["late_bag"]["inventory"]
+    ok(all(late.get(i) == n for i, n in server.STARTER_PACK.items()),
+       "the claimed items survive a bag that had not caught up")
+    # And once the bag does carry them, the bag alone decides.
+    st, j = req("/api/sync", {"username": "late_bag", "inventory": {},
+                              "cultivation": 0, "spirit_stones": 0, "mastery_battle": 0})
+    ok(not server.PLAYERS["late_bag"]["inventory"].get("wooden_sword"),
+       "after the grant is settled the bag alone decides what is in the bag")
 
     # ---- plain mail has nothing to open, so it is read on arrival
     fresh("plainmail")

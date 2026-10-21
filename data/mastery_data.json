@@ -1,0 +1,126 @@
+{
+  "comment": "The masteries. Five tracks, and every one of them works the same way: twelve ranks of ten levels (I-X). A rank is named, and each level inside it buys the rank's bonus. 'bonus' is the percent each level of that rank adds to the track's gift (a duplicate chance for the trades, a faster gather for the herbs, body and loot for the hunt). 'time_reduction' is the herb track's own: percent off the gather time per level. 'discovery' is the rarity a node may turn up, and the bonus for it. 'unlocks' is the rank a herb rarity asks for.",
+  "levels_per_rank": 10,
+  "tracks": {
+    "cooking": {
+      "label": "Cooking",
+      "gift": "chance to duplicate the meal",
+      "bonus_cap": 25,
+      "ranks": [
+        { "rank": 1, "name": "Novice Cook", "bonus": 1.0 },
+        { "rank": 2, "name": "Apprentice Cook", "bonus": 1.0 },
+        { "rank": 3, "name": "Skilled Cook", "bonus": 1.25 },
+        { "rank": 4, "name": "Adept Cook", "bonus": 1.25 },
+        { "rank": 5, "name": "Expert Cook", "bonus": 1.5 },
+        { "rank": 6, "name": "Master Cook", "bonus": 1.5 },
+        { "rank": 7, "name": "Grandmaster Cook", "bonus": 1.75 },
+        { "rank": 8, "name": "Spirit Kitchen Sage", "bonus": 1.75 },
+        { "rank": 9, "name": "Celestial Kitchen Sage", "bonus": 2.0 },
+        { "rank": 10, "name": "Immortal Kitchen Sovereign", "bonus": 2.0 },
+        { "rank": 11, "name": "Divine Kitchen Ancestor", "bonus": 2.25 },
+        { "rank": 12, "name": "Primordial Kitchen Deity", "bonus": 2.5 }
+      ]
+    },
+    "alchemy": {
+      "label": "Alchemy",
+      "gift": "chance to duplicate the brew",
+      "bonus_cap": 25,
+      "ranks": [
+        { "rank": 1, "name": "Novice Alchemist", "bonus": 1.0 },
+        { "rank": 2, "name": "Apprentice Alchemist", "bonus": 1.0 },
+        { "rank": 3, "name": "Skilled Alchemist", "bonus": 1.25 },
+        { "rank": 4, "name": "Adept Alchemist", "bonus": 1.25 },
+        { "rank": 5, "name": "Expert Alchemist", "bonus": 1.5 },
+        { "rank": 6, "name": "Master Alchemist", "bonus": 1.5 },
+        { "rank": 7, "name": "Grandmaster Alchemist", "bonus": 1.75 },
+        { "rank": 8, "name": "Spirit Pill Sage", "bonus": 1.75 },
+        { "rank": 9, "name": "Celestial Pill Sage", "bonus": 2.0 },
+        { "rank": 10, "name": "Immortal Pill Sovereign", "bonus": 2.0 },
+        { "rank": 11, "name": "Divine Pill Ancestor", "bonus": 2.25 },
+        { "rank": 12, "name": "Primordial Pill Deity", "bonus": 2.5 }
+      ]
+    },
+    "crafting": {
+      "label": "Crafting",
+      "gift": "chance to duplicate the work",
+      "bonus_cap": 25,
+      "ranks": [
+        { "rank": 1, "name": "Novice Smith", "bonus": 1.0 },
+        { "rank": 2, "name": "Apprentice Smith", "bonus": 1.0 },
+        { "rank": 3, "name": "Skilled Smith", "bonus": 1.25 },
+        { "rank": 4, "name": "Adept Smith", "bonus": 1.25 },
+        { "rank": 5, "name": "Expert Smith", "bonus": 1.5 },
+        { "rank": 6, "name": "Master Smith", "bonus": 1.5 },
+        { "rank": 7, "name": "Grandmaster Smith", "bonus": 1.75 },
+        { "rank": 8, "name": "Spirit Forge Sage", "bonus": 1.75 },
+        { "rank": 9, "name": "Celestial Forge Sage", "bonus": 2.0 },
+        { "rank": 10, "name": "Immortal Forge Sovereign", "bonus": 2.0 },
+        { "rank": 11, "name": "Divine Forge Ancestor", "bonus": 2.25 },
+        { "rank": 12, "name": "Primordial Forge Deity", "bonus": 2.5 }
+      ]
+    },
+    "battle": {
+      "label": "Battle",
+      "gift": "chance of an extra drop",
+      "bonus_cap": 50,
+      "body_per_level": 1.0,
+      "body_cap": 100,
+      "ranks": [
+        { "rank": 1, "name": "Novice Hunter", "bonus": 2.0 },
+        { "rank": 2, "name": "Apprentice Hunter", "bonus": 2.0 },
+        { "rank": 3, "name": "Skilled Hunter", "bonus": 2.5 },
+        { "rank": 4, "name": "Adept Hunter", "bonus": 2.5 },
+        { "rank": 5, "name": "Expert Hunter", "bonus": 3.0 },
+        { "rank": 6, "name": "Master Hunter", "bonus": 3.0 },
+        { "rank": 7, "name": "Grandmaster Hunter", "bonus": 3.5 },
+        { "rank": 8, "name": "Spirit Beast Sage", "bonus": 3.5 },
+        { "rank": 9, "name": "Celestial Beast Sage", "bonus": 4.0 },
+        { "rank": 10, "name": "Immortal Beast Sovereign", "bonus": 4.0 },
+        { "rank": 11, "name": "Divine Beast Ancestor", "bonus": 4.5 },
+        { "rank": 12, "name": "Primordial Beast Deity", "bonus": 5.0 }
+      ]
+    },
+    "herbs": {
+      "label": "Herbs",
+      "gift": "chance of a second herb",
+      "bonus_cap": 25,
+      "time_reduction_cap": 50,
+      "ranks": [
+        { "rank": 1, "name": "Novice Herbalist", "time_reduction": 1.0, "bonus": 0.5 },
+        { "rank": 2, "name": "Apprentice Herbalist", "time_reduction": 1.5, "bonus": 0.5,
+          "discovery": { "rarity": "Common", "bonus": 1.0 } },
+        { "rank": 3, "name": "Skilled Herbalist", "time_reduction": 2.0, "bonus": 0.75,
+          "discovery": { "rarity": "Uncommon", "bonus": 0.5 } },
+        { "rank": 4, "name": "Adept Herbalist", "time_reduction": 2.5, "bonus": 0.75,
+          "discovery": { "rarity": "Rare", "bonus": 0.25 } },
+        { "rank": 5, "name": "Expert Herbalist", "time_reduction": 3.0, "bonus": 1.0,
+          "discovery": { "rarity": "Rare", "bonus": 0.5 } },
+        { "rank": 6, "name": "Master Herbalist", "time_reduction": 3.5, "bonus": 1.0,
+          "discovery": { "rarity": "Epic", "bonus": 0.2 } },
+        { "rank": 7, "name": "Grandmaster Herbalist", "time_reduction": 4.0, "bonus": 1.25,
+          "discovery": { "rarity": "Epic", "bonus": 0.3 } },
+        { "rank": 8, "name": "Spirit Herb Sage", "time_reduction": 4.5, "bonus": 1.5,
+          "discovery": { "rarity": "Legendary", "bonus": 0.15 } },
+        { "rank": 9, "name": "Celestial Herb Sage", "time_reduction": 5.0, "bonus": 1.5,
+          "discovery": { "rarity": "Legendary", "bonus": 0.2 } },
+        { "rank": 10, "name": "Immortal Herb Sovereign", "time_reduction": 5.5, "bonus": 1.75,
+          "discovery": { "rarity": "Mythic", "bonus": 0.1 } },
+        { "rank": 11, "name": "Divine Herb Ancestor", "time_reduction": 6.0, "bonus": 2.0,
+          "discovery": { "rarity": "Divine", "bonus": 0.05 } },
+        { "rank": 12, "name": "Primordial Herb Deity", "time_reduction": 7.0, "bonus": 2.5,
+          "discovery": { "rarity": "Primordial", "bonus": 0.025 } }
+      ]
+    }
+  },
+  "unlocks": {
+    "comment": "The rank a herb rarity asks for. The rank that first carries that rarity's discovery bonus is the one that opens it.",
+    "Common": 1,
+    "Uncommon": 3,
+    "Rare": 4,
+    "Epic": 6,
+    "Legendary": 8,
+    "Mythic": 10,
+    "Divine": 11,
+    "Primordial": 12
+  }
+}

@@ -17,8 +17,8 @@ import mimetypes
 # Single source of truth for the build number. Must match CLIENT_VERSION in
 # public/js/app.js and the footer in public/index.html. A player whose saved
 # patch_version differs gets one patch-note mail when they next check mail.
-SERVER_VERSION = "0.9.27"
-CLIENT_VERSION = "0.9.27"  # for /status only; the client keeps its own copy
+SERVER_VERSION = "0.9.28"
+CLIENT_VERSION = "0.9.28"  # for /status only; the client keeps its own copy
 STARTED_AT = time.time()
 RESTARTED_AT = 0
 RESTART_SEQ = 0
@@ -181,107 +181,32 @@ CRAFT_MAX_COUNT = 20
 # req_idx gates by player realm. Loot rolls are client-side; Qi rewards flow
 # through accrue() and the /api/sync clamp like any other honest gain.
 # Spirit stones are granted per kill from the mob's stones field.
+#
+# The grounds themselves live in data/areas_data.json: the world of beasts and
+# their drops belongs in a file, not in this one.
 # ----------------------------------------------------------------------------
-def _mob(id, name, realm, difficulty, desc, glyph, hp, atk, dfn, speed, qi, loot,
-         req_idx=0, boss=False):
-    # req_idx: realm the player must have reached before this beast can be
-    # faced (a boss can demand more than the area around it). boss: marks the
-    # card as a boss encounter.
+def _mob_from_data(d):
     # stones: a currency, so a kill pays a real purse. The range scales with
     # the beast -- a Spectral Rat pays 10-20, the alpha wolf 151-302.
+    qi = int(d.get("qi", 0) or 0)
     s_lo = qi * 3 + 1
-    return {"id": id, "name": name, "realm": realm, "difficulty": difficulty,
-            "desc": desc, "glyph": glyph,
-            "hp": hp, "atk": atk, "def": dfn, "crit": 5, "crit_dmg": 150,
-            "speed": speed, "qi": qi,
-            "stones": {"min": s_lo, "max": s_lo * 2}, "loot": loot,
-            "req_idx": req_idx, "boss": boss}
+    return {"id": d["id"], "name": d["name"], "realm": d.get("realm", "Mortal"),
+            "difficulty": d.get("difficulty", "Easy"), "desc": d.get("desc", ""),
+            "glyph": d.get("glyph", "👤"),
+            "hp": int(d.get("hp", 10)), "atk": int(d.get("atk", 1)),
+            "def": int(d.get("def", 0)), "crit": 5, "crit_dmg": 150,
+            "speed": float(d.get("speed", 1.0)), "qi": qi,
+            "stones": {"min": s_lo, "max": s_lo * 2},
+            "loot": list(d.get("loot") or []),
+            "req_idx": int(d.get("req_idx", 0)), "boss": bool(d.get("boss", False))}
 
-# A mob's loot list, written as (item, rarity, chance%, min, max).
-def _drops(*rows):
-    return [{"item": i, "rarity": r, "chance": c / 100.0, "min": mn, "max": mx}
-            for (i, r, c, mn, mx) in rows]
-
-AREAS = [
-    {"id": "origin_village", "name": "Origin Village", "req_idx": 0,
-      "req": "Mortal", "difficulty": "Beginner",
-      "desc": "A peaceful village where new cultivators begin their journey, "
-              "complete basic quests, and learn the fundamentals of combat. "
-              "A corrupted alpha prowls the treeline past the fields — a "
-              "Mortal is not ready for it.",
-      "mobs": [
-        _mob("spectral_rat", "Spectral Rat", "Mortal", "Very Easy",
-             "Scratching under the granary boards. Bold in numbers, harmless alone.",
-             "🐀", 40, 6, 0, 1.4, 3,
-             _drops(("Rat Fur", "Common", 85, 1, 3),
-                     ("Raw Meat", "Common", 75, 2, 4),
-                     ("Broken Claw", "Common", 60, 1, 1),
-                     ("Rat Tail", "Uncommon", 40, 1, 2),
-                     ("Small Beast Bone", "Uncommon", 25, 1, 1),
-                     ("Weak Beast Blood", "Rare", 10, 1, 1))),
-        _mob("crimson_eyed_rat", "Crimson Eyed Rat", "Mortal", "Very Easy",
-             "A bloated sack of fur and teeth that eats whole rows of millet.",
-             "🐁", 90, 9, 2, 1.2, 5,
-             _drops(("Rat Fur", "Common", 85, 3, 5),
-                     ("Raw Meat", "Common", 80, 3, 6),
-                     ("Broken Claw", "Common", 70, 2, 2),
-                     ("Rat Tail", "Uncommon", 50, 2, 3),
-                     ("Small Beast Bone", "Uncommon", 40, 1, 2),
-                     ("Beast Core Fragment", "Rare", 8, 1, 1))),
-        _mob("mystical_wolf", "Mystical Wolf", "Mortal", "Easy",
-             "Works the tree line at dusk. Hunts alone, and prefers it that way.",
-             "🐺", 130, 13, 4, 1.2, 8,
-             _drops(("Wolf Pelt", "Common", 85, 2, 4),
-                     ("Raw Meat", "Common", 80, 4, 6),
-                     ("Broken Claw", "Common", 65, 5, 5),
-                     ("Wolf Fang", "Uncommon", 60, 2, 3),
-                     ("Beast Bone", "Uncommon", 45, 2, 4),
-                     ("Weak Beast Core", "Rare", 10, 1, 1))),
-        _mob("silver_wind_wolf", "Silver Wind Wolf", "Mortal", "Easy",
-             "Paler, older, and far less inclined to run from a cultivator.",
-             "🐕", 175, 15, 6, 1.1, 11,
-             _drops(("Gray Wolf Pelt", "Common", 85, 2, 5),
-                     ("Raw Meat", "Common", 80, 4, 7),
-                     ("Broken Claw", "Common", 70, 6, 6),
-                     ("Wolf Fang", "Uncommon", 65, 3, 4),
-                     ("Beast Bone", "Uncommon", 55, 3, 5),
-                     ("Gray Wolf Essence", "Rare", 12, 1, 1))),
-        _mob("tusked_war_boar", "Tusked War Boar", "Mortal", "Easy",
-             "Roots up the eastern field. Slow, armoured, and extremely bad-tempered.",
-             "🐗", 190, 16, 8, 1.05, 14,
-             _drops(("Boar Hide", "Common", 85, 2, 4),
-                     ("Raw Meat", "Common", 90, 5, 8),
-                     ("Broken Claw", "Common", 50, 3, 3),
-                     ("Boar Tusk", "Uncommon", 65, 2, 3),
-                     ("Beast Bone", "Uncommon", 50, 3, 5),
-                     ("Boar Fat", "Uncommon", 45, 2, 4))),
-        _mob("frostmane_wereboar", "Frostmane Wereboar", "Mortal", "Easy",
-             "Fevered and frothing at the village edge. The worst thing in the fields.",
-             "🐃", 260, 18, 10, 1.05, 18,
-             _drops(("Tough Boar Hide", "Uncommon", 80, 2, 5),
-                     ("Raw Meat", "Common", 85, 5, 9),
-                     ("Broken Claw", "Uncommon", 50, 3, 3),
-                     ("Bloodied Tusk", "Rare", 65, 2, 4),
-                     ("Beast Blood", "Uncommon", 45, 2, 4),
-                     ("Corrupted Beast Core", "Epic", 12, 1, 1))),
-        # The boss hunts the same fields as the rest of the pack, but it
-        # demands a realm of its own: a Mortal cannot survive it, so it stays
-        # locked until Qi Refinement I. Its loot is drawn from materials that
-        # already exist -- no new item is minted for a boss kill.
-        _mob("corrupted_alpha_wolf", "Corrupted Alpha Wolf", "Qi Refinement I", "Hard",
-             "The corrupted alpha. Its breath freezes the air, its claws rend steel.",
-             "🐺", 800, 50, 30, 0.8, 50,
-             _drops(("Corrupted Alpha Wolf Core", "Legendary", 30, 1, 1),
-                     ("Corrupted Alpha Wolf Pelt", "Legendary", 12, 1, 1),
-                     ("Corrupted Fang", "Legendary", 8, 1, 1),
-                     ("Corrupted Alpha Blood", "Epic", 30, 1, 1),
-                     ("Corrupted Beast Core", "Epic", 100, 1, 1),
-                     ("Bloodied Tusk", "Rare", 60, 1, 2),
-                     ("Wolf Fang", "Uncommon", 70, 2, 4),
-                     ("Tough Boar Hide", "Uncommon", 60, 1, 3)),
-             req_idx=1, boss=True),
-      ]},
-]
+def _areas_from_data(data):
+    areas = []
+    for a in data.get("areas", []):
+        area = dict(a)
+        area["mobs"] = [_mob_from_data(m) for m in a.get("mobs", [])]
+        areas.append(area)
+    return areas
 
 
 # ----------------------------------------------------------------------------
@@ -301,21 +226,36 @@ def _load_data(name, fallback):
         return fallback
 
 HERB_DATA = _load_data("herbs_data.json", {"herbs": []})
-HERB_MASTERY_DATA = _load_data("herb_mastery_data.json", {"ranks": [], "unlocks": {}})
 SKILL_DATA = _load_data("skills_data.json", {"skills": [], "slots": 3})
+AREA_DATA = _load_data("areas_data.json", {"areas": []})
+RECIPE_DATA = _load_data("recipes_data.json", {"recipes": []})
+MASTERY_DATA = _load_data("mastery_data.json", {"tracks": {}, "unlocks": {}})
 
 # The herb table: id -> the herb it is.
 HERBS = {h["id"]: h for h in HERB_DATA.get("herbs", [])}
 HERB_IDS = tuple(HERBS.keys())
 HERB_RARITY_ORDER = HERB_DATA.get("rarities") or ITEM_RARITY_ORDER
 
+# The masteries: five tracks, and every one of them works the same way --
+# twelve ranks of ten levels, a named rank, and a bonus bought with each
+# level. data/mastery_data.json is the only place the ranks are written down.
+MASTERY_TRACK_DATA = MASTERY_DATA.get("tracks", {})
+MASTERY_UNLOCKS = MASTERY_DATA.get("unlocks", {})
+MASTERY_LEVELS_PER_RANK = int(MASTERY_DATA.get("levels_per_rank", 10))
+MASTERY_RANKS = {t: list(v.get("ranks", [])) for t, v in MASTERY_TRACK_DATA.items()}
+MASTERY_MAX_LEVEL = max(1, max((len(v) for v in MASTERY_RANKS.values()), default=1)
+                        * MASTERY_LEVELS_PER_RANK)
+
 # The herb mastery: twelve ranks of ten levels.
-HERB_RANKS = HERB_MASTERY_DATA.get("ranks", [])
-HERB_UNLOCKS = HERB_MASTERY_DATA.get("unlocks", {})
-HERB_LEVELS_PER_RANK = int(HERB_MASTERY_DATA.get("levels_per_rank", 10))
-HERB_TIME_CAP = float(HERB_MASTERY_DATA.get("time_reduction_cap", 0.5))
-HERB_BONUS_CAP = float(HERB_MASTERY_DATA.get("bonus_chance_cap", 0.25))
+HERB_RANKS = MASTERY_RANKS.get("herbs", [])
+HERB_UNLOCKS = MASTERY_UNLOCKS
+HERB_LEVELS_PER_RANK = MASTERY_LEVELS_PER_RANK
+HERB_TIME_CAP = float(MASTERY_TRACK_DATA.get("herbs", {}).get("time_reduction_cap", 50)) / 100.0
+HERB_BONUS_CAP = float(MASTERY_TRACK_DATA.get("herbs", {}).get("bonus_cap", 25)) / 100.0
 HERB_MAX_LEVEL = max(1, len(HERB_RANKS) * HERB_LEVELS_PER_RANK)
+
+# The hunting grounds, from data/areas_data.json.
+AREAS = _areas_from_data(AREA_DATA)
 
 # The technique table, from data/skills_data.json.
 SKILL_SLOTS = int(SKILL_DATA.get("slots", 3))
@@ -543,20 +483,11 @@ SLOT_GROUPS = {"ring": ("ring1", "ring2")}
 
 def herb_level(xp):
     """Level for a total herb XP figure (the same curve the other tracks use)."""
-    lvl = 1
-    xp = max(0, int(xp or 0))
-    while lvl < HERB_MAX_LEVEL and 50 * (lvl + 1) * lvl <= xp:
-        lvl += 1
-    return lvl
+    return mastery_level(xp)
 
 def herb_rank_of(xp):
     """(rank number, level within the rank, rank name) for a herb XP figure."""
-    lvl = herb_level(xp)
-    if not HERB_RANKS:
-        return 1, 1, "Novice Herbalist"
-    idx = min(len(HERB_RANKS) - 1, (lvl - 1) // HERB_LEVELS_PER_RANK)
-    within = (lvl - 1) % HERB_LEVELS_PER_RANK + 1
-    return idx + 1, within, HERB_RANKS[idx]["name"]
+    return mastery_rank_of("herbs", xp)
 
 def herb_bonuses(xp):
     """The bonuses the current herb rank buys: faster gathering, more herbs,
@@ -566,7 +497,7 @@ def herb_bonuses(xp):
         return 0.0, 0.0, None, 0.0
     r = HERB_RANKS[min(len(HERB_RANKS) - 1, rank - 1)]
     time_red = min(HERB_TIME_CAP, r.get("time_reduction", 0.0) / 100.0 * within)
-    bonus = min(HERB_BONUS_CAP, r.get("bonus_chance", 0.0) / 100.0 * within)
+    bonus = min(HERB_BONUS_CAP, r.get("bonus", 0.0) / 100.0 * within)
     disc = r.get("discovery") or None
     disc_chance = (disc.get("bonus", 0.0) / 100.0 * within) if disc else 0.0
     return time_red, bonus, disc, disc_chance
@@ -629,79 +560,37 @@ def _recipe_kind(out_id):
         return "cook" if (u.get("heal_pct") and u.get("qi_pct")) else "alchemy"
     return "craft"
 
-RECIPES = [
-    # ---- the pot: food
-    _recipe("roast_meat", "roasted_wild_rat_meat", {"rat_tail": 1, "raw_meat": 1},
-            note="Skewer the tail, sear the meat. It feeds the body and warms the meridians."),
-    _recipe("boar_roast", "boar_roast", {"boar_fat": 2, "bloodied_tusk": 1, "raw_meat": 2},
-            note="Fat rendered slow over a bloodied tusk. It sits heavy and warm."),
-    _recipe("wolf_stew", "wolf_stew", {"wolf_fang": 2, "raw_meat": 2, "weak_beast_core": 1},
-            note="Marrow and a weak core, simmered down. Sharp, and it warms you through."),
-    _recipe("spirit_dumpling", "spirit_dumpling",
-            {"corrupted_alpha_blood": 1, "beast_core_fragment": 1, "raw_meat": 2},
-            note="Dough folded around a core fragment, dyed with the alpha's blood. It tastes of qi, not flour."),
-
-    # ---- the mortar: pills and elixirs
-    _recipe("grind_qi_pill", "minor_qi_pill", {"small_beast_bone": 1, "weak_beast_blood": 1},
-            note="Bone ground to powder, blood to bind it into a pellet."),
-    _recipe("steep_elixir", "minor_vitality_elixir", {"beast_core_fragment": 1, "beast_blood": 1},
-            note="A core steeped in beast blood until it glows dull red."),
-
-    # ---- hide and bone gear
-    _recipe("cure_leather_chest", "leather_chest", {"tough_boar_hide": 2, "boar_hide": 2, "boar_fat": 2},
-            note="The tough hide over the soft, cured with its own fat and sewn close."),
-    _recipe("cure_leather_helmet", "leather_helmet", {"boar_hide": 2, "boar_tusk": 1},
-            note="Hide boiled soft, a tusk split for the brow."),
-    _recipe("cure_leather_boots", "leather_boots", {"boar_hide": 2, "wolf_pelt": 1},
-            note="Soles thick enough to outlast a wolf's sprint."),
-    _recipe("bind_leather_bracers", "leather_bracers", {"wolf_pelt": 2, "broken_claw": 2},
-            note="Thin hide guards. A little defence, a little grip."),
-    _recipe("pad_leather_leggings", "leather_leggings", {"wolf_pelt": 2, "boar_hide": 1},
-            note="Reinforced at the knees, where the beast's claws land first."),
-    _recipe("sew_leather_cape", "leather_cape", {"gray_wolf_pelt": 2, "wolf_pelt": 1, "rat_fur": 2},
-            note="Travel-worn, ash-stained. It hides nothing, but it catches the wind."),
-    _recipe("carve_wooden_sword", "wooden_sword", {"boar_tusk": 2, "boar_fat": 1},
-            note="A tusk ground down to a practice blade. Every master kept one."),
-    _recipe("lash_wooden_shield", "wooden_shield", {"boar_hide": 3, "boar_tusk": 1},
-            note="Planks and a tusk rim. Heavy, honest, and better than an open hand."),
-    _recipe("knot_cloth_headband", "cloth_headband", {"wolf_pelt": 2, "raw_meat": 1},
-            note="A knotted strip of dyed hide, worn at the brow."),
-
-    # ---- spirit gear, from the parts that still hum
-    _recipe("split_qi_stone", "cracked_qi_stone",
-            {"corrupted_beast_core": 1, "beast_core_fragment": 1, "beast_bone": 2},
-            note="A stone split by a thin seam of living qi. It hums when you breathe."),
-    _recipe("chip_jade_pendant", "chipped_jade_pendant",
-            {"corrupted_alpha_wolf_pelt": 1, "gray_wolf_essence": 1, "beast_bone": 2},
-            note="Jade with a corner broken off, set in the alpha's own pelt. Still cool against the sternum."),
-    _recipe("draw_copper_ring", "copper_spirit_ring", {"wolf_fang": 2, "broken_claw": 3},
-            note="A plain copper band that sharpens the wearer's critical strikes."),
-    _recipe("weave_qi_ring", "qi_gathering_ring",
-            {"corrupted_alpha_wolf_core": 1, "gray_wolf_essence": 2, "beast_core_fragment": 1},
-            note="The alpha's core spun into a ring that helps draw ambient Qi into the dantian."),
-    _recipe("forge_jade_ring", "jade_guard_ring", {"corrupted_fang": 1, "wolf_fang": 2, "beast_blood": 1},
-            note="Dense green jade that steadies the body and turns aside blows."),
-]
+# The forge table, from data/recipes_data.json: one recipe per item, every
+# material in the game with a use.
+RECIPES = []
+for _r in RECIPE_DATA.get("recipes", []):
+    _rec = _recipe(_r["id"], _r["out"], dict(_r.get("cost") or {}),
+                    int(_r.get("count", 1)), _r.get("note", ""))
+    # The trade comes from the file, and is checked against what the recipe
+    # actually makes -- the file can never quietly put a pill on the smith's
+    # bench.
+    _rec["kind"] = _r.get("kind") or _recipe_kind(_rec["out"])
+    _rec["max_count"] = int(_r.get("max_count", 20))
+    RECIPES.append(_rec)
 RECIPE_BY_ID = {r["id"]: r for r in RECIPES}
 
 # ----------------------------------------------------------------------------
 # Masteries
 #
-# Four tracks, each levelling to 99: cooking, alchemy, crafting and battle.
-# The level comes from the XP and the rank from the level: every ten levels
-# the track changes rank, so a level 10 cooking is "Cooking Beginner X" and
-# a level 11 is "Cooking Artisan I".
+# Five tracks -- cooking, alchemy, crafting, battle and herbs -- and every one
+# of them works the same way: twelve ranks of ten levels (I-X). The level
+# comes from the XP and the rank from the level, so a level 10 cooking is
+# "Adept Cook X" and a level 11 is "Expert Cook I". The ranks and what each
+# level buys live in data/mastery_data.json.
 #
 # The three trades grant their own XP where the work happens (on the server),
 # and every level of a trade buys a chance to duplicate what you made. Battle
-# XP is earned on the kill and reported with the save.
+# XP is earned on the kill and reported with the save. The herbalist track
+# teaches itself by gathering.
 # ----------------------------------------------------------------------------
 HERB_XP_PER_GATHER = 20  # per gather, doubled for every rarity above Common
 MASTERY_TRACKS = ("cooking", "alchemy", "crafting", "battle", "herbs")
-MASTERY_RANKS = ["Beginner", "Artisan", "Master", "Grandmaster", "Sage",
-                 "Elder", "Immortal", "Legendary", "Mythic", "Transcendent"]
 MASTERY_NUMERALS = ["I", "II", "III", "IV", "V", "VI", "VII", "VIII", "IX", "X"]
-MASTERY_MAX_LEVEL = 99
 MASTERY_XP_CAP = 10 ** 9
 MASTERY_XP_PER_CRAFT = 10   # per item made
 MASTERY_XP_PER_KILL = 5
@@ -720,11 +609,39 @@ def mastery_level(xp):
         lvl += 1
     return lvl
 
-def mastery_rank(level):
-    return MASTERY_RANKS[min(len(MASTERY_RANKS) - 1, (level - 1) // 10)]
-
 def mastery_numeral(level):
     return MASTERY_NUMERALS[(level - 1) % 10]
+
+def track_ranks(track):
+    return MASTERY_RANKS.get(track) or []
+
+def mastery_rank_of(track, xp):
+    """(rank, level inside the rank, rank name) for a track."""
+    ranks = track_ranks(track)
+    lvl = mastery_level(xp)
+    if not ranks:
+        return 1, lvl, track.title()
+    idx = min(len(ranks) - 1, (lvl - 1) // MASTERY_LEVELS_PER_RANK)
+    within = (lvl - 1) % MASTERY_LEVELS_PER_RANK + 1
+    return idx + 1, within, ranks[idx].get("name", "")
+
+def track_bonus(track, xp):
+    """The gift the track's rank buys, as a fraction (0.25 is a quarter)."""
+    ranks = track_ranks(track)
+    if not ranks:
+        return 0.0
+    rank, within, _ = mastery_rank_of(track, xp)
+    r = ranks[min(len(ranks) - 1, rank - 1)]
+    cap = float(MASTERY_TRACK_DATA.get(track, {}).get("bonus_cap", 50)) / 100.0
+    return min(cap, float(r.get("bonus", 0.0)) * within / 100.0)
+
+def track_body_bonus(track, xp):
+    """The body the track hardens, as a fraction (the hunt's own track)."""
+    info = MASTERY_TRACK_DATA.get(track, {})
+    per = float(info.get("body_per_level", 0.0))
+    cap = float(info.get("body_cap", 100)) / 100.0
+    lvl = mastery_level(xp)
+    return min(cap, per * max(0, lvl - 1) / 100.0)
 
 def _mastery_xp(stored, track):
     return int(((stored.get("mastery") or {}).get(track) or 0))
@@ -735,21 +652,40 @@ def _grant_mastery(stored, track, xp):
     return m[track]
 
 def mastery_payload(stored):
-    """What the client shows: xp, level and the rank the level earns."""
+    """What the client shows: xp, level, the rank and the level inside it.
+
+    Every track answers the same way -- the herbs did it first, and the rest
+    of the masteries follow the same shape.
+    """
     out = {}
     for t in MASTERY_TRACKS:
         xp = _mastery_xp(stored, t)
-        if t == "herbs":
-            # The herbalist track has its own twelve ranks of ten levels.
-            rank, within, name = herb_rank_of(xp)
-            out[t] = {"xp": xp, "level": herb_level(xp), "rank": rank,
-                      "rank_name": name, "within": within,
-                      "next": mastery_total_xp(herb_level(xp) + 1) - xp}
-            continue
         lvl = mastery_level(xp)
-        out[t] = {"xp": xp, "level": lvl, "rank": mastery_rank(lvl),
+        rank, within, name = mastery_rank_of(t, xp)
+        out[t] = {"xp": xp, "level": lvl, "rank": rank,
+                  "rank_name": name, "within": within,
                   "numeral": mastery_numeral(lvl),
                   "next": mastery_total_xp(lvl + 1) - xp}
+    return out
+
+def mastery_definitions():
+    """The rank tables, for the client: it draws the same names we do."""
+    out = {}
+    for t in MASTERY_TRACKS:
+        info = MASTERY_TRACK_DATA.get(t, {})
+        out[t] = {
+            "label": info.get("label", t.title()),
+            "gift": info.get("gift", ""),
+            "bonus_cap": float(info.get("bonus_cap", 50)),
+            "body_per_level": float(info.get("body_per_level", 0.0)),
+            "body_cap": float(info.get("body_cap", 100)),
+            "time_reduction_cap": float(info.get("time_reduction_cap", 0)),
+            "ranks": [{"rank": r.get("rank", i + 1), "name": r.get("name", ""),
+                       "bonus": r.get("bonus", 0),
+                       "time_reduction": r.get("time_reduction", 0),
+                       "discovery": r.get("discovery") or None}
+                      for i, r in enumerate(track_ranks(t))],
+        }
     return out
 
 # ----------------------------------------------------------------------------
@@ -1362,18 +1298,33 @@ class Handler(BaseHTTPRequestHandler):
             stored = PLAYERS.get(username)
             xp = _mastery_xp(stored, "herbs") if stored else 0
             rank, within, rank_name = herb_rank_of(xp)
+            # The rank gathers faster, so the panel must show the time the
+            # player actually waits -- not the raw time of the herb.
+            time_red, bonus, disc, disc_chance = herb_bonuses(xp)
             herbs = []
             for h in HERBS.values():
                 need = int(HERB_UNLOCKS.get(h.get("rarity", "Common"), 1))
+                base = float(h.get("time", 10) or 10)
                 herbs.append({"id": h["id"], "name": h["name"], "rarity": h.get("rarity", "Common"),
-                              "element": h.get("element", ""), "time": h.get("time", 10),
+                              "element": h.get("element", ""), "time": base,
+                              "now": round(max(0.5, base * (1.0 - time_red)), 1),
                               "desc": h.get("desc") or "",
                               "need_rank": need, "locked": rank < need})
             return self._send_json({
                 "ok": True, "herbs": herbs, "rank": rank, "level": within,
                 "rank_name": rank_name, "xp": xp,
+                "time_reduction": time_red, "bonus_chance": bonus,
                 "levels_per_rank": HERB_LEVELS_PER_RANK,
             }, cache="no-store")
+
+        if path == "/api/mastery":
+            # The rank tables: the client draws the same names the server
+            # hands out, so a rank can never read one way on one side.
+            return self._send_json({
+                "ok": True, "tracks": mastery_definitions(),
+                "levels_per_rank": MASTERY_LEVELS_PER_RANK,
+                "max_level": MASTERY_MAX_LEVEL,
+            }, cache="max-age=3600")
 
         if path == "/api/icons":
             # UI chrome art (tabs, doll slots). Resolved per request so a new
@@ -1588,6 +1539,14 @@ class Handler(BaseHTTPRequestHandler):
                     continue
                 granted[iid] = n
                 inv[iid] = max(0, min(int(inv.get(iid, 0)) + n, 9999))
+            # The client syncs its own bag every half minute, and that sync
+            # carries whatever the bag held a moment ago. A grant that a
+            # stale bag does not know about yet must not be wiped by it, so
+            # the grant is remembered until the next sync confirms it.
+            pending = stored.get("pending_grants") or {}
+            for iid, n in granted.items():
+                pending[iid] = max(int(pending.get(iid, 0) or 0), n)
+            stored["pending_grants"] = pending
             # Claiming is what settles the mail: read and claimed together, so
             # it leaves the unread count even though opening it did not.
             m["claimed"] = True
@@ -1740,7 +1699,7 @@ class Handler(BaseHTTPRequestHandler):
             # The XP follows the work: every item made teaches, and the rarer
             # the work the more it teaches.
             _grant_mastery(stored, track, MASTERY_XP_PER_CRAFT * (2 ** tier) * made)
-            chance = min(MASTERY_DUPLICATE_CAP, 0.01 * max(0, mastery_level(_mastery_xp(stored, track)) - 1))
+            chance = track_bonus(track, _mastery_xp(stored, track))
             duplicated = chance > 0 and random.random() < chance
             inv[out_id] = max(0, min(int(inv.get(out_id, 0) or 0) + made * (2 if duplicated else 1), 9999))
             stored["inventory"] = inv
@@ -1898,6 +1857,14 @@ class Handler(BaseHTTPRequestHandler):
                             inventory[k] = max(0, min(int(v), 9999))
                         except (TypeError, ValueError):
                             pass
+            # A grant from the mailbox that this bag does not know about yet
+            # (the client syncs the bag it had a moment ago) is not lost: it
+            # waits here until the bag carries it. After this sync the grant
+            # is settled, and the bag alone decides what is in the bag.
+            pending = stored.pop("pending_grants", None) or {}
+            for k, v in pending.items():
+                if k in ITEM_BY_ID and int(inventory.get(k, 0) or 0) < int(v or 0):
+                    inventory[k] = int(v or 0)
             elixirs = [None, None, None]
             elix_in = data.get("elixirs") or []
             if isinstance(elix_in, list):

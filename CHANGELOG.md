@@ -11,6 +11,49 @@ and push to `main` on https://github.com/itzRealEzra/ashen-fantasy.
 
 ## [Unreleased]
 
+## [0.9.28] - 2026-10-21
+### Added
+- **Every mastery is a herb mastery.** The tracks are no longer four
+  leftovers and one special case: all five -- cooking, alchemy, crafting,
+  the hunt and the herbs -- are twelve ranks of ten levels, each rank named
+  ("Novice Cook" through "Primordial Kitchen Deity", "Novice Hunter"
+  through "Primordial Beast Deity"), and the character panel reads them all
+  the same way: the rank's name, the level inside it out of ten, the road to
+  the next level, and what the level buys.
+- **The rank tables live in `data/mastery_data.json`**, and the client asks
+  the server for them (`/api/mastery`), so a rank can never read one way in
+  the panel and another way in the notice.
+- **The gather time is live.** The Gather panel shows the time the player
+  actually waits -- 6s at first, less as the herbalist rank grows -- and it
+  is corrected the moment the rank turns over, not on the next visit.
+- **A new realm reports its gains.** Ascending shows the stat increases in
+  the corner, under the name of the realm reached:
+  `New Realm — Qi Refinement Realm I`, with the HP, Attack and Defense the
+  new realm brings.
+
+### Fixed
+- **An item drop can be claimed again.** The tooltip that floats over a
+  mailbox item was swallowing the click on the Claim button underneath it,
+  and a tooltip left over from the previous panel floated over the next
+  one. The tooltip now lets clicks through (only its own buttons take the
+  pointer), and every panel switch clears it.
+- **A claim is not lost to a stale bag.** The client syncs the bag it had a
+  moment ago; a grant the bag did not know about yet waited on the server
+  until the bag caught up, instead of being wiped by the sync.
+- **Equipping one copy no longer empties the stack.** Four Copper Spirit
+  Rings, one worn, showed three in the bag -- now it does. Only a stack with
+  nothing left in it disappears.
+- Leaving a hunt now says plainly that the loot is in the bag.
+
+### Changed
+- **The world moved into `data/`.** The hunting grounds, the beasts and
+  their drop tables are in `data/areas_data.json`; the forge is in
+  `data/recipes_data.json`; the masteries are in `data/mastery_data.json`.
+  `server.py` reads them at start-up -- one place for each list, no second
+  copy in the code.
+- **The corner notices are words, not cards.** The border and the plate
+  behind them are gone; the text stands on its own with a shadow.
+
 ## [0.9.27] - 2026-10-21
 ### Added
 - **The herb says so in the corner.** Every herb that lands pops up in the

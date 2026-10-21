@@ -1,0 +1,115 @@
+{
+  "comment": "The hunting grounds: every area, every beast, and what it drops. The server reads this file at start-up, so the world of beasts lives in one place. 'req_idx' gates an area (and a boss) by the player's realm. 'chance' is a fraction (0.85 = 85%). 'stones' is the spirit-stone purse of a kill: [min, max].",
+  "areas": [
+    {
+      "id": "origin_village",
+      "name": "Origin Village",
+      "req_idx": 0,
+      "req": "Mortal",
+      "difficulty": "Beginner",
+      "desc": "A peaceful village where new cultivators begin their journey, complete basic quests, and learn the fundamentals of combat. A corrupted alpha prowls the treeline past the fields — a Mortal is not ready for it.",
+      "mobs": [
+        {
+          "id": "spectral_rat", "name": "Spectral Rat", "realm": "Mortal", "difficulty": "Very Easy",
+          "desc": "Scratching under the granary boards. Bold in numbers, harmless alone.",
+          "glyph": "🐀", "hp": 40, "atk": 6, "def": 0, "speed": 1.4, "qi": 3,
+          "req_idx": 0, "boss": false,
+          "loot": [
+            { "item": "Rat Fur", "rarity": "Common", "chance": 0.85, "min": 1, "max": 3 },
+            { "item": "Raw Meat", "rarity": "Common", "chance": 0.75, "min": 2, "max": 4 },
+            { "item": "Broken Claw", "rarity": "Common", "chance": 0.60, "min": 1, "max": 1 },
+            { "item": "Rat Tail", "rarity": "Uncommon", "chance": 0.40, "min": 1, "max": 2 },
+            { "item": "Small Beast Bone", "rarity": "Uncommon", "chance": 0.25, "min": 1, "max": 1 },
+            { "item": "Weak Beast Blood", "rarity": "Rare", "chance": 0.10, "min": 1, "max": 1 }
+          ]
+        },
+        {
+          "id": "crimson_eyed_rat", "name": "Crimson Eyed Rat", "realm": "Mortal", "difficulty": "Very Easy",
+          "desc": "A bloated sack of fur and teeth that eats whole rows of millet.",
+          "glyph": "🐁", "hp": 90, "atk": 9, "def": 2, "speed": 1.2, "qi": 5,
+          "req_idx": 0, "boss": false,
+          "loot": [
+            { "item": "Rat Fur", "rarity": "Common", "chance": 0.85, "min": 3, "max": 5 },
+            { "item": "Raw Meat", "rarity": "Common", "chance": 0.80, "min": 3, "max": 6 },
+            { "item": "Broken Claw", "rarity": "Common", "chance": 0.70, "min": 2, "max": 2 },
+            { "item": "Rat Tail", "rarity": "Uncommon", "chance": 0.50, "min": 2, "max": 3 },
+            { "item": "Small Beast Bone", "rarity": "Uncommon", "chance": 0.40, "min": 1, "max": 2 },
+            { "item": "Beast Core Fragment", "rarity": "Rare", "chance": 0.08, "min": 1, "max": 1 }
+          ]
+        },
+        {
+          "id": "mystical_wolf", "name": "Mystical Wolf", "realm": "Mortal", "difficulty": "Easy",
+          "desc": "Works the tree line at dusk. Hunts alone, and prefers it that way.",
+          "glyph": "🐺", "hp": 130, "atk": 13, "def": 4, "speed": 1.2, "qi": 8,
+          "req_idx": 0, "boss": false,
+          "loot": [
+            { "item": "Wolf Pelt", "rarity": "Common", "chance": 0.85, "min": 2, "max": 4 },
+            { "item": "Raw Meat", "rarity": "Common", "chance": 0.80, "min": 4, "max": 6 },
+            { "item": "Broken Claw", "rarity": "Common", "chance": 0.65, "min": 5, "max": 5 },
+            { "item": "Wolf Fang", "rarity": "Uncommon", "chance": 0.60, "min": 2, "max": 3 },
+            { "item": "Beast Bone", "rarity": "Uncommon", "chance": 0.45, "min": 2, "max": 4 },
+            { "item": "Weak Beast Core", "rarity": "Rare", "chance": 0.10, "min": 1, "max": 1 }
+          ]
+        },
+        {
+          "id": "silver_wind_wolf", "name": "Silver Wind Wolf", "realm": "Mortal", "difficulty": "Easy",
+          "desc": "Paler, older, and far less inclined to run from a cultivator.",
+          "glyph": "🐕", "hp": 175, "atk": 15, "def": 6, "speed": 1.1, "qi": 11,
+          "req_idx": 0, "boss": false,
+          "loot": [
+            { "item": "Gray Wolf Pelt", "rarity": "Common", "chance": 0.85, "min": 2, "max": 5 },
+            { "item": "Raw Meat", "rarity": "Common", "chance": 0.80, "min": 4, "max": 7 },
+            { "item": "Broken Claw", "rarity": "Common", "chance": 0.70, "min": 6, "max": 6 },
+            { "item": "Wolf Fang", "rarity": "Uncommon", "chance": 0.65, "min": 3, "max": 4 },
+            { "item": "Beast Bone", "rarity": "Uncommon", "chance": 0.55, "min": 3, "max": 5 },
+            { "item": "Gray Wolf Essence", "rarity": "Rare", "chance": 0.12, "min": 1, "max": 1 }
+          ]
+        },
+        {
+          "id": "tusked_war_boar", "name": "Tusked War Boar", "realm": "Mortal", "difficulty": "Easy",
+          "desc": "Roots up the eastern field. Slow, armoured, and extremely bad-tempered.",
+          "glyph": "🐗", "hp": 190, "atk": 16, "def": 8, "speed": 1.05, "qi": 14,
+          "req_idx": 0, "boss": false,
+          "loot": [
+            { "item": "Boar Hide", "rarity": "Common", "chance": 0.85, "min": 2, "max": 4 },
+            { "item": "Raw Meat", "rarity": "Common", "chance": 0.90, "min": 5, "max": 8 },
+            { "item": "Broken Claw", "rarity": "Common", "chance": 0.50, "min": 3, "max": 3 },
+            { "item": "Boar Tusk", "rarity": "Uncommon", "chance": 0.65, "min": 2, "max": 3 },
+            { "item": "Beast Bone", "rarity": "Uncommon", "chance": 0.50, "min": 3, "max": 5 },
+            { "item": "Boar Fat", "rarity": "Uncommon", "chance": 0.45, "min": 2, "max": 4 }
+          ]
+        },
+        {
+          "id": "frostmane_wereboar", "name": "Frostmane Wereboar", "realm": "Mortal", "difficulty": "Easy",
+          "desc": "Fevered and frothing at the village edge. The worst thing in the fields.",
+          "glyph": "🐃", "hp": 260, "atk": 18, "def": 10, "speed": 1.05, "qi": 18,
+          "req_idx": 0, "boss": false,
+          "loot": [
+            { "item": "Tough Boar Hide", "rarity": "Uncommon", "chance": 0.80, "min": 2, "max": 5 },
+            { "item": "Raw Meat", "rarity": "Common", "chance": 0.85, "min": 5, "max": 9 },
+            { "item": "Broken Claw", "rarity": "Uncommon", "chance": 0.50, "min": 3, "max": 3 },
+            { "item": "Bloodied Tusk", "rarity": "Rare", "chance": 0.65, "min": 2, "max": 4 },
+            { "item": "Beast Blood", "rarity": "Uncommon", "chance": 0.45, "min": 2, "max": 4 },
+            { "item": "Corrupted Beast Core", "rarity": "Epic", "chance": 0.12, "min": 1, "max": 1 }
+          ]
+        },
+        {
+          "id": "corrupted_alpha_wolf", "name": "Corrupted Alpha Wolf", "realm": "Qi Refinement I", "difficulty": "Hard",
+          "desc": "The corrupted alpha. Its breath freezes the air, its claws rend steel.",
+          "glyph": "🐺", "hp": 800, "atk": 50, "def": 30, "speed": 0.8, "qi": 50,
+          "req_idx": 1, "boss": true,
+          "loot": [
+            { "item": "Corrupted Alpha Wolf Core", "rarity": "Legendary", "chance": 0.30, "min": 1, "max": 1 },
+            { "item": "Corrupted Alpha Wolf Pelt", "rarity": "Legendary", "chance": 0.12, "min": 1, "max": 1 },
+            { "item": "Corrupted Fang", "rarity": "Legendary", "chance": 0.08, "min": 1, "max": 1 },
+            { "item": "Corrupted Alpha Blood", "rarity": "Epic", "chance": 0.30, "min": 1, "max": 1 },
+            { "item": "Corrupted Beast Core", "rarity": "Epic", "chance": 1.00, "min": 1, "max": 1 },
+            { "item": "Bloodied Tusk", "rarity": "Rare", "chance": 0.60, "min": 1, "max": 2 },
+            { "item": "Wolf Fang", "rarity": "Uncommon", "chance": 0.70, "min": 2, "max": 4 },
+            { "item": "Tough Boar Hide", "rarity": "Uncommon", "chance": 0.60, "min": 1, "max": 3 }
+          ]
+        }
+      ]
+    }
+  ]
+}
