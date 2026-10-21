@@ -34,6 +34,7 @@ const els = {
   "alchemy-root": mkEl(), "cook-root": mkEl(), "skills-root": mkEl(),
   "equipped-skills": mkEl(), "loot-rows": mkEl(), "kill-count": mkEl(),
   "battle-status": mkEl(), "battle-kit": mkEl(), "item-tip": mkEl(),
+  "mail-badge": mkEl(),
 };
 const calls = { cEvents: [], saves: [], enemies: [], notices: [], renderInv: 0, timeouts: [], fetch: null, toasts: [], popups: [], fetches: 0 };
 const state = { username: "tester", player: null };
@@ -150,6 +151,7 @@ const parts = [
   grab(/let RECIPES = \[\];/, "RECIPES"),
   grab(/const TRADES = \{[\s\S]*?\n\};/, "TRADES"),
   grab(/async function fetchRecipes\(\) \{[\s\S]*?\n\}/, "fetchRecipes"),
+  grab(/async function sellItem\(itemId, count\) \{[\s\S]*?\n\}/, "sellItem"),
   grab(/function craftReady\(r, count\) \{[\s\S]*?\n\}/, "craftReady"),
   grab(/function craftMax\(r\) \{[\s\S]*?\n\}/, "craftMax"),
   grab(/function toastBox\(\) \{[\s\S]*?\n\}/, "toastBox"),
@@ -172,6 +174,11 @@ const parts = [
   grab(/function masteryPanel\(p\) \{[\s\S]*?\n\}/, "masteryPanel"),
   grab(/function closeSidebar\(\) \{[\s\S]*?\n\}/, "closeSidebar"),
   grab(/function renderWork\(rootId, kind\) \{[\s\S]*?\n\}/, "renderWork"),
+  grab(/let crafting = false;/, "crafting"),
+  grab(/let mailNewItems = 0;/, "mailNewItems"),
+  grab(/function mailUnread\(\) \{[\s\S]*?\n\}/, "mailUnread"),
+  grab(/let mailBox = \[\], mailOpen = null, mailBusy = false;/, "mailBox"),
+  grab(/function paintMailBadge\(\) \{[\s\S]*?\n\}/, "paintMailBadge"),
   grab(/async function craftRecipe\(recipeId, count\) \{[\s\S]*?\n\}/, "craftRecipe"),
   // The real card painter is renamed on extraction: the prelude already has
   // a showBattleEnemies stub (the defeat message sink).
@@ -240,6 +247,8 @@ const lib = new Function("__", prelude + parts + `
     loadElixirSlot, unloadElixir, elixirPreferredSlot, leaveActiveHunt,
     showBattleAreas, showBattleEnemiesCard, battleTick, derivedStats, playerMaxHp, addInv, takeInv,
     craftReady, craftMax, toast, toastBox, renderWork, craftRecipe, fetchRecipes,
+    crafting, sellItem, paintMailBadge,
+    setMailNewItems: v => { mailNewItems = v; },
     masteryLevel, masteryRank, masteryNumeral, masteryTitle, masteryXp, masteryKillXp,
     activeBuffs, skillCooldown, equippedSkills, useSkills, fireSkill, sortBag,
     BAG_SORTS, ITEM_RARITY_ORDER, renderSkills, toggleSkill, SKILL_SLOTS, paintCombat,
@@ -662,6 +671,14 @@ state.player = basePlayer();
      "the notice names the level change");
   ok(/Cooking Beginner X -> Cooking Artisan I/.test(calls.popups[0]),
      "the notice names the old rank and the new one");
+  // Every level turns the numeral too, and the notice says so.
+  calls.popups.length = 0;
+  lib.applyMasteryXp("battle", 5500);   // level 11
+  calls.popups.length = 0;
+  lib.applyMasteryXp("battle", 6600);   // level 12
+  ok(/Battle Artisan I -> Battle Artisan II/.test(calls.popups[0]),
+     "the notice names the rank even when only the numeral turns");
+  state.player.mastery.battle = 0;
 
   lib.renderChar(state.player);
   const charHtml = els["char-sheet"].innerHTML;
@@ -802,6 +819,39 @@ state.player = basePlayer();
      "the techniques sit above the loot log");
 
   // ============ 6l. the elixir, the pill and the meal are in the fight ============
+  const cssNow = fs.readFileSync(path.join(__dirname, "..", "public", "css", "style.css"), "utf8").replace(/\r\n/g, "\n");
+  // ============ 6m. selling, the mail badge, the difficulty colour ============
+  state.player = basePlayer();
+  state.player.inventory = { rat_fur: 4 };
+  state.player.spirit_stones = 0;
+  calls.toasts.length = 0;
+  calls.fetch = async (url, opts) => {
+    const body = JSON.parse(opts.body);
+    ok(body.item_id === "rat_fur", "the buyer is asked for the right item");
+    return { ok: true, json: async () => ({ ok: true, sold: "rat_fur", count: 2, earned: 10,
+      player: { ...state.player, inventory: { rat_fur: 2 }, spirit_stones: 10 } }) };
+  };
+  await lib.sellItem("rat_fur", 2);
+  ok(state.player.spirit_stones === 10, "selling pays the stones");
+  ok(state.player.inventory.rat_fur === 2, "the sold goods leave the bag");
+  ok(calls.toasts.some(m => /Sold 2 Rat Fur for 10 stones/.test(m)),
+     "the sale is reported in the corner");
+  calls.fetch = null;
+
+  // The badge counts the new items waiting to be claimed.
+  lib.setMailNewItems(3);
+  lib.paintMailBadge();
+  ok(String(els["mail-badge"].textContent) === "3", "the mail badge counts the new items");
+  ok(els["mail-badge"].hidden === false, "the badge shows when there is something new");
+  lib.setMailNewItems(0);
+  lib.paintMailBadge();
+  ok(els["mail-badge"].hidden === true, "the badge goes quiet with nothing new");
+
+  // The boss is Hard, and Hard is dark red.
+  ok(/difficulty-tag \$\{esc\(String\(m\.difficulty\)/.test(SRC),
+     "the difficulty tag carries its own class");
+  ok(/\.difficulty-tag\.hard \{ color: #7d1018/.test(cssNow),
+     "Hard is written in dark red");
   state.player = basePlayer();
   state.player.elixirs = ["minor_vitality_elixir", "minor_qi_pill", "roasted_wild_rat_meat"];
   state.player.inventory = {
@@ -812,12 +862,12 @@ state.player = basePlayer();
   ok(/data-elixir="0"/.test(kitHtml) && /data-elixir="2"/.test(kitHtml),
      "each kit slot knows which one it is");
   ok(!/Roasted Wild Rat Meat/.test(kitHtml), "the kit shows the icon alone, not the name");
-  ok(!/kit-count/.test(kitHtml) && !/\d+x/.test(kitHtml), "the kit shows no count");
+  ok(/kit-count">3</.test(kitHtml), "the kit shows the count on the icon");
   const kitSrc = SRC.slice(SRC.indexOf("function paintBattleKit"), SRC.indexOf("function paintCombat"));
   ok(/onmouseleave = scheduleHideTip/.test(kitSrc),
      "the kit tooltip leaves with the cursor instead of sticking");
-  const cssNow = fs.readFileSync(path.join(__dirname, "..", "public", "css", "style.css"), "utf8").replace(/\r\n/g, "\n");
-  ok(/\.kit-slot \{[^}]*justify-content: center/.test(cssNow),
+  const cssNow2 = fs.readFileSync(path.join(__dirname, "..", "public", "css", "style.css"), "utf8").replace(/\r\n/g, "\n");
+  ok(/\.kit-slot \{[^}]*justify-content: center/.test(cssNow2),
      "the kit icon sits in the middle of its slot");
   ok(/kit-slot ready/.test(kitHtml), "a filled kit slot is lit and ready");
   ok(/data-tip="roasted_wild_rat_meat"/.test(kitHtml), "a filled kit slot points at its item");
@@ -1038,8 +1088,8 @@ state.player = basePlayer();
   ok(/spirit_stones: p\.spirit_stones \| 0/.test(SRC), "sync payload carries spirit_stones");
   ok(/p\.spirit_stones = Math\.max\(0, Math\.floor\(\+p\.spirit_stones \|\| 0\)\)/.test(SRC),
      "normalizePlayer repairs the stone balance");
-  ok(/\+\$\{battle\.lastStones\} <img class="stone-glyph"/.test(SRC),
-     "the respawn line shows the stone reward");
+  ok(/\+\$\{battle\.lastStones\} <img class="stone-glyph"/.test(SRC) === false,
+     "the searching line shows neither qi nor stones");
   ok(/battle\.loot\["Spirit Stone"\]/.test(SRC), "kills log the guaranteed stone drop");
   ok(/loot-guaranteed/.test(SRC) && /guaranteed/.test(SRC),
      "enemy cards preview the drop as guaranteed");

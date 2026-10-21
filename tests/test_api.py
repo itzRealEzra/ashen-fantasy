@@ -535,6 +535,33 @@ try:
     st, j = sync("skiller", skills=["not_a_skill"])
     ok(all(s is None for s in j["player"]["skills"]),
        "an unknown technique is refused")
+
+    # ============ 10g. values, selling, and the legendary rates ============
+    ok(all(i.get("value", 0) > 0 for i in server.ITEMS), "every item has a value")
+    ok(server.ITEM_BY_ID["rat_fur"]["value"] < server.ITEM_BY_ID["corrupted_fang"]["value"],
+       "a rarer item is worth more")
+    fresh("seller", inventory={"rat_fur": 5}, spirit_stones=10)
+    st, j = req("/api/sell", {"username": "seller", "item_id": "rat_fur", "count": 2})
+    ok(st == 200 and j.get("ok") is True, "the buyer takes the goods")
+    worth = server.ITEM_BY_ID["rat_fur"]["value"]
+    ok(j["earned"] == worth * 2, "the buyer pays the value of the goods")
+    ok(j["player"]["inventory"].get("rat_fur") == 3, "the sold goods leave the bag")
+    ok(j["player"]["spirit_stones"] == 10 + worth * 2, "the stones are paid")
+    st, j = req("/api/sell", {"username": "seller", "item_id": "rat_fur", "count": 99})
+    ok(st == 200 and j["player"]["inventory"].get("rat_fur", 0) == 0,
+       "selling more than you hold sells what you hold")
+    st, j = req("/api/sell", {"username": "seller", "item_id": "not_a_real_item"})
+    ok(st == 404, "the buyer will not take an item that does not exist")
+    st, j = req("/api/sell", {"username": "seller", "item_id": "wooden_sword"})
+    ok(st == 400, "there is nothing to sell that is not in the bag")
+
+    # Legendary materials are not a farm.
+    st, j = req("/api/areas")
+    boss = next(m for a in j["areas"] for m in a["mobs"] if m.get("boss"))
+    legendary = [l for l in boss["loot"] if l["rarity"] == "Legendary"]
+    ok(legendary and all(l["chance"] <= 0.35 for l in legendary),
+       "the boss's legendary drops are rare")
+    ok(boss["difficulty"] == "Hard", "the alpha wolf is Hard, not Nightmare")
     # The rarer the work, the more it teaches: Common is 10, Uncommon is 20.
     common_xp = server.MASTERY_XP_PER_CRAFT
     uncommon_xp = server.MASTERY_XP_PER_CRAFT * 2

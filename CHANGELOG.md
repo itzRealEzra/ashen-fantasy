@@ -11,6 +11,34 @@ and push to `main` on https://github.com/itzRealEzra/ashen-fantasy.
 
 ## [Unreleased]
 
+## [0.9.25] - 2026-10-20
+### Added
+- **Items have a value, and you can sell them.** Every item carries a price
+  in spirit stones (the rarity sets the band, and a piece of gear is worth
+  more than a material of the same rarity), shown in the tooltip. The bag
+  tooltip gained **Sell** and **Sell all**: the buyer is server-side, so it
+  checks the bag, takes the goods and pays the stones, and the counter in the
+  top bar goes up.
+- **The mail badge counts the new items** waiting to be claimed ("3"), not
+  the number of messages -- and it updates the moment you claim them.
+
+### Changed
+- **Legendary materials are not a farm any more.** The alpha wolf's
+  legendary drops were 100%, 50% and 25%: the core is now 30%, the pelt 12%
+  and the fang 8%, so a legendary piece is a find, not a routine.
+- The Corrupted Alpha Wolf is **Hard** now, not Nightmare -- and Hard is
+  written in dark red.
+- The **battle kit** shows the quantity on the icon, in the middle of it.
+- The **level-up notice** always names the rank as well as the level
+  ("Battle Artisan I -> Battle Artisan II"), not only when the rank itself
+  turns over.
+- The **searching line** says only that it is searching: the qi and the
+  stones are no longer shouted at you mid-hunt.
+- **One craft at a time.** A second click while the first is still at the
+  forge asked for materials that were already spent, so the mass forge
+  sometimes did nothing. The forge is now free only once the last craft has
+  answered.
+
 ## [0.9.24] - 2026-10-20
 ### Fixed
 - **Crafting, brewing and cooking taught no mastery.** The server sends the

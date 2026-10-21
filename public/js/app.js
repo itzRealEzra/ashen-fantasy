@@ -1,6 +1,6 @@
 /* Ashen Fantasy — vanilla JS state machine: username -> roots -> main */
 const $ = (id) => document.getElementById(id);
-const CLIENT_VERSION = "0.9.24"; // must match server.py server_version + footer
+const CLIENT_VERSION = "0.9.25"; // must match server.py server_version + footer
 const state = {
   username: localStorage.getItem("af_user") || "",
   rollId: null,
@@ -1046,6 +1046,8 @@ function itemTipHtml(itemId, ctx) {
   // Held count: for materials this is the only number that matters, and the
   // bag grid's "3x" badge is too small to read mid-hover.
   if (it.kind === "material") h += `<div><small class="muted">Held: ${owned}</small></div>`;
+  // What it is worth: the buyer pays in spirit stones.
+  if (it.value) h += `<div><small class="muted">Worth ${it.value} spirit stone${it.value === 1 ? "" : "s"}</small></div>`;
   let acts = "";
   if (ctx.plain) {
     // A plain look: the item, described, with no buttons to press.
@@ -1062,6 +1064,10 @@ function itemTipHtml(itemId, ctx) {
     const idx = p.elixirs ? p.elixirs.findIndex(x => x === itemId) : -1;
     if (idx >= 0) acts += `<button data-act="use">Use</button><button data-act="unload" data-slot="${idx}">Unequip</button>`;
     else acts += `<button data-act="use">Use</button><button data-act="elixir">Equip</button>`;
+  }
+  // Selling is a bag thing: what is worn or loaded is not for sale.
+  if (!ctx.plain && !ctx.unequip && ctx.unload == null && owned > 0 && it.value) {
+    acts += `<button data-act="sell">Sell</button><button data-act="sell-all">Sell all</button>`;
   }
   if (acts) h += `<div class="tip-actions">${acts}</div>`;
   return h;
@@ -1558,7 +1564,7 @@ function masteryPopup(track, fromLevel, toLevel) {
   const name = track[0].toUpperCase() + track.slice(1);
   const el = document.createElement("div");
   el.className = "toast mastery-toast";
-  const rankLine = masteryRank(fromLevel) !== masteryRank(toLevel)
+  const rankLine = masteryTitle(track, fromLevel) !== masteryTitle(track, toLevel)
     ? `<p class="mastery-rank">${esc(masteryTitle(track, fromLevel))} -> ${esc(masteryTitle(track, toLevel))}</p>`
     : "";
   el.innerHTML = `<b>${esc(name)} Mastery ${fromLevel} -> ${toLevel}</b>${rankLine}`;
@@ -1623,6 +1629,39 @@ function toggleSkill(skillId) {
   saveLocal(p);
   renderSkills();
   syncPlayer(false);
+}
+
+// Sell what is in the bag. The buyer is server-side: it checks the bag,
+// takes the goods and pays the stones.
+async function sellItem(itemId, count) {
+  const p = state.player;
+  if (!p) return;
+  let j = null;
+  try {
+    const r = await fetch("/api/sell", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ username: p.username, item_id: itemId, count }),
+    });
+    j = await r.json();
+  } catch {
+    toast("The buyer will not answer.");
+    return;
+  }
+  if (!j || j.error) {
+    toast("The buyer refuses: " + (j && j.error ? j.error : "no reason given"));
+    return;
+  }
+  if (j.ok && j.player) {
+    p.inventory = j.player.inventory;
+    p.spirit_stones = j.player.spirit_stones | 0;
+    const it = ITEM_BY_ID[j.sold] || {};
+    const line = `Sold ${j.count} ${it.name || j.sold} for ${j.earned} stone${j.earned === 1 ? "" : "s"}`;
+    cEvent(line + ".");
+    toast(line + ".");
+    saveLocal(p);
+    updateQi(p);
+    renderInventory();
+  }
 }
 
 // The three trades ----------
@@ -1746,42 +1785,51 @@ function renderWork(rootId, kind) {
   });
 }
 
+// One craft at a time: a second click while the first is still at the forge
+// would ask for materials that are already spent.
+let crafting = false;
+
 async function craftRecipe(recipeId, count) {
   const p = state.player;
-  if (!p) return;
-  let j = null;
+  if (!p || crafting) return;
+  crafting = true;
   try {
-    const r = await fetch("/api/craft", {
-      method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ username: p.username, recipe_id: recipeId, count }),
-    });
-    j = await r.json();
-  } catch {
-    cEvent("The forge stays cold — the server did not answer.");
-    return;
-  }
-  if (!j || j.error) {
-    cEvent("The forge refuses: " + (j && j.error ? j.error : "unknown reason"));
-    return;
-  }
-  if (j.ok && j.player) {
-    p.inventory = j.player.inventory;
-    const it = ITEM_BY_ID[j.crafted] || {};
-    const trade = TRADES[j.kind] || TRADES.craft;
-    const n = j.count * (j.duplicated ? 2 : 1);
-    const made = `${trade.done} ${it.name || j.crafted} x${n}` +
-      (j.duplicated ? " — mastery bonus" : "");
-    cEvent(made + ".");
-    toast(made);
-    // the trade taught its own mastery (the server sends the whole track)
-    const track = { craft: "crafting", alchemy: "alchemy", cook: "cooking" }[j.kind];
-    const taught = track && j.mastery && j.mastery[track];
-    if (taught && typeof taught.xp === "number") applyMasteryXp(track, taught.xp);
-    saveLocal(p);
-    // repaint the bench the player is standing at, with the new counts
-    const kind = j.kind || "craft";
-    renderWork({ craft: "craft-root", alchemy: "alchemy-root", cook: "cook-root" }[kind] || "craft-root", kind);
-    renderInventory();
+    let j = null;
+    try {
+      const r = await fetch("/api/craft", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ username: p.username, recipe_id: recipeId, count }),
+      });
+      j = await r.json();
+    } catch {
+      cEvent("The forge stays cold — the server did not answer.");
+      return;
+    }
+    if (!j || j.error) {
+      cEvent("The forge refuses: " + (j && j.error ? j.error : "unknown reason"));
+      return;
+    }
+    if (j.ok && j.player) {
+      p.inventory = j.player.inventory;
+      const it = ITEM_BY_ID[j.crafted] || {};
+      const trade = TRADES[j.kind] || TRADES.craft;
+      const n = j.count * (j.duplicated ? 2 : 1);
+      const made = `${trade.done} ${it.name || j.crafted} x${n}` +
+        (j.duplicated ? " — mastery bonus" : "");
+      cEvent(made + ".");
+      toast(made);
+      // the trade taught its own mastery (the server sends the whole track)
+      const track = { craft: "crafting", alchemy: "alchemy", cook: "cooking" }[j.kind];
+      const taught = track && j.mastery && j.mastery[track];
+      if (taught && typeof taught.xp === "number") applyMasteryXp(track, taught.xp);
+      saveLocal(p);
+      // repaint the bench the player is standing at, with the new counts
+      const kind = j.kind || "craft";
+      renderWork({ craft: "craft-root", alchemy: "alchemy-root", cook: "cook-root" }[kind] || "craft-root", kind);
+      renderInventory();
+    }
+  } finally {
+    crafting = false;   // the forge is free again
   }
 }
 
@@ -1953,7 +2001,7 @@ function showBattleEnemies(notice) {
         <b>${esc(m.name)}</b>
         ${m.boss ? `<div class="boss-tag">Boss</div>` : ""}
         <div class="realm-tag">${esc(m.realm)}</div>
-        ${m.difficulty ? `<div class="difficulty-tag">${esc(m.difficulty)}</div>` : ""}
+        ${m.difficulty ? `<div class="difficulty-tag ${esc(String(m.difficulty).toLowerCase().replace(/[^a-z]+/g, "-"))}">${esc(m.difficulty)}</div>` : ""}
         ${locked ? `<div class="locked-tag">Locked — needs ${esc(m.realm)}</div>` : ""}
         <div class="desc">${esc(m.desc)}</div>
         <div class="enemy-glyph">${iconHtml(m.img, m.glyph, "art-enemy")}</div>
@@ -2081,6 +2129,7 @@ function paintBattleKit() {
     // the item, and there is no item yet.
     return `<div class="kit-slot${usable ? " ready" : ""}" data-elixir="${i}"${usable ? ` data-tip="${iid}"` : ` data-slot-name="Empty" data-slot-type="${esc(slot.type)}"`}>` +
       (it ? iconHtml(it.img, it.glyph, artCls(it, "art-slot")) : iconImg(slot.icon, "slot-icon")) +
+      (usable ? `<span class="kit-count">${n}</span>` : "") +
       `</div>`;
   }).join("");
   root.querySelectorAll("[data-elixir]").forEach(el => {
@@ -2124,7 +2173,7 @@ function paintCombat() {
   if (kc) kc.textContent = battle.kills ? `${m.name} slain ×${battle.kills}` : "";
   const st = $("battle-status");
   if (st) st.innerHTML = battle.searching
-    ? `<div class="searching">Searching for that same enemy…${battle.lastQi ? ` · +${battle.lastQi} Qi` : ""}${battle.lastStones ? ` · +${battle.lastStones} <img class="stone-glyph" src="/assets/icons/spirit_stone.png" alt="" />` : ""}</div>`
+    ? `<div class="searching">Searching for that same enemy…</div>`
     : "";
 }
 
@@ -2291,6 +2340,8 @@ function ensureTipWired() {
     else if (act === "elixir") loadElixirSlot(tipItem);
     else if (act === "unequip" && e.target.dataset.slot) unequipSlot(e.target.dataset.slot);
     else if (act === "unload") unloadElixir(tipItem);
+    else if (act === "sell") sellItem(tipItem, 1);
+    else if (act === "sell-all") sellItem(tipItem, 9999);
     hideTip();
   });
   tip.addEventListener("mouseenter", () => {
@@ -2311,10 +2362,14 @@ function mailUnread() {
   return mailBox.filter(m => !m.read).length;
 }
 
+let mailNewItems = 0;
+
 function paintMailBadge() {
   const b = $("mail-badge");
   if (!b) return;
-  const n = mailUnread();
+  // New items waiting to be claimed are what the badge is really about;
+  // plain patch notes fall back to the unread count.
+  const n = mailNewItems > 0 ? mailNewItems : mailUnread();
   b.textContent = n;
   b.hidden = n === 0;
 }
@@ -2390,6 +2445,7 @@ async function loadMail() {
     if (j.ok && j.mail) {
       mailBox = j.mail;
       mailOpen = null;
+      if (typeof j.new_items === "number") mailNewItems = j.new_items;
       renderMail();
     }
   } catch {
@@ -2434,6 +2490,7 @@ async function claimMail(id) {
       const ids = Object.keys(j.granted || {});
       const i = mailBox.findIndex(m => m.id === id);
       if (i >= 0) mailBox[i] = j.mail;
+      if (typeof j.new_items === "number") mailNewItems = j.new_items;
       // Adopt the server's inventory so the bag reflects the grant at once.
       if (j.inventory) p.inventory = j.inventory;
       saveLocal(p);

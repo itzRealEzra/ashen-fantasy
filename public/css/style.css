@@ -141,6 +141,7 @@ input { background: #0e0e14; border: 1px solid var(--line); color: var(--ink); p
 .enemy-card b { font-size: 15px; }
 .enemy-card .realm-tag { font-size: 12px; color: var(--gold2); }
 .enemy-card .difficulty-tag { color: var(--muted); font-family: var(--font-brush); font-size: 14px; letter-spacing: 1px; }
+.enemy-card .difficulty-tag.hard { color: #7d1018; }
 .tip-rarity { font-family: var(--font-brush); letter-spacing: 1px; }
 .enemy-card.boss { border-color: var(--gold); background: #241d0e; }
 .enemy-card.boss:hover { box-shadow: 0 0 10px rgba(201,168,106,.35); }
@@ -276,7 +277,7 @@ input { background: #0e0e14; border: 1px solid var(--line); color: var(--ink); p
 .kit-slot .slot-icon, .kit-slot .art-slot { width: 22px; height: 22px; }
 .kit-name { font-size: 12px; color: var(--muted); letter-spacing: 1px; }
 .kit-slot.ready .kit-name { color: var(--gold2); }
-.kit-count { font-size: 11px; color: var(--gold2); }
+.kit-count { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: bold; color: #fff; text-shadow: 0 0 4px #000, 0 0 2px #000; }
 .skill-slot { position: relative; border: 1px solid var(--line); background: var(--panel2); padding: 4px 8px; min-width: 92px; overflow: hidden; }
 .skill-slot .skill-art { width: 26px; height: 26px; display: block; }
 .skill-name { font-size: 11px; letter-spacing: 1px; color: var(--gold2); }

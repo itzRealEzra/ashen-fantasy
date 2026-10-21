@@ -17,8 +17,8 @@ import mimetypes
 # Single source of truth for the build number. Must match CLIENT_VERSION in
 # public/js/app.js and the footer in public/index.html. A player whose saved
 # patch_version differs gets one patch-note mail when they next check mail.
-SERVER_VERSION = "0.9.24"
-CLIENT_VERSION = "0.9.24"  # for /status only; the client keeps its own copy
+SERVER_VERSION = "0.9.25"
+CLIENT_VERSION = "0.9.25"  # for /status only; the client keeps its own copy
 STARTED_AT = time.time()
 RESTARTED_AT = 0
 RESTART_SEQ = 0
@@ -268,12 +268,12 @@ AREAS = [
         # demands a realm of its own: a Mortal cannot survive it, so it stays
         # locked until Qi Refinement I. Its loot is drawn from materials that
         # already exist -- no new item is minted for a boss kill.
-        _mob("corrupted_alpha_wolf", "Corrupted Alpha Wolf", "Qi Refinement I", "Nightmare",
+        _mob("corrupted_alpha_wolf", "Corrupted Alpha Wolf", "Qi Refinement I", "Hard",
              "The corrupted alpha. Its breath freezes the air, its claws rend steel.",
              "🐺", 800, 50, 30, 0.8, 50,
-             _drops(("Corrupted Alpha Wolf Core", "Legendary", 100, 1, 1),
-                     ("Corrupted Alpha Wolf Pelt", "Legendary", 50, 1, 1),
-                     ("Corrupted Fang", "Legendary", 25, 1, 1),
+             _drops(("Corrupted Alpha Wolf Core", "Legendary", 30, 1, 1),
+                     ("Corrupted Alpha Wolf Pelt", "Legendary", 12, 1, 1),
+                     ("Corrupted Fang", "Legendary", 8, 1, 1),
                      ("Corrupted Alpha Blood", "Epic", 30, 1, 1),
                      ("Corrupted Beast Core", "Epic", 100, 1, 1),
                      ("Bloodied Tusk", "Rare", 60, 1, 2),
@@ -306,6 +306,11 @@ ITEM_RARITY_COLORS = {
 ITEM_RARITY_BANDS = {
     "Common": (60, 90), "Uncommon": (30, 59), "Rare": (10, 29),
     "Epic": (3, 15), "Legendary": (0.5, 3), "Mythic": (0.1, 0.5),
+}
+# What an item sells for, in spirit stones, by rarity.
+ITEM_VALUE_BY_RARITY = {
+    "Common": 5, "Uncommon": 15, "Rare": 45, "Epic": 120,
+    "Legendary": 320, "Mythic": 900,
 }
 
 # The stat block every item carries. Beyond the old six (attack, defense, hp,
@@ -472,6 +477,11 @@ ITEM_BY_ID = {it["id"]: it for it in ITEMS}
 # colour a slot from the payload alone.
 for _it in ITEMS:
     _it["color"] = ITEM_RARITY_COLORS[_it["rarity"]]
+    # What it is worth in spirit stones. The rarity sets the band; a piece of
+    # gear is worth more than a material of the same rarity, because a
+    # material is only an ingredient.
+    _band = ITEM_VALUE_BY_RARITY.get(_it["rarity"], 5)
+    _it["value"] = _band * 2 if _it["kind"] == "gear" else _band
 EQUIP_SLOTS = ("head", "sec_weapon", "chest", "main_weapon", "core", "arm",
                "back", "boots", "legs", "ring1", "ring2", "necklace", "headpiece")
 
@@ -1108,6 +1118,20 @@ def _mail_unread(stored):
     return sum(1 for m in stored.get("mail", []) if not m.get("read"))
 
 
+def _mail_pending_items(stored):
+    """How many items are still waiting to be claimed in the mailbox."""
+    total = 0
+    for m in stored.get("mail", []):
+        if m.get("claimed"):
+            continue
+        for n in (m.get("items") or {}).values():
+            try:
+                total += max(0, int(n))
+            except (TypeError, ValueError):
+                pass
+    return total
+
+
 def _find_mail(stored, mid):
     for m in stored.get("mail", []):
         if m.get("id") == mid:
@@ -1308,6 +1332,7 @@ class Handler(BaseHTTPRequestHandler):
                 "ok": True,
                 "mail": stored.get("mail", []),
                 "unread": _mail_unread(stored),
+                "new_items": _mail_pending_items(stored),
                 "version": SERVER_VERSION,
             }, cache="no-store")
 
@@ -1488,7 +1513,48 @@ class Handler(BaseHTTPRequestHandler):
             save_players()
             return self._send_json({
                 "ok": True, "mail": m, "unread": _mail_unread(stored),
+                "new_items": _mail_pending_items(stored),
                 "granted": granted, "inventory": inv,
+            }, cache="no-store")
+
+        if path == "/api/sell":
+            # The buyer is server-side: the client asks for an item, the
+            # server checks the bag, takes the goods and pays the stones.
+            data = self._read_json()
+            username = str(data.get("username") or "").strip()
+            if not USERNAME_RE.match(username):
+                return self._send_json({"error": "Bad username"}, status=400)
+            stored = PLAYERS.get(username)
+            if not stored:
+                return self._send_json({"error": "Unknown cultivator"}, status=404)
+            item_id = str(data.get("item_id") or "")
+            it = ITEM_BY_ID.get(item_id)
+            if not it:
+                return self._send_json({"error": "No such item"}, status=404)
+            try:
+                count = int(data.get("count", 1))
+            except (TypeError, ValueError):
+                count = 1
+            count = max(1, min(count, 9999))
+            inv = dict(stored.get("inventory") or {})
+            have = int(inv.get(item_id, 0) or 0)
+            if have <= 0:
+                return self._send_json({"error": "You do not have that"}, status=400)
+            count = min(count, have)
+            earned = int(it.get("value", 0) or 0) * count
+            left = have - count
+            if left > 0:
+                inv[item_id] = left
+            else:
+                inv.pop(item_id, None)
+            stored["inventory"] = inv
+            stored["spirit_stones"] = min(SPIRIT_STONE_CAP,
+                                          int(stored.get("spirit_stones", 0) or 0) + earned)
+            stored["last_seen"] = time.time()
+            save_players()
+            return self._send_json({
+                "ok": True, "sold": item_id, "count": count, "earned": earned,
+                "player": {k: v for k, v in stored.items() if k != "hp"},
             }, cache="no-store")
 
         if path == "/api/craft":
