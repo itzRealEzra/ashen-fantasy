@@ -92,6 +92,14 @@ const parts = [
   grab(/function fireSkill\(p, m, s, d\) \{[\s\S]*?\n\}/, "fireSkill"),
   grab(/let invSort = "[a-z]+";/, "invSort"),
   grab(/function paintBattleKit\(\) \{[\s\S]*?\n\}/, "paintBattleKit"),
+  grab(/let tipItem = null, tipHideTimer = null;/, "tipState"),
+  grab(/let tipCtxKey = "", lastTipHtml = "";/, "tipState2"),
+  grab(/let tipWired = false;/, "tipWired"),
+  grab(/function ensureTipWired\(\) \{[\s\S]*?\n\}/, "ensureTipWired"),
+  grab(/function showTipHtml\(html, x, y, key, itemId\) \{[\s\S]*?\n\}/, "showTipHtml"),
+  grab(/function showTip\(itemId, x, y, ctx\) \{[\s\S]*?\n\}/, "showTip"),
+  grab(/function showSlotTip\(name, type, hint, x, y, key\) \{[\s\S]*?\n\}/, "showSlotTip"),
+  grab(/function hideTip\(\) \{[\s\S]*?\n\}/, "hideTip"),
   grab(/function iconUrl\(name\) \{[\s\S]*?\n\}/, "iconUrl"),
   grab(/function iconImg\(name, cls\) \{[\s\S]*?\n\}/, "iconImg"),
   grab(/let SKILLS = \{\};/, "SKILLS"),
@@ -234,6 +242,8 @@ const lib = new Function("__", prelude + parts + `
     activeBuffs, skillCooldown, equippedSkills, useSkills, fireSkill, sortBag,
     BAG_SORTS, ITEM_RARITY_ORDER, renderSkills, toggleSkill, SKILL_SLOTS, paintCombat,
     paintBattleKit, iconUrl, iconImg, fetchSkills, setSkillsLoaded: v => { SKILLS_LOADED = v; },
+    showTip, showSlotTip, hideTip,
+    setIcon: (k, v) => { ICON[k] = v; },
     setSort: s => { invSort = s; },
     setSkills: s => { SKILLS = s; },
     applyMasteryXp, masteryPopup, masteryPanel, masteryTotalXp, MASTERY_TRACKS,
@@ -799,6 +809,35 @@ state.player = basePlayer();
   ok(/data-elixir="0"/.test(kitHtml) && /data-elixir="2"/.test(kitHtml),
      "each kit slot knows which one it is");
   ok(/2x/.test(kitHtml) && /3x/.test(kitHtml), "the kit counts what is left");
+
+  // An empty slot shows its art and says "Empty" -- not the name of the
+  // pill that would fit it.
+  lib.setIcon("elixir_icon", "/assets/icons/elixir_icon.png");
+  lib.setIcon("qi_pill_icon", "/assets/icons/qi_pill_icon.png");
+  lib.setIcon("spirit_meal_icon", "/assets/icons/spirit_meal_icon.png");
+  state.player.elixirs = [null, null, null];
+  state.player.inventory = {};
+  lib.paintBattleKit();
+  const emptyKit = els["battle-kit"].innerHTML;
+  ok(!/Minor Vitality Elixir/.test(emptyKit), "an empty slot shows no item name");
+  ok(!/Minor Qi Pill/.test(emptyKit) && !/Roasted Wild Rat Meat/.test(emptyKit),
+     "an empty slot names no pill at all");
+  ok(/data-slot-name="Empty"/.test(emptyKit), "an empty slot says Empty in its tooltip");
+  ok(/slot-icon/.test(emptyKit), "an empty slot draws its own art");
+
+  // The medicine has to land on the fight's own wound, not only on the save.
+  state.player = basePlayer();
+  state.player.hp = 50;
+  state.player.inventory = { minor_vitality_elixir: 1 };
+  state.player.elixirs = ["minor_vitality_elixir", null, null];
+  lib.battle.view = "combat";
+  lib.battle.timer = setTimeout(() => {}, 1000);
+  lib.battle.php = 50;
+  lib.useConsumable("minor_vitality_elixir");
+  ok(lib.battle.php > 50, "drinking in a fight heals the wound you are carrying");
+  ok(state.player.hp === lib.battle.php, "the save and the fight agree on the wound");
+  lib.battle.timer = null;
+  lib.battle.view = "areas";
 
   // The skills panel must never spin: one ask for the manual, then an answer.
   lib.setSkills({});

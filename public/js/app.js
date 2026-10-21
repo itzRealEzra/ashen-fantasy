@@ -1,6 +1,6 @@
 /* Ashen Fantasy — vanilla JS state machine: username -> roots -> main */
 const $ = (id) => document.getElementById(id);
-const CLIENT_VERSION = "0.9.21"; // must match server.py server_version + footer
+const CLIENT_VERSION = "0.9.22"; // must match server.py server_version + footer
 const state = {
   username: localStorage.getItem("af_user") || "",
   rollId: null,
@@ -1312,7 +1312,13 @@ function useConsumable(itemId) {
   const heals = (it.use.heal_pct || 0) > 0 && (p.hp || maxHp) < maxHp;
   const givesQi = (it.use.qi_pct || 0) > 0;
   if (!heals && !givesQi) return; // never waste a pill on full HP
-  if (it.use.heal_pct) p.hp = Math.min(maxHp, (p.hp || maxHp) + maxHp * it.use.heal_pct / 100);
+  if (it.use.heal_pct) {
+    const healed = Math.min(maxHp, (p.hp || maxHp) + maxHp * it.use.heal_pct / 100);
+    p.hp = healed;
+    // In a fight the wound is the fight's own hp: healing the save alone
+    // would be wiped by the next mirror, and the medicine would do nothing.
+    if (battle.timer && battle.view === "combat") battle.php = healed;
+  }
   if (it.use.qi_pct) accrue(p, stageOf(p).cost * it.use.qi_pct / 100);
   takeInv(itemId, 1);
   if ((p.inventory[itemId] || 0) <= 0) {
@@ -1325,6 +1331,7 @@ function useConsumable(itemId) {
   refreshCultPanel();
   updateQi(p);
   paintBattleKit();   // the kit in the fight shows the new count
+  paintBars();       // and the wound bar shows the medicine at once
   syncPlayer(false);
 }
 
@@ -2069,14 +2076,19 @@ function paintBattleKit() {
     const it = iid && ITEM_BY_ID[iid];
     const n = iid ? (p.inventory[iid] || 0) : 0;
     const usable = !!it && n > 0;
-    return `<div class="kit-slot${usable ? " ready" : ""}" data-elixir="${i}"${usable ? ` data-tip="${iid}"` : ` data-slot-name="${esc(slot.name)}" data-slot-type="${esc(slot.type)}"`}>` +
+    // An empty slot shows its own art and says nothing: the name belongs to
+    // the item, and there is no item yet.
+    return `<div class="kit-slot${usable ? " ready" : ""}" data-elixir="${i}"${usable ? ` data-tip="${iid}"` : ` data-slot-name="Empty" data-slot-type="${esc(slot.type)}"`}>` +
       (it ? iconHtml(it.img, it.glyph, artCls(it, "art-slot")) : iconImg(slot.icon, "slot-icon")) +
-      `<span class="kit-name">${esc(it ? it.name : slot.name)}</span>` +
-      (it ? `<span class="kit-count">${n}x</span>` : "") +
+      (usable ? `<span class="kit-name">${esc(it.name)}</span><span class="kit-count">${n}x</span>` : "") +
       `</div>`;
   }).join("");
   root.querySelectorAll("[data-elixir]").forEach(el => {
     el.onclick = () => useElixir(+el.dataset.elixir);
+    el.onmousemove = e => {
+      if (el.dataset.tip) showTip(el.dataset.tip, e.clientX, e.clientY);
+      else showSlotTip(el.dataset.slotName, el.dataset.slotType, "", e.clientX, e.clientY, el.dataset.elixir);
+    };
   });
 }
 

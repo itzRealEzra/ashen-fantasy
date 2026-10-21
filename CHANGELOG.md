@@ -11,6 +11,17 @@ and push to `main` on https://github.com/itzRealEzra/ashen-fantasy.
 
 ## [Unreleased]
 
+## [0.9.22] - 2026-10-20
+### Fixed
+- **An empty consumable slot in the fight named the pill that would fit it.**
+  It showed "Minor Vitality Elixir" where there was no elixir at all. An
+  empty slot now shows only its own art, and its tooltip says "Empty".
+- **The medicine did nothing in a fight.** The heal was applied to the saved
+  wound, and the fight mirrors its own hp back into the save on every tick --
+  so the next tick wiped the healing. The medicine now lands on the wound you
+  are actually carrying, and the save and the fight agree on it. The hp bar
+  repaints at once.
+
 ## [0.9.21] - 2026-10-20
 ### Added
 - **The elixir, the pill and the meal are in the fight.** The three
