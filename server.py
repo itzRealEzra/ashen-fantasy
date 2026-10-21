@@ -17,8 +17,8 @@ import mimetypes
 # Single source of truth for the build number. Must match CLIENT_VERSION in
 # public/js/app.js and the footer in public/index.html. A player whose saved
 # patch_version differs gets one patch-note mail when they next check mail.
-SERVER_VERSION = "0.9.28"
-CLIENT_VERSION = "0.9.28"  # for /status only; the client keeps its own copy
+SERVER_VERSION = "0.9.29"
+CLIENT_VERSION = "0.9.29"  # for /status only; the client keeps its own copy
 STARTED_AT = time.time()
 RESTARTED_AT = 0
 RESTART_SEQ = 0
@@ -950,11 +950,34 @@ def max_affordable_realm(cultivation, start_idx, limit):
 
 
 def save_players():
+    """Write the players file without ever leaving it half-written.
+
+    The file is written to a temporary name and moved into place, so a crash
+    (or a machine that loses power) cannot leave a truncated file where the
+    cultivators were. The previous file is kept as players.json.bak, so a
+    bad write can always be undone by hand.
+    """
+    path = os.path.join(BASE_DIR, "players.json")
+    tmp = path + ".tmp"
     try:
-        with open(os.path.join(BASE_DIR, "players.json"), "w", encoding="utf-8") as f:
+        with open(tmp, "w", encoding="utf-8") as f:
             json.dump(PLAYERS, f, ensure_ascii=False, indent=2)
+            f.flush()
+            os.fsync(f.fileno())
+        # Keep the last good file before replacing it.
+        try:
+            if os.path.exists(path):
+                with open(path, "rb") as src, open(path + ".bak", "wb") as dst:
+                    dst.write(src.read())
+        except OSError:
+            pass
+        os.replace(tmp, path)
     except OSError:
-        pass
+        try:
+            if os.path.exists(tmp):
+                os.remove(tmp)
+        except OSError:
+            pass
 
 def load_players():
     try:
@@ -973,6 +996,17 @@ def load_players():
             PLAYERS.update(data)
             return len(data)
     except (OSError, ValueError):
+        pass
+    # The file is unreadable -- a truncated write, or a disk that gave up.
+    # It is kept as it is (renamed aside) so nothing is silently destroyed,
+    # and the server starts empty rather than pretending the players exist.
+    path = os.path.join(BASE_DIR, "players.json")
+    try:
+        if os.path.exists(path) and os.path.getsize(path) > 0:
+            broken = path + ".corrupt"
+            os.replace(path, broken)
+            print("players.json could not be read -- kept as %s" % broken)
+    except OSError:
         pass
     return 0
 
@@ -1746,6 +1780,75 @@ class Handler(BaseHTTPRequestHandler):
                 sent += 1
             save_players()
             return self._send_json({"ok": True, "sent": sent, "items": items})
+
+        if path == "/api/adopt":
+            # The server lost this cultivator -- its save file was wiped, or
+            # it is a fresh server -- but the player still carries the
+            # cultivator in their own save. They hand that save over once,
+            # and the cultivator walks back into the world.
+            data = self._read_json()
+            username = str(data.get("username") or "").strip()
+            if not USERNAME_RE.match(username):
+                return self._send_json({"error": "Bad username"}, status=400)
+            if username in PLAYERS:
+                return self._send_json(
+                    {"error": "That cultivator already walks the jianghu.",
+                     "exists": True}, status=409)
+            save = data.get("player")
+            if not isinstance(save, dict):
+                return self._send_json({"error": "No save to adopt"}, status=400)
+            # The roots come from the save when they are real roots, so the
+            # cultivator keeps its own build.
+            root_ids = [r.get("id") for r in (save.get("roots") or [])
+                        if isinstance(r, dict) and r.get("id") in ROOT_BY_ID]
+            if len(root_ids) != 3:
+                root_ids = [r["id"] for r in random.sample(ROOTS, 3)]
+            player = build_player(username, root_ids)
+            try:
+                player["cultivation"] = max(0.0, float(save.get("cultivation") or 0))
+            except (TypeError, ValueError):
+                player["cultivation"] = 0.0
+            player["realm_idx"] = max(0, min(int(save.get("realm_idx") or 0), len(REALMS) - 1))
+            player["bottleneck"] = max(0, int(save.get("bottleneck") or 0))
+            player["dao_insight"] = max(0, int(save.get("dao_insight") or 0))
+            player["spirit_stones"] = max(0, min(int(save.get("spirit_stones") or 0), SPIRIT_STONE_CAP))
+            inv = {}
+            for iid, n in (save.get("inventory") or {}).items():
+                if iid in ITEM_BY_ID:
+                    try:
+                        inv[iid] = max(0, min(int(n), 9999))
+                    except (TypeError, ValueError):
+                        pass
+            player["inventory"] = inv
+            equipment = {s: None for s in EQUIP_SLOTS}
+            for s, iid in (save.get("equipment") or {}).items():
+                if s in EQUIP_SLOTS and iid in ITEM_BY_ID:
+                    it = ITEM_BY_ID[iid]
+                    if slot_accepts(it.get("slot"), s):
+                        equipment[s] = iid
+            player["equipment"] = equipment
+            elixirs = [None] * 3
+            for i, iid in enumerate((save.get("elixirs") or [])[:3]):
+                if iid in ITEM_BY_ID and ITEM_BY_ID[iid].get("kind") == "consumable":
+                    elixirs[i] = iid
+            player["elixirs"] = elixirs
+            skills = [s for s in (save.get("skills") or [])
+                      if isinstance(s, str) and s in SKILLS][:SKILL_SLOTS]
+            player["skills"] = skills + [None] * (SKILL_SLOTS - len(skills))
+            mastery = {}
+            for t in MASTERY_TRACKS:
+                raw = (save.get("mastery") or {}).get(t, 0)
+                if isinstance(raw, dict):
+                    raw = raw.get("xp", 0)
+                try:
+                    mastery[t] = max(0, min(int(raw or 0), MASTERY_XP_CAP))
+                except (TypeError, ValueError):
+                    mastery[t] = 0
+            player["mastery"] = mastery
+            player["last_seen"] = time.time()
+            PLAYERS[username] = player
+            save_players()
+            return self._send_json({"ok": True, "player": player}, cache="no-store")
 
         if path == "/api/sync":
             data = self._read_json()

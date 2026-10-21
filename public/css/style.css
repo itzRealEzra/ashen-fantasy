@@ -390,9 +390,24 @@ input { background: #0e0e14; border: 1px solid var(--line); color: var(--ink); p
 #stat-notice b.down { color: #ff6b6b; font-weight: 600; }
 /* floating item tooltip (hover) with rarity + compare colors.
    It never eats a click: only its own buttons take the pointer, so a
-   tooltip that floats over a button (the mailbox Claim) cannot swallow it. */
-#item-tip { display: none; position: fixed; z-index: 9999; max-width: 280px; background: #0e0e15; border: 1px solid var(--gold); padding: 8px 10px; font-size: 13px; line-height: 1.6; opacity: 0; transition: opacity .12s ease; pointer-events: none; }
+   tooltip that floats over a button (the mailbox Claim) cannot swallow it.
+   The cursor is watched on the document instead, so the tooltip stays open
+   while the cursor is inside it. */
+#item-tip { display: none; position: fixed; z-index: 9999; max-width: 300px;
+  background: linear-gradient(180deg, rgba(18, 18, 26, .98), rgba(10, 10, 15, .98));
+  border: 1px solid rgba(201, 168, 106, .5); border-radius: 3px; padding: 10px 13px;
+  font-size: 13px; line-height: 1.65; color: var(--ink);
+  box-shadow: 0 14px 34px rgba(0, 0, 0, .75), 0 0 0 1px rgba(0, 0, 0, .45);
+  opacity: 0; transition: opacity .12s ease; pointer-events: none; }
+#item-tip.on { opacity: 1; }
+#item-tip .tip-title { align-items: center; }
+#item-tip .tip-title b { font-size: 14px; letter-spacing: .5px; }
+#item-tip .tip-rarity { font-size: 11px; letter-spacing: 1.5px; text-transform: uppercase; opacity: .9; }
+#item-tip .tip-desc { margin-top: 4px; color: var(--muted); }
+/* The tooltip's own buttons are the one part that takes the pointer. */
 #item-tip .tip-actions { pointer-events: auto; }
+#item-tip .up { color: #9ccc65; }
+#item-tip .down { color: #ff8a80; }
 #item-tip.on { opacity: 1; }
 #item-tip .up { color: #9ccc65; }
 #item-tip .down { color: #ff8a80; }

@@ -103,6 +103,11 @@ const parts = [
   grab(/function showTip\(itemId, x, y, ctx\) \{[\s\S]*?\n\}/, "showTip"),
   grab(/function showSlotTip\(name, type, hint, x, y, key\) \{[\s\S]*?\n\}/, "showSlotTip"),
   grab(/function hideTip\(\) \{[\s\S]*?\n\}/, "hideTip"),
+  grab(/function scheduleHideTip\(\) \{[\s\S]*?\n\}/, "scheduleHideTip"),
+  grab(/function tipPointerOverTip\(\) \{[\s\S]*?\n\}/, "tipPointerOverTip"),
+  grab(/let tipPointer = \{ x: 0, y: 0 \};\nlet tipOnTip = false;/, "tipPointer"),
+  grab(/function watchTipPointer\(e\) \{[\s\S]*?\n\}/, "watchTipPointer"),
+  grab(/async function adoptPlayer\(p\) \{[\s\S]*?\n\}/, "adoptPlayer"),
   grab(/function iconUrl\(name\) \{[\s\S]*?\n\}/, "iconUrl"),
   grab(/function iconImg\(name, cls\) \{[\s\S]*?\n\}/, "iconImg"),
   grab(/let SKILLS = \{\};/, "SKILLS"),
@@ -279,7 +284,8 @@ const lib = new Function("__", prelude + parts + `
     activeBuffs, skillCooldown, equippedSkills, useSkills, fireSkill, sortBag,
     BAG_SORTS, ITEM_RARITY_ORDER, renderSkills, toggleSkill, SKILL_SLOTS, paintCombat,
     paintBattleKit, iconUrl, iconImg, fetchSkills, setSkillsLoaded: v => { SKILLS_LOADED = v; },
-    showTip, showSlotTip, hideTip,
+    showTip, showSlotTip, hideTip, scheduleHideTip, tipPointerOverTip, watchTipPointer,
+    adoptPlayer,
     setIcon: (k, v) => { ICON[k] = v; },
     setSort: s => { invSort = s; },
     setSkills: s => { SKILLS = s; },
@@ -940,6 +946,36 @@ state.player = basePlayer();
   ok(/data-act="sell-all"/.test(manyTip), "several copies can be sold in one go");
 
   // ============ 6p. the bag keeps the spares, the realm reports its gains ============
+  // The tooltip must not hide while the cursor is inside it.
+  const tipEl = els["item-tip"];
+  tipEl.getBoundingClientRect = () => ({ left: 0, top: 0, right: 100, bottom: 50, width: 100, height: 50 });
+  tipEl.style.display = "block";
+  lib.watchTipPointer({ clientX: 20, clientY: 20 });
+  ok(lib.tipPointerOverTip() === true, "the game knows the cursor is inside the tooltip");
+  calls.timeouts.length = 0;
+  lib.scheduleHideTip();
+  calls.timeouts[calls.timeouts.length - 1].fn();
+  ok(tipEl.style.display === "block",
+     "the tooltip stays open while the cursor is inside it");
+  lib.watchTipPointer({ clientX: 500, clientY: 500 });
+  calls.timeouts.length = 0;
+  lib.scheduleHideTip();
+  calls.timeouts[calls.timeouts.length - 1].fn();
+  ok(tipEl.style.display === "none", "the tooltip goes when the cursor leaves it");
+
+  // A server that has lost the cultivator: the save is handed over once and
+  // the sync is tried again.
+  state.player = basePlayer();
+  let syncCalls = 0;
+  calls.fetch = async (url) => {
+    syncCalls++;
+    if (url === "/api/adopt") return { ok: true, json: async () => ({ ok: true }) };
+    return { ok: true, json: async () => ({ ok: false, error: "Unknown cultivator. Create first." }) };
+  };
+  await lib.syncPlayer(false);
+  ok(syncCalls === 3, "the save is handed over and the sync is tried again");
+  calls.fetch = null;
+
   // Equipping one of four must leave three in the bag, not empty it.
   const bagPlayer = {
     equipment: { chest: "linen_robe", ring1: "copper_ring", ring2: null },

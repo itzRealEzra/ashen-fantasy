@@ -18,6 +18,9 @@ sys.path.insert(0, ROOT)
 import server  # noqa: E402
 
 # Never touch the real save file, and start from a clean slate.
+# The real writer is kept, so the file handling can still be tested (in a
+# temporary folder) without ever writing the live one.
+REAL_SAVE_PLAYERS = server.save_players
 server.save_players = lambda: None
 server.PLAYERS.clear()
 server.ROLLS.clear()
@@ -946,6 +949,53 @@ try:
     ok(st == 404, "claiming an unknown mail is a 404")
     st, j = req("/api/mail?username=ghost_here")
     ok(st == 404, "mail for an unknown cultivator is a 404")
+
+    # ---- a cultivator the server lost walks back in
+    st, j = req("/api/adopt", {"username": "lost_one", "player": {
+        "username": "lost_one", "cultivation": 120, "realm_idx": 1,
+        "inventory": {"rat_fur": 3, "not_a_real_item": 5},
+        "equipment": {"chest": "leather_chest"}, "elixirs": [None, None, None],
+        "mastery": {"cooking": 40, "herbs": {"xp": 20}}, "roots": []}})
+    ok(st == 200 and j["ok"] is True, "a lost cultivator is adopted")
+    ok(j["player"]["inventory"].get("rat_fur") == 3, "the bag came back with it")
+    ok("not_a_real_item" not in j["player"]["inventory"], "a save cannot smuggle in items")
+    ok(j["player"]["equipment"].get("chest") == "leather_chest", "the worn gear came back too")
+    ok(j["player"]["mastery"]["cooking"] == 40, "the masteries came back too")
+    ok(j["player"]["mastery"]["herbs"] == 20, "a whole track is read as its XP")
+    st, j = req("/api/adopt", {"username": "lost_one", "player": {}})
+    ok(st == 409, "a cultivator is never adopted twice")
+    st, j = req("/api/adopt", {"username": "bad name!", "player": {}})
+    ok(st == 400, "a bad name is refused")
+    st, j = req("/api/sync", {"username": "lost_one", "cultivation": 120,
+                              "inventory": {"rat_fur": 3}, "spirit_stones": 0,
+                              "mastery_battle": 0})
+    ok(st == 200, "the adopted cultivator syncs like any other")
+
+    # ---- the players file is written whole, and the last good one is kept
+    import shutil
+    import tempfile
+    tmpdir = tempfile.mkdtemp()
+    try:
+        old_base = server.BASE_DIR
+        server.BASE_DIR = tmpdir
+        server.PLAYERS["file_test"] = {"username": "file_test", "inventory": {}}
+        REAL_SAVE_PLAYERS()
+        path = os.path.join(tmpdir, "players.json")
+        ok(os.path.exists(path), "the players file is written")
+        ok(json.load(open(path, encoding="utf-8"))["file_test"], "the file holds the cultivator")
+        # A broken file is kept aside, never silently overwritten.
+        with open(path, "w", encoding="utf-8") as f:
+            f.write("{ this is not json")
+        saved_players = dict(server.PLAYERS)
+        server.PLAYERS.clear()
+        ok(server.load_players() == 0, "a broken file loads as no players")
+        ok(os.path.exists(os.path.join(tmpdir, "players.json.corrupt")),
+           "the broken file is kept aside")
+        server.PLAYERS.update(saved_players)
+    finally:
+        server.BASE_DIR = old_base
+        server.PLAYERS.pop("file_test", None)
+        shutil.rmtree(tmpdir, ignore_errors=True)
 
     # ---- mail cannot smuggle in items that do not exist
     st, j = req("/api/mail/maintenance",

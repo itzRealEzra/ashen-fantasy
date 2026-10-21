@@ -1,6 +1,6 @@
 /* Ashen Fantasy — vanilla JS state machine: username -> roots -> main */
 const $ = (id) => document.getElementById(id);
-const CLIENT_VERSION = "0.9.28"; // must match server.py server_version + footer
+const CLIENT_VERSION = "0.9.29"; // must match server.py server_version + footer
 const state = {
   username: localStorage.getItem("af_user") || "",
   rollId: null,
@@ -630,18 +630,29 @@ async function syncPlayer(initial) {
   if (!p || syncing) return;
   syncing = true;
   try {
-    const r = await fetch("/api/sync", {
-      method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        username: p.username, cultivation: p.cultivation, realm_idx: p.realm_idx,
-        bottleneck: p.bottleneck, dao_insight: p.dao_insight, seclusion: p.seclusion,
-        equipment: p.equipment, inventory: p.inventory, elixirs: p.elixirs,
-        spirit_stones: p.spirit_stones | 0,
-        mastery_battle: masteryXp("battle"),
-        skills: p.skills || [],
-      }),
+    const body = JSON.stringify({
+      username: p.username, cultivation: p.cultivation, realm_idx: p.realm_idx,
+      bottleneck: p.bottleneck, dao_insight: p.dao_insight, seclusion: p.seclusion,
+      equipment: p.equipment, inventory: p.inventory, elixirs: p.elixirs,
+      spirit_stones: p.spirit_stones | 0,
+      mastery_battle: masteryXp("battle"),
+      skills: p.skills || [],
     });
-    const j = await r.json();
+    let r = await fetch("/api/sync", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body,
+    });
+    let j = await r.json();
+    // The server does not know this cultivator (its save file was lost, or it
+    // is a fresh server). The player still carries the cultivator in their
+    // own save, so it is handed over once and the sync is tried again.
+    if (j.error && /Unknown cultivator/i.test(j.error) && await adoptPlayer(p)) {
+      r = await fetch("/api/sync", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body,
+      });
+      j = await r.json();
+    }
     // Maintenance refuses writes with 503; surface it right away rather than
     // waiting for the next poll. Progress stays local until it lifts.
     if (j.error === "maintenance") {
@@ -1159,16 +1170,48 @@ function hideTip() {
 }
 
 // Grace period so the cursor can travel from the slot onto the tooltip.
-// Re-checks :hover when it fires — the slot's mouseleave can run AFTER the
-// tooltip's mouseenter, which used to schedule a hide right under the cursor.
+//
+// The tooltip does not take the pointer (it must never swallow a click on
+// what lies under it), so it cannot be "hovered" in the ordinary way. Where
+// the cursor actually is decides: if it is inside the tooltip's box, the
+// tooltip stays.
 function scheduleHideTip() {
   if (tipHideTimer) clearTimeout(tipHideTimer);
   tipHideTimer = setTimeout(() => {
     tipHideTimer = null;
-    const tip = $("item-tip");
-    if (tip && tip.matches && tip.matches(":hover")) return;
+    if (tipPointerOverTip()) return;   // the cursor is inside the tooltip
     hideTip();
   }, 350);
+}
+
+// Where the cursor is, and whether it is inside the tooltip's box.
+let tipPointer = { x: 0, y: 0 };
+let tipOnTip = false;
+
+function tipPointerOverTip() {
+  const tip = $("item-tip");
+  if (!tip || tip.style.display !== "block") return false;
+  if (!tip.getBoundingClientRect) return false;
+  const r = tip.getBoundingClientRect();
+  if (!r || (!r.width && !r.height)) return false;
+  return tipPointer.x >= r.left && tipPointer.x <= r.right
+      && tipPointer.y >= r.top && tipPointer.y <= r.bottom;
+}
+
+// The cursor is watched on the document, so it is still known while it is
+// over the tooltip (which takes no pointer events of its own).
+function watchTipPointer(e) {
+  if (!e) return;
+  tipPointer.x = e.clientX;
+  tipPointer.y = e.clientY;
+  const tip = $("item-tip");
+  if (!tip || tip.style.display !== "block") return;
+  if (tipPointerOverTip()) { tipOnTip = true; return; }
+  if (tipOnTip) {
+    // The cursor has left the tooltip: it may go now.
+    tipOnTip = false;
+    scheduleHideTip();
+  }
 }
 
 function renderInventory() {
@@ -1900,6 +1943,11 @@ async function gatherOnce(herbId) {
     return;
   }
   if (!j || j.error) {
+    // The server may have lost this cultivator: hand the save over once and
+    // try the gathering again.
+    if (j && /Unknown cultivator/i.test(j.error) && await adoptPlayer(p)) {
+      return gatherOnce(herbId);
+    }
     cEvent("The gathering stops: " + (j && j.error ? j.error : "unknown reason"));
     stopGathering();
     return;
@@ -2630,6 +2678,10 @@ function onPlayerDeath() {
 if (state.username) $("username-input").value = state.username;
 checkServerFresh();
 startServerStatePoll();
+// The cursor is watched on the document: the tooltip takes no pointer
+// events of its own (it must never swallow a click), so this is how the
+// game knows the cursor is sitting inside it.
+document.addEventListener("mousemove", watchTipPointer);
 
 // Tooltip actions (delegated: tip content re-renders on every hover).
 // Wired lazily so script order can never silently break the buttons again.
@@ -2654,7 +2706,30 @@ function ensureTipWired() {
   tip.addEventListener("mouseenter", () => {
     if (tipHideTimer) { clearTimeout(tipHideTimer); tipHideTimer = null; }
   });
-  tip.addEventListener("mouseleave", hideTip);
+  tip.addEventListener("mouseleave", () => {
+    // The tooltip takes no pointer events, so this rarely fires -- but if it
+    // ever does, the same rule applies: the cursor is off the tooltip.
+    if (!tipPointerOverTip()) hideTip();
+  });
+}
+
+// The server does not know this cultivator: its save file was lost, or it
+// is a fresh server. The player still carries the cultivator in their own
+// save, so they hand it over once and walk back into the world.
+async function adoptPlayer(p) {
+  if (!p || !p.username) return false;
+  try {
+    const r = await fetch("/api/adopt", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ username: p.username, player: p }),
+    });
+    const j = await r.json();
+    if (j.ok) {
+      cEvent("The server had lost this cultivator — your own save was carried back in.");
+      return true;
+    }
+  } catch {}
+  return false;
 }
 
 // ---------- mail ----------

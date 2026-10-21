@@ -11,6 +11,30 @@ and push to `main` on https://github.com/itzRealEzra/ashen-fantasy.
 
 ## [Unreleased]
 
+## [0.9.29] - 2026-10-21
+### Fixed
+- **The tooltip stayed open.** It used to vanish the moment the cursor
+  reached it, so its own buttons could never be reached. The cursor is now
+  watched on the document -- the tooltip takes no pointer events of its own,
+  so it cannot be "hovered" in the ordinary way -- and the box stays open
+  while the cursor is inside it, and closes when the cursor leaves.
+- **The tooltips are polished**: a deeper panel with a hairline gold edge
+  and a soft shadow, a little more room, the rarity in small capitals, and
+  the description in its own line.
+- **The server had lost the cultivators.** Its save file
+  (`players.json`) was unreadable -- every byte of it was zero -- so the
+  server came up with nobody in it, and every save answered "Unknown
+  cultivator" (400) and every gathering "No such herb" (404). Three
+  things now keep that from happening:
+  - the file is written whole (a temporary file, moved into place) and the
+    last good one is kept as `players.json.bak`, so a half-written file can
+    never take the cultivators with it;
+  - a file that cannot be read is kept aside as `players.json.corrupt`
+    instead of being quietly overwritten;
+  - and the player can walk back in: the client hands its own save over
+    once (`/api/adopt`) when the server does not know the cultivator, so
+    the bag, the gear, the masteries and the realm all come back with it.
+
 ## [0.9.28] - 2026-10-21
 ### Added
 - **Every mastery is a herb mastery.** The tracks are no longer four
