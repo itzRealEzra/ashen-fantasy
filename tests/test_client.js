@@ -34,7 +34,7 @@ const els = {
   "equipped-skills": mkEl(), "loot-rows": mkEl(), "kill-count": mkEl(),
   "battle-status": mkEl(),
 };
-const calls = { cEvents: [], saves: [], enemies: [], notices: [], renderInv: 0, timeouts: [], fetch: null, toasts: [], popups: [] };
+const calls = { cEvents: [], saves: [], enemies: [], notices: [], renderInv: 0, timeouts: [], fetch: null, toasts: [], popups: [], fetches: 0 };
 const state = { username: "tester", player: null };
 
 const ZERO_STATS = { atk: 0, def: 0, hp: 0, crit: 0, critDmg: 0 };
@@ -92,7 +92,9 @@ const parts = [
   grab(/function fireSkill\(p, m, s, d\) \{[\s\S]*?\n\}/, "fireSkill"),
   grab(/let invSort = "[a-z]+";/, "invSort"),
   grab(/let SKILLS = \{\};/, "SKILLS"),
+  grab(/let SKILLS_LOADED = false;/, "SKILLS_LOADED"),
   grab(/let SKILL_SLOTS = \d+;/, "SKILL_SLOTS"),
+  grab(/async function fetchSkills\(\) \{[\s\S]*?\n\}/, "fetchSkills"),
   grab(/function renderSkills\(\) \{[\s\S]*?\n\}/, "renderSkills"),
   grab(/function toggleSkill\(skillId\) \{[\s\S]*?\n\}/, "toggleSkill"),
   grab(/function sortBag\(entries, p\) \{[\s\S]*?\n\}/, "sortBag"),
@@ -208,7 +210,7 @@ const prelude = `
     body: { appendChild(el) { if (el.innerHTML) calls.popups.push(el.innerHTML); } },
   };
   const setTimeout = (fn, ms) => { calls.timeouts.push({ fn, ms }); return calls.timeouts.length; };
-  const fetch = (...a) => (calls.fetch ? calls.fetch(...a) : Promise.resolve({ ok: false, json: async () => ({ ok: false }) }));
+  const fetch = (...a) => { calls.fetches++; return calls.fetch ? calls.fetch(...a) : Promise.resolve({ ok: false, json: async () => ({ ok: false }) }); };
 `;
 
 const lib = new Function("__", prelude + parts + `
@@ -227,6 +229,7 @@ const lib = new Function("__", prelude + parts + `
     masteryLevel, masteryRank, masteryNumeral, masteryTitle, masteryXp, masteryKillXp,
     activeBuffs, skillCooldown, equippedSkills, useSkills, fireSkill, sortBag,
     BAG_SORTS, ITEM_RARITY_ORDER, renderSkills, toggleSkill, SKILL_SLOTS, paintCombat,
+    fetchSkills, setSkillsLoaded: v => { SKILLS_LOADED = v; },
     setSort: s => { invSort = s; },
     setSkills: s => { SKILLS = s; },
     applyMasteryXp, masteryPopup, masteryPanel, masteryTotalXp, MASTERY_TRACKS,
@@ -777,6 +780,18 @@ state.player = basePlayer();
      "the carried techniques show in the battle");
   ok(/<div class="skill-bar" id="equipped-skills"><\/div>[\s\S]*<div class="loot-log">/.test(SRC),
      "the techniques sit above the loot log");
+
+  // The skills panel must never spin: one ask for the manual, then an answer.
+  lib.setSkills({});
+  lib.setSkillsLoaded(false);
+  calls.fetches = 0;
+  lib.renderSkills();
+  for (let i = 0; i < 5; i++) await Promise.resolve();
+  ok(calls.fetches <= 1, "an empty manual is asked for once, not in a loop");
+  ok(/manual is empty/.test(els["skills-root"].innerHTML),
+     "an empty manual says so instead of spinning");
+  lib.setSkillsLoaded(true);
+  lib.setSkills({});
 
   // ============ 7. leaving the hunt persists HP, stops fight, clears log ============
   state.player = basePlayer();

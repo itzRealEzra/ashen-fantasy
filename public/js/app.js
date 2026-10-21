@@ -1,6 +1,6 @@
 /* Ashen Fantasy — vanilla JS state machine: username -> roots -> main */
 const $ = (id) => document.getElementById(id);
-const CLIENT_VERSION = "0.9.19"; // must match server.py server_version + footer
+const CLIENT_VERSION = "0.9.20"; // must match server.py server_version + footer
 const state = {
   username: localStorage.getItem("af_user") || "",
   rollId: null,
@@ -411,7 +411,7 @@ async function enterMain(p) {
   REALM_TABLE = await fetchRealms();
   await fetchItems();
   await fetchIcons();
-  await fetchSkills();
+  fetchSkills();   // not awaited: a slow server must not hold the game up
   normalizePlayer(p);
   const frac = p.cultivation / stageOf(p).cost;
   stageFlags = { half: frac >= 0.5, full: frac >= 1 };
@@ -1360,17 +1360,22 @@ function unloadElixir(itemId) {
 // energy for them, so the fight plays itself.
 let SKILLS = {};
 let SKILL_SLOTS = 3;
+// Whether the manual has been asked for already. Without this the panel
+// would ask again on every repaint and never stop.
+let SKILLS_LOADED = false;
 
 async function fetchSkills() {
   try {
     const r = await fetch("/api/skills", { cache: "max-age=3600" });
     const j = await r.json();
-    if (j.skills) {
+    if (j && Array.isArray(j.skills)) {
       SKILLS = {};
       for (const s of j.skills) SKILLS[s.id] = s;
     }
-    if (j.slots) SKILL_SLOTS = j.slots;
+    if (j && j.slots) SKILL_SLOTS = j.slots;
   } catch {}
+  // Asked once, asked done: a server that cannot answer must not spin us.
+  SKILLS_LOADED = true;
   return SKILLS;
 }
 
@@ -1562,8 +1567,13 @@ function renderSkills() {
   const p = state.player;
   if (!root || !p) return;
   if (!Object.keys(SKILLS).length) {
-    root.innerHTML = `<p class="muted">Consulting the manual…</p>`;
-    fetchSkills().then(() => renderSkills());
+    if (!SKILLS_LOADED) {
+      root.innerHTML = `<p class="muted">Consulting the manual…</p>`;
+      fetchSkills().then(() => renderSkills());
+      return;
+    }
+    // Asked already and still nothing: say so rather than ask forever.
+    root.innerHTML = `<p class="muted">The manual is empty — the server has no techniques to give.</p>`;
     return;
   }
   const carried = (p.skills || []).filter(Boolean);

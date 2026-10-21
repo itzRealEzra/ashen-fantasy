@@ -11,6 +11,17 @@ and push to `main` on https://github.com/itzRealEzra/ashen-fantasy.
 
 ## [Unreleased]
 
+## [0.9.20] - 2026-10-20
+### Fixed
+- **The Skills tab froze the page.** When the technique table came back empty
+  -- an older server, a failed request, a page served instead of the answer --
+  the panel asked for the manual again on every repaint, and never stopped:
+  a fetch loop that pinned the tab. The manual is now asked for once, a
+  second attempt is never made, and an empty manual says so
+  ("The manual is empty -- the server has no techniques to give"). The
+  boot-time fetch no longer holds the game up either: a slow server cannot
+  keep the player out of the world.
+
 ## [0.9.19] - 2026-10-20
 ### Added
 - **Techniques (skills).** A new `Skills` tab: what you carry on the left,
