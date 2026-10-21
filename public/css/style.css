@@ -270,7 +270,7 @@ input { background: #0e0e14; border: 1px solid var(--line); color: var(--ink); p
 .skill-empty { color: var(--muted); font-size: 13px; padding: 10px 2px; }
 .skill-bar { display: flex; gap: 8px; flex-wrap: wrap; margin: 8px 0 2px; align-items: center; }
 .battle-kit { display: flex; gap: 8px; flex-wrap: wrap; margin: 6px 0 2px; }
-.kit-slot { position: relative; border: 1px solid var(--line); background: var(--panel2); padding: 4px 10px 4px 6px; display: flex; align-items: center; gap: 6px; cursor: default; }
+.kit-slot { position: relative; border: 1px solid var(--line); background: var(--panel2); padding: 5px 8px; display: flex; align-items: center; justify-content: center; gap: 6px; cursor: default; }
 .kit-slot.ready { border-color: var(--gold); cursor: pointer; }
 .kit-slot.ready:hover { box-shadow: 0 0 6px rgba(240,212,154,.3); }
 .kit-slot .slot-icon, .kit-slot .art-slot { width: 22px; height: 22px; }

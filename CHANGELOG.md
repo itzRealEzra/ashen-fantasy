@@ -11,6 +11,22 @@ and push to `main` on https://github.com/itzRealEzra/ashen-fantasy.
 
 ## [Unreleased]
 
+## [0.9.24] - 2026-10-20
+### Fixed
+- **Crafting, brewing and cooking taught no mastery.** The server sends the
+  whole mastery track (xp, level, rank), but the client was looking for a
+  plain number, so the XP a craft earned was dropped on the floor: the bars
+  never moved and the level-up never came. Now the craft applies the XP the
+  server granted, and the Character panel follows it.
+- **A mass craft taught once, not per item.** The XP now follows the work:
+  making twelve things teaches twelve times what making one teaches, times
+  the rarity of what you made.
+- **The tooltip stuck on the screen.** The consumable slots in the fight had
+  no leave handler, so the tooltip stayed where it was after the cursor
+  walked away. They now leave with the cursor, like every other slot.
+- **The kit icon sat off to one side.** The slot is an icon and nothing else
+  now, so the icon sits in the middle of it.
+
 ## [0.9.23] - 2026-10-20
 ### Changed
 - **An empty slot says "Empty" -- everywhere.** The equipment slots and the

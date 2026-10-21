@@ -496,6 +496,10 @@ try:
     st, j = req("/api/craft", {"username": "master_crafter", "recipe_id": "roast_meat", "count": 1})
     ok(st == 200 and j["player"]["mastery"]["cooking"] == server.MASTERY_XP_PER_CRAFT,
        "a cook teaches the cooking mastery")
+    # A mass cook teaches for every item made, not once for the batch.
+    st, j = req("/api/craft", {"username": "master_crafter", "recipe_id": "roast_meat", "count": 3})
+    ok(st == 200 and j["player"]["mastery"]["cooking"] == server.MASTERY_XP_PER_CRAFT * 4,
+       "a mass cook teaches for every item it makes")
     ok(j["player"]["mastery"]["crafting"] == 0, "a cook does not teach crafting")
     ok(j.get("mastery", {}).get("cooking", {}).get("level") == 1,
        "the craft reports the new mastery level")

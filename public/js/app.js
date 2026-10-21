@@ -1,6 +1,6 @@
 /* Ashen Fantasy — vanilla JS state machine: username -> roots -> main */
 const $ = (id) => document.getElementById(id);
-const CLIENT_VERSION = "0.9.23"; // must match server.py server_version + footer
+const CLIENT_VERSION = "0.9.24"; // must match server.py server_version + footer
 const state = {
   username: localStorage.getItem("af_user") || "",
   rollId: null,
@@ -1773,10 +1773,10 @@ async function craftRecipe(recipeId, count) {
       (j.duplicated ? " — mastery bonus" : "");
     cEvent(made + ".");
     toast(made);
-    // the trade taught its own mastery
+    // the trade taught its own mastery (the server sends the whole track)
     const track = { craft: "crafting", alchemy: "alchemy", cook: "cooking" }[j.kind];
-    if (track && j.mastery && typeof j.mastery[track] === "number")
-      applyMasteryXp(track, j.mastery[track]);
+    const taught = track && j.mastery && j.mastery[track];
+    if (taught && typeof taught.xp === "number") applyMasteryXp(track, taught.xp);
     saveLocal(p);
     // repaint the bench the player is standing at, with the new counts
     const kind = j.kind || "craft";
@@ -2090,6 +2090,8 @@ function paintBattleKit() {
       if (el.dataset.tip) showTip(el.dataset.tip, e.clientX, e.clientY, { plain: true });
       else showSlotTip(el.dataset.slotName, el.dataset.slotType, "", e.clientX, e.clientY, el.dataset.elixir);
     };
+    // Without this the tooltip stays on the screen after the cursor leaves.
+    el.onmouseleave = scheduleHideTip;
   });
 }
 

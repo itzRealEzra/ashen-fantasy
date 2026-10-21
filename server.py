@@ -17,8 +17,8 @@ import mimetypes
 # Single source of truth for the build number. Must match CLIENT_VERSION in
 # public/js/app.js and the footer in public/index.html. A player whose saved
 # patch_version differs gets one patch-note mail when they next check mail.
-SERVER_VERSION = "0.9.23"
-CLIENT_VERSION = "0.9.23"  # for /status only; the client keeps its own copy
+SERVER_VERSION = "0.9.24"
+CLIENT_VERSION = "0.9.24"  # for /status only; the client keeps its own copy
 STARTED_AT = time.time()
 RESTARTED_AT = 0
 RESTART_SEQ = 0
@@ -1537,7 +1537,9 @@ class Handler(BaseHTTPRequestHandler):
             track = MASTERY_TRACK_FOR_BENCH[bench]
             rarity = (ITEM_BY_ID.get(out_id) or {}).get("rarity", "Common")
             tier = ITEM_RARITY_ORDER.index(rarity) if rarity in ITEM_RARITY_ORDER else 0
-            _grant_mastery(stored, track, MASTERY_XP_PER_CRAFT * (2 ** tier))
+            # The XP follows the work: every item made teaches, and the rarer
+            # the work the more it teaches.
+            _grant_mastery(stored, track, MASTERY_XP_PER_CRAFT * (2 ** tier) * made)
             chance = min(MASTERY_DUPLICATE_CAP, 0.01 * max(0, mastery_level(_mastery_xp(stored, track)) - 1))
             duplicated = chance > 0 and random.random() < chance
             inv[out_id] = max(0, min(int(inv.get(out_id, 0) or 0) + made * (2 if duplicated else 1), 9999))

@@ -612,9 +612,13 @@ state.player = basePlayer();
     ok(body.recipe_id === "roast_meat" && body.count === 1,
        "the forge is asked for the right recipe");
     return { ok: true, json: async () => ({ ok: true, crafted: "roasted_wild_rat_meat", count: 1,
-      kind: "cook", player: { ...state.player, inventory: { rat_tail: 2, raw_meat: 1, roasted_wild_rat_meat: 1 } } }) };
+      kind: "cook",
+      mastery: { cooking: { xp: 40, level: 1, rank: "Beginner", numeral: "I", next: 60 } },
+      player: { ...state.player, inventory: { rat_tail: 2, raw_meat: 1, roasted_wild_rat_meat: 1 } } }) };
   };
+  state.player.mastery = { cooking: 0, alchemy: 0, crafting: 0, battle: 0 };
   await lib.craftRecipe("roast_meat", 1);
+  ok(state.player.mastery.cooking === 40, "a craft teaches the mastery of its trade");
   ok(state.player.inventory.roasted_wild_rat_meat === 1, "the crafted item lands in the bag");
   ok(state.player.inventory.rat_tail === 2, "the server's inventory replaces the local one");
   ok(calls.cEvents.some(m => /Cooked/.test(m)), "the forge reports what it made");
@@ -809,6 +813,12 @@ state.player = basePlayer();
      "each kit slot knows which one it is");
   ok(!/Roasted Wild Rat Meat/.test(kitHtml), "the kit shows the icon alone, not the name");
   ok(!/kit-count/.test(kitHtml) && !/\d+x/.test(kitHtml), "the kit shows no count");
+  const kitSrc = SRC.slice(SRC.indexOf("function paintBattleKit"), SRC.indexOf("function paintCombat"));
+  ok(/onmouseleave = scheduleHideTip/.test(kitSrc),
+     "the kit tooltip leaves with the cursor instead of sticking");
+  const cssNow = fs.readFileSync(path.join(__dirname, "..", "public", "css", "style.css"), "utf8").replace(/\r\n/g, "\n");
+  ok(/\.kit-slot \{[^}]*justify-content: center/.test(cssNow),
+     "the kit icon sits in the middle of its slot");
   ok(/kit-slot ready/.test(kitHtml), "a filled kit slot is lit and ready");
   ok(/data-tip="roasted_wild_rat_meat"/.test(kitHtml), "a filled kit slot points at its item");
   // In the fight the tooltip is a plain look: no use, no unequip.
