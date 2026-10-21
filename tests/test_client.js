@@ -24,6 +24,7 @@ const mkEl = () => ({
   innerHTML: "", textContent: "", style: {}, onclick: null,
   classList: { add() {}, remove() {}, toggle() {}, contains() { return false; } },
   querySelectorAll: () => [],
+  addEventListener() {},
 });
 const els = {
   "breakthrough-btn": mkEl(), "p-name": mkEl(), "qi-bar": mkEl(),
@@ -32,7 +33,7 @@ const els = {
   "p-stones": mkEl(), "enemy-back": mkEl(), "craft-root": mkEl(),
   "alchemy-root": mkEl(), "cook-root": mkEl(), "skills-root": mkEl(),
   "equipped-skills": mkEl(), "loot-rows": mkEl(), "kill-count": mkEl(),
-  "battle-status": mkEl(), "battle-kit": mkEl(),
+  "battle-status": mkEl(), "battle-kit": mkEl(), "item-tip": mkEl(),
 };
 const calls = { cEvents: [], saves: [], enemies: [], notices: [], renderInv: 0, timeouts: [], fetch: null, toasts: [], popups: [], fetches: 0 };
 const state = { username: "tester", player: null };
@@ -222,6 +223,7 @@ const prelude = `
   };
   const setTimeout = (fn, ms) => { calls.timeouts.push({ fn, ms }); return calls.timeouts.length; };
   let ICON = {};
+  const window = { innerWidth: 1200, innerHeight: 800 };
   const fetch = (...a) => { calls.fetches++; return calls.fetch ? calls.fetch(...a) : Promise.resolve({ ok: false, json: async () => ({ ok: false }) }); };
 `;
 
@@ -803,12 +805,21 @@ state.player = basePlayer();
   };
   lib.paintBattleKit();
   const kitHtml = els["battle-kit"].innerHTML;
-  ok(/Minor Vitality Elixir/.test(kitHtml), "the elixir is in the fight");
-  ok(/Minor Qi Pill/.test(kitHtml), "the pill is in the fight");
-  ok(/Roasted Wild Rat Meat/.test(kitHtml), "the meal is in the fight");
   ok(/data-elixir="0"/.test(kitHtml) && /data-elixir="2"/.test(kitHtml),
      "each kit slot knows which one it is");
-  ok(/2x/.test(kitHtml) && /3x/.test(kitHtml), "the kit counts what is left");
+  ok(!/Roasted Wild Rat Meat/.test(kitHtml), "the kit shows the icon alone, not the name");
+  ok(!/kit-count/.test(kitHtml) && !/\d+x/.test(kitHtml), "the kit shows no count");
+  ok(/kit-slot ready/.test(kitHtml), "a filled kit slot is lit and ready");
+  ok(/data-tip="roasted_wild_rat_meat"/.test(kitHtml), "a filled kit slot points at its item");
+  // In the fight the tooltip is a plain look: no use, no unequip.
+  lib.showTip("roasted_wild_rat_meat", 10, 10, { plain: true });
+  ok(!/tip-actions/.test(els["item-tip"].innerHTML),
+     "the fight tooltip has no use or unequip buttons");
+  // An empty slot -- equipment or consumable -- says Empty and nothing else.
+  lib.showSlotTip("Spirit Core", "Cultivation Artifact", "", 10, 10, "core");
+  ok(/Empty/.test(els["item-tip"].innerHTML), "an empty slot says Empty");
+  ok(!/Spirit Core/.test(els["item-tip"].innerHTML),
+     "an empty slot does not name the item that would fit it");
 
   // An empty slot shows its art and says "Empty" -- not the name of the
   // pill that would fit it.
@@ -838,6 +849,15 @@ state.player = basePlayer();
   ok(state.player.hp === lib.battle.php, "the save and the fight agree on the wound");
   lib.battle.timer = null;
   lib.battle.view = "areas";
+
+  // No healing at full hp -- and no pill spent on nothing.
+  state.player = basePlayer();
+  state.player.hp = lib.playerMaxHp(state.player);
+  state.player.inventory = { minor_vitality_elixir: 1 };
+  lib.useConsumable("minor_vitality_elixir");
+  ok(state.player.hp === lib.playerMaxHp(state.player), "no healing at full hp");
+  ok((state.player.inventory.minor_vitality_elixir || 0) === 1,
+     "a pill that would heal nothing is not spent");
 
   // The skills panel must never spin: one ask for the manual, then an answer.
   lib.setSkills({});

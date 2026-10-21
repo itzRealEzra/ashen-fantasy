@@ -11,6 +11,20 @@ and push to `main` on https://github.com/itzRealEzra/ashen-fantasy.
 
 ## [Unreleased]
 
+## [0.9.23] - 2026-10-20
+### Changed
+- **An empty slot says "Empty" -- everywhere.** The equipment slots and the
+  three consumable slots no longer name the item that would fit them ("Minor
+  Vitality Elixir" over an empty slot); the tooltip is a plain "Empty", with
+  the hint on how to fill it.
+- **The kit in the fight shows the icon alone.** No name, no count: the icon
+  is the whole slot, and clicking it drinks it.
+- **The fight tooltip is a plain look.** No Use, no Unequip -- in a fight the
+  click does the using, so the tooltip only describes the item.
+
+### Fixed
+- A medicine taken at full health heals nothing and is not spent.
+
 ## [0.9.22] - 2026-10-20
 ### Fixed
 - **An empty consumable slot in the fight named the pill that would fit it.**

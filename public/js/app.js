@@ -1,6 +1,6 @@
 /* Ashen Fantasy — vanilla JS state machine: username -> roots -> main */
 const $ = (id) => document.getElementById(id);
-const CLIENT_VERSION = "0.9.22"; // must match server.py server_version + footer
+const CLIENT_VERSION = "0.9.23"; // must match server.py server_version + footer
 const state = {
   username: localStorage.getItem("af_user") || "",
   rollId: null,
@@ -1047,7 +1047,9 @@ function itemTipHtml(itemId, ctx) {
   // bag grid's "3x" badge is too small to read mid-hover.
   if (it.kind === "material") h += `<div><small class="muted">Held: ${owned}</small></div>`;
   let acts = "";
-  if (ctx.unequip) acts += `<button data-act="unequip" data-slot="${esc(ctx.unequip)}">Unequip</button>`;
+  if (ctx.plain) {
+    // A plain look: the item, described, with no buttons to press.
+  } else if (ctx.unequip) acts += `<button data-act="unequip" data-slot="${esc(ctx.unequip)}">Unequip</button>`;
   else if (ctx.unload != null) acts += `<button data-act="use">Use</button><button data-act="unload" data-slot="${ctx.unload}">Unequip</button>`;
   else if (it.kind === "gear" && owned > 0) {
     // Accurate label via the same rule the bag click uses.
@@ -1090,11 +1092,10 @@ function showTip(itemId, x, y, ctx) {
   showTipHtml(itemTipHtml(itemId, ctx), x, y, key, itemId);
 }
 
-// Custom tooltip for empty slots — name, category, and how to fill it
-// (replaces the slow native title).
+// Custom tooltip for empty slots: a plain "Empty" and how to fill it.
 function showSlotTip(name, type, hint, x, y, key) {
-  const html = `<div class="tip-title"><b>${esc(name)}</b><span class="tip-rarity" style="color:var(--muted)">${esc(type)}</span></div>` +
-    `<div class="muted">Empty slot.</div><div class="muted">${esc(hint)}</div>`;
+  const html = `<div class="tip-title"><b>Empty</b></div>` +
+    (hint ? `<div class="muted">${esc(hint)}</div>` : "");
   showTipHtml(html, x, y, "slot|" + key, null);
 }
 
@@ -2080,13 +2081,13 @@ function paintBattleKit() {
     // the item, and there is no item yet.
     return `<div class="kit-slot${usable ? " ready" : ""}" data-elixir="${i}"${usable ? ` data-tip="${iid}"` : ` data-slot-name="Empty" data-slot-type="${esc(slot.type)}"`}>` +
       (it ? iconHtml(it.img, it.glyph, artCls(it, "art-slot")) : iconImg(slot.icon, "slot-icon")) +
-      (usable ? `<span class="kit-name">${esc(it.name)}</span><span class="kit-count">${n}x</span>` : "") +
       `</div>`;
   }).join("");
   root.querySelectorAll("[data-elixir]").forEach(el => {
     el.onclick = () => useElixir(+el.dataset.elixir);
     el.onmousemove = e => {
-      if (el.dataset.tip) showTip(el.dataset.tip, e.clientX, e.clientY);
+      // A plain look in the fight: no use, no unequip -- the click does it.
+      if (el.dataset.tip) showTip(el.dataset.tip, e.clientX, e.clientY, { plain: true });
       else showSlotTip(el.dataset.slotName, el.dataset.slotType, "", e.clientX, e.clientY, el.dataset.elixir);
     };
   });
