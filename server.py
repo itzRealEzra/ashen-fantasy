@@ -17,8 +17,8 @@ import mimetypes
 # Single source of truth for the build number. Must match CLIENT_VERSION in
 # public/js/app.js and the footer in public/index.html. A player whose saved
 # patch_version differs gets one patch-note mail when they next check mail.
-SERVER_VERSION = "0.9.31"
-CLIENT_VERSION = "0.9.31"  # for /status only; the client keeps its own copy
+SERVER_VERSION = "0.9.32"
+CLIENT_VERSION = "0.9.32"  # for /status only; the client keeps its own copy
 STARTED_AT = time.time()
 RESTARTED_AT = 0
 RESTART_SEQ = 0
@@ -701,7 +701,7 @@ def mastery_definitions():
 _ASSET_DIRS = ("enemies", "items", "icons", "herb")
 # Pictures the client can show. Both PNG and JPEG are picked up, so art can be
 # dropped in either format.
-_ASSET_EXTS = (".png", ".jpg", ".jpeg")
+_ASSET_EXTS = (".png", ".jpg", ".jpeg", ".webp")
 
 # The holder: what every item without a picture of its own is drawn with
 # (public/assets/items/place_holder.jpg). Resolved live, so removing the file
@@ -715,12 +715,17 @@ _ITEM_ICON_FILES = {
 
 
 def _asset_cache():
-    """id-keyed map of every art file currently on disk, keyed "kind/name"."""
+    """id-keyed map of every art file currently on disk, keyed "kind/name".
+
+    The names are read in order, so when a picture exists in two formats
+    (a .png and the small .webp beside it) the webp wins -- it is the one
+    the game draws.
+    """
     out = {}
     for kind in _ASSET_DIRS:
         d = os.path.join(PUBLIC_DIR, "assets", kind)
         try:
-            names = os.listdir(d)
+            names = sorted(os.listdir(d))
         except OSError:
             continue
         for fn in names:

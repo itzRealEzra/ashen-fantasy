@@ -5,11 +5,27 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
 <title>Ashen Fantasy — Text Cultivation RPG</title>
 <link rel="icon" href="/favicon.ico" />
-<link rel="stylesheet" href="/css/style.css?v=0.9.31" />
-<link rel="stylesheet" href="/css/fonts.css?v=0.9.31" />
+<link rel="stylesheet" href="/css/style.css?v=0.9.32" />
+<link rel="stylesheet" href="/css/fonts.css?v=0.9.32" />
 </head>
 <body>
 <div class="mist"></div>
+
+<!-- ============ THE GATE: the world is loaded before the game opens ============ -->
+<div id="boot-screen" class="boot-screen">
+  <div class="boot-inner">
+    <div class="boot-title">Ashen Fantasy</div>
+    <div class="boot-sub">灰燼仙途</div>
+    <div class="boot-bar"><div class="boot-fill" id="boot-fill"></div></div>
+    <div class="boot-step" id="boot-step">Waking the world…</div>
+  </div>
+</div>
+<!-- A safety net: if the script never runs, the gate must not keep the
+     player outside the game. -->
+<script>setTimeout(function () {
+  var g = document.getElementById("boot-screen");
+  if (g) g.classList.add("gone");
+}, 15000);</script>
 
 <!-- ============ SCREEN: USERNAME ============ -->
 <section id="screen-username" class="screen active">
@@ -84,7 +100,7 @@
           <button data-tab="skills" class="side-btn">Skills</button>
           <button data-tab="gather" class="side-btn">Gather</button>
           <button data-tab="mail" class="side-btn">Mail<span id="mail-badge" class="mail-badge" hidden>0</span></button>
-        <div class="side-foot">Ashen Fantasy v0.9.31</div>
+        <div class="side-foot">Ashen Fantasy v0.9.32</div>
       </nav>
       <main class="content">
         <div id="server-banner" class="server-banner" hidden></div>
@@ -135,6 +151,6 @@
 </section>
 
 <div id="item-tip"></div>
-<script src="/js/app.js?v=0.9.31"></script>
+<script src="/js/app.js?v=0.9.32"></script>
 </body>
 </html>

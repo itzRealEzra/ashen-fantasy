@@ -1599,9 +1599,27 @@ state.player = basePlayer();
   ok(sideOps.length === 0, "a closed sidebar is left alone");
 
   // ============ 22. the new benches carry their own icons ============
-  for (const f of ["craft_icon.png", "alchemy_icon.png", "cook_icon.png"])
-    ok(fs.existsSync(path.join(__dirname, "..", "public", "assets", "icons", f)),
-       "%s is on disk" % f);
+  const iconDir = path.join(__dirname, "..", "public", "assets", "icons");
+  const iconFiles = fs.readdirSync(iconDir);
+  for (const f of ["craft_icon", "alchemy_icon", "cook_icon"]) {
+    const there = iconFiles.some(fn => fn.startsWith(f) && /\.(png|webp|jpg|jpeg)$/i.test(fn));
+    ok(there, f + " is on disk");
+  }
+
+  // ============ 23. the gate: the world is loaded before the game opens ============
+  ok(/id="boot-screen"/.test(HTML), "the gate is in the page");
+  ok(/id="boot-fill"/.test(HTML) && /id="boot-step"/.test(HTML), "the gate shows its progress");
+  ok(/async function preloadWorld\(\)/.test(SRC), "the world is loaded in one place");
+  ok(/await fontsReady\(\)/.test(SRC), "the brush face is in hand before the game opens");
+  ok(/warmArt\(artUrls\(\)\)/.test(SRC), "the pictures are warmed before the game opens");
+  ok(/if \(!REALM_TABLE\.length\) REALM_TABLE = await fetchRealms\(\)/.test(SRC),
+     "the tables are not fetched a second time");
+  ok(/if \(!Object\.keys\(ITEM_BY_ID\)\.length\) await fetchItems\(\)/.test(SRC),
+     "the item table is not fetched a second time");
+  ok(/preloadWorld\(\)\.then/.test(SRC), "the gate opens the world when it is ready");
+  ok(/function openTheGate\(\)/.test(SRC) && /boot-screen/.test(SRC), "the gate is closed when the world is ready");
+  ok(/\.boot-screen \{ position: fixed; inset: 0/.test(CSS), "the gate covers the screen");
+  ok(/\.boot-fill \{[^}]*width: 0/.test(CSS), "the gate's bar starts empty");
   ok(/craft: "craft_icon"/.test(SRC) && /alchemy: "alchemy_icon"/.test(SRC) && /cook: "cook_icon"/.test(SRC),
      "each bench tab has its own icon");
   ok(/\.stone-glyph \{ width: 14px/.test(CSS), "the stone glyph is sized for inline use");

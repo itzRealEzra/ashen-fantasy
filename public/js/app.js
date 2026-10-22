@@ -1,6 +1,6 @@
 /* Ashen Fantasy — vanilla JS state machine: username -> roots -> main */
 const $ = (id) => document.getElementById(id);
-const CLIENT_VERSION = "0.9.31"; // must match server.py server_version + footer
+const CLIENT_VERSION = "0.9.32"; // must match server.py server_version + footer
 const state = {
   username: localStorage.getItem("af_user") || "",
   rollId: null,
@@ -14,6 +14,93 @@ const state = {
 function show(id) {
   document.querySelectorAll(".screen").forEach(s => s.classList.remove("active"));
   $(id).classList.add("active");
+}
+
+// ---------- the gate ----------
+// The world is loaded before the game opens. The player never sees a
+// half-drawn game, and the first click never waits for a table to arrive:
+// the fonts, the realms, the items, the grounds and the pictures are all
+// in hand by the time the screen is theirs.
+let worldReady = false;
+
+function bootStep(pct, text) {
+  const fill = $("boot-fill");
+  if (fill) fill.style.width = Math.max(0, Math.min(100, pct)) + "%";
+  const step = $("boot-step");
+  if (step && text) step.textContent = text;
+}
+
+function openTheGate() {
+  const gate = $("boot-screen");
+  if (!gate) return;
+  gate.classList.add("gone");
+  setTimeout(() => { if (gate.parentNode) gate.parentNode.removeChild(gate); }, 600);
+}
+
+// The brush face must be in hand before the labels are drawn, or the first
+// paint is a flash of the fallback face.
+async function fontsReady() {
+  if (!document.fonts || !document.fonts.ready) return;
+  try {
+    await document.fonts.load('16px "Ma Shan Zheng"');
+    await document.fonts.ready;
+  } catch {}
+}
+
+// Every picture the game can draw, warmed into the browser's cache so no
+// panel ever waits for an image.
+function artUrls() {
+  const urls = new Set();
+  for (const it of Object.values(ITEM_BY_ID || {})) if (it.img) urls.add(it.img);
+  for (const a of (battle.areas || [])) {
+    for (const m of (a.mobs || [])) if (m.img) urls.add(m.img);
+  }
+  for (const u of Object.values(ICON || {})) {
+    if (typeof u === "string" && u.startsWith("/assets/")) urls.add(u);
+  }
+  return [...urls];
+}
+
+function warmArt(urls) {
+  if (!urls.length) return Promise.resolve();
+  return Promise.all(urls.map(u => new Promise(res => {
+    const im = new Image();
+    im.onload = () => res();
+    im.onerror = () => res();
+    im.src = u;
+  })));
+}
+
+// Load the world. The gate closes when it is done -- or when it has taken
+// long enough, because a slow line must not keep the player outside.
+async function preloadWorld() {
+  const started = Date.now();
+  try {
+    bootStep(8, "Waking the world…");
+    await fontsReady();
+    bootStep(20, "Reading the tables…");
+    const [realms] = await Promise.all([
+      fetchRealms().then(r => { REALM_TABLE = r; return r; }),
+      fetchItems(),
+      fetchIcons(),
+      fetchMasteryDefs(),
+    ]);
+    bootStep(45, "Finding the hunting grounds…");
+    battle.areas = await fetchAreas();
+    await fetchSkills();
+    bootStep(60, "Waking the plants…");
+    // The pictures are warmed, but the gate never waits forever for them.
+    await Promise.race([
+      warmArt(artUrls()),
+      new Promise(res => setTimeout(res, 6000)),
+    ]);
+    bootStep(100, "The world is ready.");
+    worldReady = true;
+  } catch {
+    worldReady = true;
+  }
+  openTheGate();
+  return Date.now() - started;
 }
 function esc(s) {
   return String(s).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
@@ -414,10 +501,12 @@ function refreshCultPanel() {
 }
 
 async function enterMain(p) {
-  REALM_TABLE = await fetchRealms();
-  await fetchItems();
-  await fetchIcons();
-  fetchSkills();   // not awaited: a slow server must not hold the game up
+  // The world was loaded before the game opened, so these are already in
+  // hand; they are only fetched again if the gate was skipped.
+  if (!REALM_TABLE.length) REALM_TABLE = await fetchRealms();
+  if (!Object.keys(ITEM_BY_ID).length) await fetchItems();
+  if (!Object.keys(ICON).length) await fetchIcons();
+  if (!SKILLS_LOADED) fetchSkills();   // a slow server must not hold the game up
   normalizePlayer(p);
   const frac = p.cultivation / stageOf(p).cost;
   stageFlags = { half: frac >= 0.5, full: frac >= 1 };
@@ -437,10 +526,10 @@ async function enterMain(p) {
   refreshCultPanel();
   updateQi(p);
   saveLocal(p);
-  battle.areas = await fetchAreas();
+  battle.areas = battle.areas.length ? battle.areas : await fetchAreas();
   // The rank tables come first: the character panel draws its masteries
   // from them, and they must be in hand before the panel is painted.
-  await fetchMasteryDefs();
+  if (!Object.keys(MASTERY_DEFS).length) await fetchMasteryDefs();
   loadLoot();
   showBattleAreas();
   renderInventory();
@@ -2690,6 +2779,15 @@ startServerStatePoll();
 // events of its own (it must never swallow a click), so this is how the
 // game knows the cursor is sitting inside it.
 document.addEventListener("mousemove", watchTipPointer);
+// The gate: the world is loaded before the game opens.
+preloadWorld().then(async () => {
+  // A cultivator who has been here before walks straight back in -- the
+  // world is ready, and there is nothing left to ask.
+  if (state.username && state.player && state.player.username === state.username) {
+    const remote = await fetchServerPlayer(state.username);
+    enterMain(remote || state.player);
+  }
+});
 
 // Tooltip actions (delegated: tip content re-renders on every hover).
 // Wired lazily so script order can never silently break the buttons again.

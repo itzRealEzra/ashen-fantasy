@@ -11,6 +11,26 @@ and push to `main` on https://github.com/itzRealEzra/ashen-fantasy.
 
 ## [Unreleased]
 
+## [0.9.32] - 2026-10-22
+### Changed
+- **The world is loaded before the game opens.** A gate stands over the
+  screen while the world comes together -- the brush face, the realms, the
+  items, the hunting grounds, the techniques, the rank tables and the
+  pictures -- and the game opens only when it is all in hand. The player
+  never sees a half-drawn world, and the first click never waits for a
+  table: a cultivator who has been here before walks straight back in.
+- **The art is a twentieth of its size.** The pictures were drawn at
+  1254x1254 and weighed 2.6 MB a piece -- 116 MB of art for a game that
+  draws most of it in a 40-pixel slot. They are now small WebP files at the
+  size the game actually uses: **116 MB -> 9.3 MB**. The server serves
+  whichever format is on disk, and `tools/optimize_art.py` rewrites any new
+  art that is dropped in.
+
+### Fixed
+- The first interaction no longer waits for the world: the fonts, the tables
+  and the pictures are already loaded when the game opens, so the click that
+  starts the journey paints straight away.
+
 ## [0.9.31] - 2026-10-21
 ### Added
 - **The herbs have their own pictures.** The fifteen plant illustrations now

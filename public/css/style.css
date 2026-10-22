@@ -457,6 +457,18 @@ input { background: #0e0e14; border: 1px solid var(--line); color: var(--ink); p
 @keyframes break-in { from { opacity: 0; transform: translateY(8px) scale(.96); } to { opacity: 1; transform: none; } }
 .cult-break:hover:not(:disabled) { background: rgba(201,168,106,.12); color: var(--gold2); }
 
+/* ---------- the gate: the world is loaded before the game opens ---------- */
+.boot-screen { position: fixed; inset: 0; z-index: 9000; display: flex; align-items: center; justify-content: center;
+  background: #0a0a0f; transition: opacity .45s ease; }
+.boot-screen.gone { opacity: 0; pointer-events: none; }
+.boot-inner { text-align: center; }
+.boot-title { font-family: var(--font-brush); font-size: 54px; letter-spacing: 12px; color: var(--gold2);
+  text-shadow: 0 0 30px #6b4d1f; }
+.boot-sub { font-family: var(--font-brush); font-size: 20px; letter-spacing: 6px; color: var(--muted); margin: 6px 0 26px; }
+.boot-bar { width: 320px; height: 3px; background: #16161f; border: 1px solid var(--line); margin: 0 auto; }
+.boot-fill { height: 100%; width: 0; background: linear-gradient(90deg, var(--gold), var(--gold2)); transition: width .3s ease; }
+.boot-step { margin-top: 12px; font-size: 13px; letter-spacing: 2px; color: var(--muted); min-height: 18px; }
+
 @media (max-width: 900px) {
   body { overflow: auto; height: auto; min-height: 100dvh; }
   .screen { height: auto; min-height: 100dvh; overflow: visible; padding: 16px; }

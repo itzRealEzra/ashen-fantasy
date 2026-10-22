@@ -174,29 +174,33 @@ try:
        "the script is linked by version")
 
     # ============ 2b. art is resolved by id, live, with an emoji fallback ============
-    # Adding a PNG must show up on the next request without a server restart.
+    # Adding a picture must show up on the next request without a server
+    # restart. The art is served as WebP now, but the path is still derived
+    # from the id, whatever the format.
+    def art_path(folder, ident):
+        return "/assets/%s/%s." % (folder, ident)
     st, j = req("/api/areas")
     mobs = [m for a in j["areas"] for m in a["mobs"]]
     with_art = [m for m in mobs if m.get("img")]
     ok(len(with_art) == len(mobs), "every enemy resolves a matching art file")
-    ok(all(m["img"] == "/assets/enemies/%s.png" % m["id"] for m in with_art),
+    ok(all(m["img"].startswith(art_path("enemies", m["id"])) for m in with_art),
        "enemy art path is derived from the mob id")
     st, j = req("/api/items")
     with_art = [i for i in j["items"] if i.get("img")]
     ok(len(with_art) > 0, "items resolve art files")
-    # Art comes from assets/items/<id>.png, from assets/herb/<id>.png for the
+    # Art comes from assets/items/<id>, from assets/herb/<id> for the
     # herbs, or from a declared icons/ override for the handful of items whose
     # picture lives with the UI icons. An item with no picture of its own is
     # drawn with the holder.
     holder = server._asset_cache().get("items/" + server._PLACEHOLDER_ITEM)
     ok(holder is not None, "the holder picture is on disk")
     def art_ok(i):
-        if i["img"] == "/assets/items/%s.png" % i["id"]:
+        if i["img"].startswith(art_path("items", i["id"])):
             return True
-        if i.get("kind") == "herb" and i["img"] == "/assets/herb/%s.png" % i["id"]:
+        if i.get("kind") == "herb" and i["img"].startswith(art_path("herb", i["id"])):
             return True
         over = server._ITEM_ICON_FILES.get(i["id"])
-        if over and i["img"] == "/assets/icons/%s.png" % over:
+        if over and i["img"].startswith(art_path("icons", over)):
             return True
         return bool(holder) and i["img"] == holder
     ok(all(art_ok(i) for i in with_art),
@@ -210,7 +214,7 @@ try:
     by_id = {i["id"]: i for i in j["items"]}
     ok(by_id["boar_roast"].get("img") == holder,
        "an item with no picture of its own is drawn with the holder")
-    ok(by_id["rat_fur"].get("img") == "/assets/items/rat_fur.png",
+    ok(by_id["rat_fur"].get("img", "").startswith("/assets/items/rat_fur."),
        "an item with a picture of its own keeps it")
 
     # Live pickup: a file dropped in after startup must be picked up.
@@ -218,11 +222,14 @@ try:
     probe = os.path.join(probe_dir, "__probe_test__.png")
     st, before = req("/api/items")
     before_art = len([i for i in before["items"] if i.get("img")])
+    source = next((os.path.join(probe_dir, fn) for fn in sorted(os.listdir(probe_dir))
+                   if fn.startswith("rat_fur.")), None)
+    ok(source is not None, "the rat fur picture is on disk")
     try:
-        shutil.copyfile(os.path.join(probe_dir, "rat_fur.png"), probe)
+        shutil.copyfile(source, probe)
         st, after = req("/api/items")
         ok(len([i for i in after["items"] if i.get("img")]) == before_art,
-           "an unreferenced png does not attach art to any item")
+           "an unreferenced picture does not attach art to any item")
     finally:
         if os.path.exists(probe):
             os.remove(probe)
@@ -405,7 +412,7 @@ try:
        "the boss drops its new art-bearing trophies")
     st, j = req("/api/items")
     by_id = {i["id"]: i for i in j["items"]}
-    ok(all(by_id[i].get("img") == "/assets/items/%s.png" % i
+    ok(all(by_id[i].get("img", "").startswith("/assets/items/%s." % i)
            for i in ("corrupted_fang", "corrupted_alpha_blood",
                      "corrupted_alpha_wolf_core", "corrupted_alpha_wolf_pelt",
                      "qi_gathering_ring")),
@@ -1062,8 +1069,8 @@ try:
     ok(st == 200 and j.get("ok") is True, "GET /api/icons serves the icon map")
     icons = j.get("icons") or {}
     ok(len(icons) > 0, "icons discovered on disk (%d)" % len(icons))
-    ok(all(v.startswith("/assets/icons/") and v.endswith(".png")
-           for v in icons.values()), "every icon maps to an icons/ png path")
+    ok(all(v.startswith("/assets/icons/") and v.rsplit(".", 1)[-1] in ("png", "webp", "jpg", "jpeg")
+           for v in icons.values()), "every icon maps to an icons/ picture path")
     ok(all("/" not in k for k in icons), "icon keys are bare file names, not paths")
 
     # every slot the client draws an icon for must actually have a file
