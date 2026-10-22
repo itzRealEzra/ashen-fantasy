@@ -1,6 +1,6 @@
 /* Ashen Fantasy — vanilla JS state machine: username -> roots -> main */
 const $ = (id) => document.getElementById(id);
-const CLIENT_VERSION = "0.9.33"; // must match server.py server_version + footer
+const CLIENT_VERSION = "0.9.34"; // must match server.py server_version + footer
 const state = {
   username: localStorage.getItem("af_user") || "",
   rollId: null,
@@ -42,7 +42,11 @@ function openTheGate() {
 async function fontsReady() {
   if (!document.fonts || !document.fonts.ready) return;
   try {
+    // The brush face for the headings, the label face for the labels. If
+    // the label face has not been dropped in yet, the system face stands in
+    // and the gate still opens.
     await document.fonts.load('16px "Ma Shan Zheng"');
+    await document.fonts.load('16px "FOT-Rodin ProN"');
     await document.fonts.ready;
   } catch {}
 }

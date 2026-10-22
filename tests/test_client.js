@@ -919,8 +919,8 @@ state.player = basePlayer();
      "the card draws the plant's own picture");
   ok(/\.gather-card \.gather-rarity \{[^}]*font-family: var\(--font-brush\)/.test(cssNow),
      "the brush face (Ma Shan Zheng) is on the rarity");
-  ok(/\.gather-card \.craft-out-name b \{[^}]*font-family: inherit/.test(cssNow),
-     "the herb name keeps the plain face -- the brush is not on the name");
+  ok(/\.gather-card \.craft-out-name b \{[^}]*font-family: var\(--font-label\)/.test(cssNow),
+     "the herb name keeps the label face -- the brush is not on the name");
   ok(/Earth · 5\.4s/.test(gatherHtml),
      "the card shows the time the player actually waits, rank bonus included");
 
@@ -1558,18 +1558,32 @@ state.player = basePlayer();
   ok(/\.craft-out-name \{ display: flex/.test(CSS) && /\.craft-way \{ border-top/.test(CSS),
      "the item name sits above its ways, never glued to them");
 
-  // ============ 19. the brush face, vendored locally ============
-  ok(/--font-brush: "Ma Shan Zheng"/.test(CSS), "the brush face is wired as the label font");
-  ok(/\.top-name, \.top-realm, \.top-stones \{ font-family: var\(--font-brush\)/.test(CSS),
-     "the top bar labels (name, realm, currency) use the brush face");
+  // ============ 19. two faces: the labels and the headings ============
+  ok(/--font-brush: "Ma Shan Zheng"/.test(CSS), "the brush face is wired for the headings");
+  ok(/--font-label: "FOT-Rodin ProN"/.test(CSS), "the label face is wired for the labels");
+  ok(/body \{[^}]*font-family: var\(--font-label\)/.test(CSS),
+     "the body is set in the label face");
+  ok(/\.top-name, \.top-realm, \.top-stones \{ font-family: var\(--font-label\)/.test(CSS),
+     "the top bar labels (name, realm, currency) use the label face");
   ok(/\.side-btn \{[^}]*font-family: var\(--font-brush\)/.test(CSS),
-     "the tab labels use the brush face");
+     "the tab headings use the brush face");
+  ok(/\.craft-out b, \.craft-out-name \{ font-family: var\(--font-label\)/.test(CSS),
+     "the item names are labels, not headings");
+  ok(/\.gather-card \.craft-out-name b \{[^}]*font-family: var\(--font-label\)/.test(CSS),
+     "the herb's name is a label -- the brush face is not on it");
+  ok(/\.gather-card \.gather-rarity \{[^}]*font-family: var\(--font-brush\)/.test(CSS),
+     "the rarity is a heading, in the brush face");
   ok(/href="\/css\/fonts\.css/.test(HTML), "the vendored font sheet is linked");
   const FONTCSS = fs.readFileSync(path.join(__dirname, "..", "public", "css", "fonts.css"), "utf8");
   const fontFiles = [...FONTCSS.matchAll(/url\('\/assets\/fonts\/([^']+)'\)/g)].map(m => m[1]);
   ok(fontFiles.length > 0, "the brush face is vendored as local files");
-  ok(fontFiles.every(f => fs.existsSync(path.join(__dirname, "..", "public", "assets", "fonts", f))),
-     "every vendored font file is on disk");
+  // The brush face must be on disk. The label face may not be there yet --
+  // then the system face stands in and nothing breaks.
+  const brushFiles = fontFiles.filter(f => f.startsWith("ma-shan-zheng"));
+  ok(brushFiles.length > 0 && brushFiles.every(f => fs.existsSync(path.join(__dirname, "..", "public", "assets", "fonts", f))),
+     "every brush face file is on disk");
+  ok(/font-family: 'FOT-Rodin ProN'/.test(FONTCSS),
+     "the label face is declared in the font sheet");
   ok(!/fonts\.googleapis\.com/.test(FONTCSS) && !/fonts\.gstatic\.com/.test(FONTCSS),
      "the font never waits on a CDN");
   ok(/#toast-box \{ position: fixed; right:/.test(CSS),

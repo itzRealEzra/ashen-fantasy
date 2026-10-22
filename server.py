@@ -17,8 +17,8 @@ import mimetypes
 # Single source of truth for the build number. Must match CLIENT_VERSION in
 # public/js/app.js and the footer in public/index.html. A player whose saved
 # patch_version differs gets one patch-note mail when they next check mail.
-SERVER_VERSION = "0.9.33"
-CLIENT_VERSION = "0.9.33"  # for /status only; the client keeps its own copy
+SERVER_VERSION = "0.9.34"
+CLIENT_VERSION = "0.9.34"  # for /status only; the client keeps its own copy
 STARTED_AT = time.time()
 RESTARTED_AT = 0
 RESTART_SEQ = 0
@@ -1468,6 +1468,13 @@ class Handler(BaseHTTPRequestHandler):
         if ext.lower() in (".png", ".jpg", ".jpeg") and os.path.isfile(stem + ".webp"):
             full = stem + ".webp"
         if not os.path.isfile(full):
+            # A font that has not been dropped in yet is not an error: the
+            # page falls back to the system face, and the console stays
+            # quiet.
+            if ext.lower() in (".woff2", ".woff", ".ttf", ".otf"):
+                self.send_response(204)
+                self.end_headers()
+                return
             return self._send_json({"error": "not found"}, status=404)
         if content_type is None:
             content_type, _ = mimetypes.guess_type(full)

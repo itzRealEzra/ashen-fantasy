@@ -9,9 +9,12 @@
   --gold2: #f0d49a;
   --red: #a31621;
   --line: #3a3226;
-  /* The brush face (Ma Shan Zheng) for labels: vendored locally in
-     public/assets/fonts, so the game never waits on a CDN. */
-  --font-brush: "Ma Shan Zheng", "Segoe UI", system-ui, sans-serif;
+  /* Two faces, two jobs. The brush face (Ma Shan Zheng) is for the
+     HEADINGS -- the titles, the rank names, the big display words. The
+     label face (FOT-Rodin ProN) is for everything else: the body, the
+     buttons, the item names, the numbers. */
+  --font-brush: "Ma Shan Zheng", "FOT-Rodin ProN", "Segoe UI", system-ui, sans-serif;
+  --font-label: "FOT-Rodin ProN", "Segoe UI", system-ui, sans-serif;
 }
 * { box-sizing: border-box; }
 /* Hide scrollbars everywhere while keeping scroll, wheel, touch, keyboard
@@ -22,7 +25,7 @@
 html, body { height: 100%; }
 body {
   margin: 0; background: var(--bg); color: var(--ink);
-  font-family: "Segoe UI", system-ui, -apple-system, "Helvetica Neue", Arial, sans-serif;
+  font-family: var(--font-label);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   text-rendering: optimizeLegibility;
@@ -52,7 +55,7 @@ input, textarea { user-select: text; -webkit-user-select: text; }
 input { background: #0e0e14; border: 1px solid var(--line); color: var(--ink); padding: 10px 14px; border-radius: 6px; font-size: 16px; min-width: 220px; }
 .err { color: #ff8a80; min-height: 20px; }
 .hint, .muted { color: var(--muted); }
-.lore { color: var(--gold); font-style: italic; font-family: var(--font-brush); font-size: 18px; }
+.lore { color: var(--gold); font-style: italic; font-family: var(--font-label); font-size: 18px; }
 
 /* buttons */
 .btn { background: var(--panel2); color: var(--ink); border: 1px solid var(--line); padding: 10px 18px; border-radius: 6px; cursor: pointer; font-size: 15px; }
@@ -97,7 +100,7 @@ input { background: #0e0e14; border: 1px solid var(--line); color: var(--ink); p
 .hamb:hover { color: var(--gold2); }
 .hamb.collapsed { transform: rotate(90deg); color: var(--gold); }
 .top-name, .top-realm { border-right: 1px solid var(--line); padding: 12px 20px; }
-.top-name, .top-realm, .top-stones { font-family: var(--font-brush); font-size: 18px; letter-spacing: 2px; }
+.top-name, .top-realm, .top-stones { font-family: var(--font-label); font-size: 18px; letter-spacing: 2px; }
 .top-name span, .top-realm span { color: var(--gold2); }
 .top-stones { margin-left: auto; border-left: 1px solid var(--line); padding: 12px 20px; color: var(--gold2); letter-spacing: 1px; white-space: nowrap; }
 .top-stones .stone-icon { width: 20px; height: 20px; vertical-align: -4px; margin-right: 6px; }
@@ -140,7 +143,7 @@ input { background: #0e0e14; border: 1px solid var(--line); color: var(--ink); p
 .enemy-card:hover { border-color: var(--gold); }
 .enemy-card b { font-size: 15px; }
 .enemy-card .realm-tag { font-size: 12px; color: var(--gold2); }
-.enemy-card .difficulty-tag { color: var(--muted); font-family: var(--font-brush); font-size: 14px; letter-spacing: 1px; }
+.enemy-card .difficulty-tag { color: var(--muted); font-family: var(--font-label); font-size: 14px; letter-spacing: 1px; }
 .enemy-card .difficulty-tag.hard { color: #7d1018; }
 .tip-rarity { font-family: var(--font-brush); letter-spacing: 1px; }
 .enemy-card.boss { border-color: var(--gold); background: #241d0e; }
@@ -216,11 +219,13 @@ input { background: #0e0e14; border: 1px solid var(--line); color: var(--ink); p
 .inv-grid .slot .art-slot { width: 26px; height: 26px; }
 .inv-grid .inv-slot { border-color: var(--rc, var(--line)); }
 .inv-grid .inv-slot:hover { border-color: var(--gold); box-shadow: 0 0 6px rgba(240, 212, 154, .3); }
-.inv-empty-msg { text-align: center; color: var(--muted); font-family: var(--font-brush); font-size: 20px; letter-spacing: 2px; padding: 48px 20px; }
+.inv-empty-msg { text-align: center; color: var(--muted); font-family: var(--font-label); font-size: 20px; letter-spacing: 2px; padding: 48px 20px; }
 
 /* crafting panel */
 .craft-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 10px; }
-.craft-card h2, .craft-out b, .craft-out-name { font-family: var(--font-brush); }
+/* The item names are labels, not headings: they keep the label face. */
+.craft-card h2 { font-family: var(--font-brush); }
+.craft-out b, .craft-out-name { font-family: var(--font-label); }
 .craft-card { border: 1px solid var(--line); background: var(--panel2); padding: 12px; display: flex; flex-direction: column; gap: 8px; }
 .craft-card:hover { border-color: var(--gold); }
 .craft-out { display: flex; gap: 10px; align-items: center; }
@@ -251,7 +256,7 @@ input { background: #0e0e14; border: 1px solid var(--line); color: var(--ink); p
 .mastery-bonus { font-size: 12px; }
 .mastery-toast { border-color: var(--gold2); padding: 12px 20px; text-align: left; }
 .mastery-toast b { display: block; font-size: 18px; color: var(--gold2); }
-.mastery-rank { font-family: var(--font-brush); color: var(--gold); font-size: 15px; letter-spacing: 2px; margin: 4px 0 0; }
+.mastery-rank { font-family: var(--font-label); color: var(--gold); font-size: 15px; letter-spacing: 2px; margin: 4px 0 0; }
 
 /* techniques: the panel, the battle row, the cooldown sweep */
 .skill-layout { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
@@ -265,7 +270,7 @@ input { background: #0e0e14; border: 1px solid var(--line); color: var(--ink); p
 .skill-card.empty { cursor: default; border-style: dashed; }
 .skill-card.empty:hover { border-color: var(--line); }
 .skill-art { width: 38px; height: 38px; }
-.skill-text b { color: var(--gold2); font-family: var(--font-brush); font-size: 16px; letter-spacing: 1px; }
+.skill-text b { color: var(--gold2); font-family: var(--font-label); font-size: 16px; letter-spacing: 1px; }
 .skill-text small { display: block; font-size: 11px; letter-spacing: 1px; }
 .skill-text p { font-size: 12px; line-height: 1.5; margin: 4px 0 0; }
 .skill-empty { color: var(--muted); font-size: 13px; padding: 10px 2px; }
@@ -281,7 +286,7 @@ input { background: #0e0e14; border: 1px solid var(--line); color: var(--ink); p
 .skill-slot { position: relative; border: 1px solid var(--line); background: var(--panel2); padding: 4px 8px; min-width: 92px; overflow: hidden; }
 .skill-slot .skill-art { width: 26px; height: 26px; display: block; }
 .skill-name { font-size: 11px; letter-spacing: 1px; color: var(--gold2); }
-.skill-cd { position: absolute; inset: 0; background: rgba(6,6,10,.78); color: var(--gold2); font-size: 15px; display: flex; align-items: center; justify-content: center; font-family: var(--font-brush); }
+.skill-cd { position: absolute; inset: 0; background: rgba(6,6,10,.78); color: var(--gold2); font-size: 15px; display: flex; align-items: center; justify-content: center; font-family: var(--font-label); }
 .skill-slot.cooling { border-color: var(--gold); }
 .skill-slot.cooling::after { content: ""; position: absolute; inset: 0; background: linear-gradient(90deg, transparent, rgba(240,212,154,.18)); animation: skill-sweep 1.1s linear infinite; }
 @keyframes skill-sweep { from { transform: translateX(-100%); } to { transform: translateX(0); } }
@@ -290,10 +295,10 @@ input { background: #0e0e14; border: 1px solid var(--line); color: var(--ink); p
 .gather-status { border: 1px solid var(--line); background: var(--panel2); padding: 10px 14px; margin: 10px 0; display: flex; align-items: center; gap: 10px; }
 .gather-status .btn { margin-left: auto; }
 /* The herb list reads like the craft bench: one card per herb, all of them.
-   The brush face (Ma Shan Zheng) belongs to the RARITY, not to the name: a
-   long herb name in brush strokes is hard to read, while the short tier word
-   looks right in it. */
-.gather-card .craft-out-name b { font-family: inherit; font-size: 15px; }
+   The herb's name is a label, not a heading -- and the rarity is the
+   heading, in the brush face: a long herb name in brush strokes is hard to
+   read, while the short tier word looks right in it. */
+.gather-card .craft-out-name b { font-family: var(--font-label); font-size: 15px; }
 .gather-card .gather-rarity { font-family: var(--font-brush); font-size: 13px; letter-spacing: 2px; }
 .gather-card.locked { opacity: .55; }
 .gather-card.locked:hover { border-color: var(--line); }

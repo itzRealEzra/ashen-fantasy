@@ -3,6 +3,21 @@
    game actually renders are shipped: Latin for the labels, and the
    CJK slices that carry the title. */
 
+/* FOT-Rodin ProN -- the label face. Drop the file into
+   public/assets/fonts/ under one of these names and it is used for every
+   label in the game; until then the browser falls back to the system face
+   and nothing breaks. */
+@font-face {
+  font-family: 'FOT-Rodin ProN';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('/assets/fonts/fot-rodin-pron.woff2') format('woff2'),
+       url('/assets/fonts/fot-rodin-pron.woff') format('woff'),
+       url('/assets/fonts/fot-rodin-pron.ttf') format('truetype'),
+       url('/assets/fonts/fot-rodin-pron.otf') format('opentype');
+}
+
 @font-face {
   font-family: 'Ma Shan Zheng';
   font-style: normal;

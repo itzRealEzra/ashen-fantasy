@@ -11,6 +11,25 @@ and push to `main` on https://github.com/itzRealEzra/ashen-fantasy.
 
 ## [Unreleased]
 
+## [0.9.34] - 2026-10-22
+### Changed
+- **Two faces, two jobs.** The brush face (Ma Shan Zheng) is for the
+  **headings** -- the game title, the panel titles, the rank names, the
+  rarity words, the big display notices. **FOT-Rodin ProN** is for the
+  **labels** -- the body, the buttons, the item names, the numbers, the
+  descriptions.
+- **The herb's name is a label.** It was still wearing the brush face on
+  the Gather cards (and on the craft bench, which shares the same rule):
+  "Wild Ginseng" in brush strokes is hard to read. The name keeps the
+  label face now; the rarity -- "Common", "Legendary" -- keeps the brush.
+
+### Added
+- **FOT-Rodin ProN is wired in.** Drop the file into
+  `public/assets/fonts/` as `fot-rodin-pron.woff2` (or `.woff`, `.ttf`,
+  `.otf`) and every label in the game is set in it. Until then the system
+  face stands in, and the console stays quiet -- a font that is not there
+  is not an error.
+
 ## [0.9.33] - 2026-10-22
 ### Fixed
 - **The old picture names still work.** The art became WebP, but a few
