@@ -99,9 +99,6 @@ input { background: #0e0e14; border: 1px solid var(--line); color: var(--ink); p
 .hamb { background: none; border: none; border-right: 1px solid var(--line); color: var(--ink); font-size: 22px; padding: 10px 16px; cursor: pointer; transition: transform .3s ease, color .2s ease; }
 .hamb:hover { color: var(--gold2); }
 .hamb.collapsed { transform: rotate(90deg); color: var(--gold); }
-/* On a wide screen the sidebar is a column of the layout, so the button that
-   opens the drawer has nothing to open. */
-@media (min-width: 901px) { .hamb { display: none; } }
 .top-name, .top-realm { border-right: 1px solid var(--line); padding: 12px 20px; }
 .top-name, .top-realm, .top-stones { font-family: var(--font-label); font-size: 18px; letter-spacing: 2px; }
 .top-name span, .top-realm span { color: var(--gold2); }
@@ -114,6 +111,8 @@ input { background: #0e0e14; border: 1px solid var(--line); color: var(--ink); p
    drawer that slides in and out is a thing for a phone, not for a desk --
    and it is what made the panel flicker and the clicks land twice. */
 .sidebar { position: relative; top: 0; left: 0; bottom: 0; width: 220px; flex: none; z-index: 10; background: var(--panel); border-right: 1px solid var(--line); display: flex; flex-direction: column; overflow-x: hidden; overflow-y: auto; opacity: 1; visibility: visible; transform: translateX(0); transition: transform .3s ease, opacity .22s ease, visibility 0s; box-shadow: 8px 0 24px rgba(0,0,0,.55); }
+/* The menu button folds the column away to give the panel the room. */
+.shell-body.side-off .sidebar { width: 0; min-width: 0; border-right-color: transparent; box-shadow: none; opacity: 0; overflow: hidden; }
 .sidebar .side-btn, .sidebar .side-foot { white-space: nowrap; }
 .side-btn { background: none; border: none; border-bottom: 1px solid var(--line); color: var(--ink); padding: 22px; font-size: 16px; letter-spacing: 2px; cursor: pointer; text-align: center; font-family: var(--font-brush); }
 .side-btn.active, .side-btn:hover { background: #241d0e; color: var(--gold2); }

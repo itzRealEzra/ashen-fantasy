@@ -11,6 +11,22 @@ and push to `main` on https://github.com/itzRealEzra/ashen-fantasy.
 
 ## [Unreleased]
 
+## [0.9.37] - 2026-10-22
+### Fixed
+- **The menu button is back.** It was hidden on a wide screen when the
+  sidebar became a column of the layout, and with it went the way to fold
+  the column away and give the panel the room. The button is there again:
+  on a wide screen it folds the column away, on a phone it opens and
+  closes the drawer.
+- **The tooltip keeps the item it is showing while the cursor is on it.**
+  The tooltip takes no pointer events (so it can never swallow a click on
+  what lies under it), which meant the slot underneath kept reporting the
+  cursor was on it -- so dragging toward the tooltip crossed the
+  neighbouring slots and each of them swapped the item under the cursor.
+  Now the cursor's own path is watched: a slot under the tooltip cannot
+  take it over, an empty slot cannot take it over, and a switch of item
+  waits a moment so it never happens mid-journey.
+
 ## [0.9.36] - 2026-10-22
 ### Fixed
 - **The bag never offers "Unequip" for a piece you are carrying.** A ring in

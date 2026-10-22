@@ -1,6 +1,6 @@
 /* Ashen Fantasy — vanilla JS state machine: username -> roots -> main */
 const $ = (id) => document.getElementById(id);
-const CLIENT_VERSION = "0.9.36"; // must match server.py server_version + footer
+const CLIENT_VERSION = "0.9.37"; // must match server.py server_version + footer
 const state = {
   username: localStorage.getItem("af_user") || "",
   rollId: null,
@@ -923,9 +923,16 @@ document.querySelectorAll(".side-btn").forEach(b => b.onclick = () => {
   }
 });
 $("hamburger").onclick = () => {
-  // On a wide screen the sidebar is always there, so the button does nothing
-  // there.
-  if (window.innerWidth > 900) return;
+  // On a wide screen the sidebar is a column of the layout, and the button
+  // folds it away to give the panel the room. On a phone it is a drawer
+  // over the panel, and the button opens and closes it.
+  if (window.innerWidth > 900) {
+    const body = document.querySelector(".shell-body");
+    if (!body) return;
+    const off = body.classList.toggle("side-off");
+    $("hamburger").classList.toggle("collapsed", off);
+    return;
+  }
   const sb = $("sidebar");
   sb.classList.toggle("open");
   $("hamburger").classList.toggle("collapsed", !sb.classList.contains("open"));
@@ -1236,6 +1243,11 @@ function itemTipHtml(itemId, ctx) {
 
 let tipCtxKey = "", lastTipHtml = "";
 let tipCtx = {};   // the context the open tooltip was drawn with
+// A switch of the tooltip waits a moment, so dragging the cursor toward the
+// tooltip (across the neighbouring slots) does not swap the item under it.
+const TIP_SWITCH_DELAY = 140;
+let tipSwitchTimer = null;
+let tipPending = null;
 function showTipHtml(html, x, y, key, itemId, force) {
   ensureTipWired();
   const tip = $("item-tip");
@@ -1261,11 +1273,50 @@ function showTipHtml(html, x, y, key, itemId, force) {
   // The box is measured here, once, and kept until the tooltip moves again.
   tipRect = measureTip();
 }
-
 function showTip(itemId, x, y, ctx) {
-  tipCtx = ctx || {};
   const key = itemId + "|" + (ctx && ctx.unequip ? "u" + ctx.unequip : ctx && ctx.unload != null ? "l" + ctx.unload : "b");
-  showTipHtml(itemTipHtml(itemId, ctx), x, y, key, itemId);
+  const tip = $("item-tip");
+  const shown = tip && tip.style.display === "block" && tipItem;
+  if (shown && tipItem === itemId && tipCtxKey === key) {
+    // The same item: keep the tooltip exactly where it is.
+    showTipHtml(itemTipHtml(itemId, ctx), x, y, key, itemId);
+    return;
+  }
+  // The tooltip takes no pointer events, so the slot under it keeps telling
+  // us the cursor is on it. If the cursor is inside the tooltip, that slot
+  // must not take the tooltip over -- the player is on their way to a
+  // button, not to a different item. The switch that was on its way is
+  // called off with it.
+  if (shown && tipHot(x, y)) {
+    if (tipSwitchTimer) { clearTimeout(tipSwitchTimer); tipSwitchTimer = null; }
+    tipPending = null;
+    return;
+  }
+  // A switch to another item waits a moment: dragging the cursor toward
+  // the tooltip crosses the neighbouring slots on the way, and each of them
+  // would otherwise snatch the tooltip away mid-journey.
+  tipPending = { itemId, x, y, ctx, key };
+  if (tipSwitchTimer) clearTimeout(tipSwitchTimer);
+  tipSwitchTimer = setTimeout(commitTipSwitch, TIP_SWITCH_DELAY);
+}
+
+// The switch the player asked for, once the cursor has settled.
+function commitTipSwitch() {
+  tipSwitchTimer = null;
+  const want = tipPending;
+  tipPending = null;
+  if (!want) return;
+  if (tipHot(want.x, want.y)) return;   // the cursor is on the tooltip
+  showTipHtml(itemTipHtml(want.itemId, want.ctx), want.x, want.y, want.key, want.itemId);
+}
+
+// Is the cursor inside the tooltip (or right at its edge)?
+function tipHot(x, y) {
+  if (!tipRect) return false;
+  const px = x == null ? tipPointer.x : x;
+  const py = y == null ? tipPointer.y : y;
+  return px >= tipRect.left - 4 && px <= tipRect.right + 4
+      && py >= tipRect.top - 4 && py <= tipRect.bottom + 4;
 }
 
 // A panel is redrawn (a craft, a sale, a gather) while the cursor is resting
@@ -1290,6 +1341,7 @@ function showSlotTip(name, type, hint, x, y, key) {
   const html = `<div class="tip-title"><b>Empty</b></div>` +
     (hint ? `<div class="muted">${esc(hint)}</div>` : "");
   tipCtx = {};
+  tipItem = null;
   showTipHtml(html, x, y, "slot|" + key, null);
 }
 
@@ -1303,6 +1355,9 @@ function armSlotTip(el, e, hint) {
   if (el._slotTipTimer) return;
   el._slotTipTimer = setTimeout(() => {
     el._slotTipTimer = null;
+    // The cursor may have arrived on the tooltip meanwhile -- then the
+    // empty slot does not get a word in.
+    if (tipHot(e.clientX, e.clientY)) return;
     showSlotTip(el.dataset.slotName, el.dataset.slotType, hint,
       e.clientX, e.clientY, el.dataset.slot || ("e" + el.dataset.elixir));
   }, SLOT_TIP_DELAY);
@@ -1318,6 +1373,8 @@ function hideTip() {
   tipCtxKey = "";
   tipCtx = {};
   tipRect = null;
+  if (tipSwitchTimer) { clearTimeout(tipSwitchTimer); tipSwitchTimer = null; }
+  tipPending = null;
   // lastTipHtml intentionally kept: re-showing the same item skips the
   // innerHTML rewrite entirely.
   if (tipHideTimer) { clearTimeout(tipHideTimer); tipHideTimer = null; }
@@ -1389,8 +1446,11 @@ function watchTipPointer(e) {
   if (tipPointerOverTip()) {
     tipOnTip = true;
     setTipLive(true);
-    // The cursor is on the tooltip: it stays, and the pending hide is off.
+    // The cursor is on the tooltip: it stays, the pending hide is off, and
+    // no switch of item is on its way.
     if (tipHideTimer) { clearTimeout(tipHideTimer); tipHideTimer = null; }
+    if (tipSwitchTimer) { clearTimeout(tipSwitchTimer); tipSwitchTimer = null; }
+    tipPending = null;
     return;
   }
   setTipLive(false);

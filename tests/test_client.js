@@ -97,10 +97,14 @@ const parts = [
   grab(/let invSort = "[a-z]+";/, "invSort"),
   grab(/function paintBattleKit\(\) \{[\s\S]*?\n\}/, "paintBattleKit"),
   grab(/let tipItem = null, tipHideTimer = null;/, "tipState"),
-  grab(/let tipCtxKey = "", lastTipHtml = "";\nlet tipCtx = \{\};/, "tipState2"),
+  grab(/let tipCtxKey = "", lastTipHtml = "";\nlet tipCtx = \{\};[\s\S]*?let tipPending = null;/, "tipState2"),
   grab(/let tipWired = false;/, "tipWired"),
   grab(/function ensureTipWired\(\) \{[\s\S]*?\n\}/, "ensureTipWired"),
   grab(/function showTipHtml\(html, x, y, key, itemId, force\) \{[\s\S]*?\n\}/, "showTipHtml"),
+  grab(/function showTip\(itemId, x, y, ctx\) \{[\s\S]*?\n\}/, "showTip"),
+  grab(/function commitTipSwitch\(\) \{[\s\S]*?\n\}/, "commitTipSwitch"),
+  grab(/function tipHot\(x, y\) \{[\s\S]*?\n\}/, "tipHot"),
+  grab(/function showSlotTip\(name, type, hint, x, y, key\) \{[\s\S]*?\n\}/, "showSlotTip"),
   grab(/function redrawTip\(\) \{[\s\S]*?\n\}/, "redrawTip"),
   grab(/function setTipLive\(on\) \{[\s\S]*?\n\}/, "setTipLive"),
   grab(/function pointerOnSlot\(\) \{[\s\S]*?\n\}/, "pointerOnSlot"),
@@ -1013,8 +1017,10 @@ state.player = basePlayer();
      "the tooltip's buttons take the pointer only while the cursor is on them");
   ok(/\.sidebar \{ position: relative/.test(cssNow),
      "the sidebar is a column of the layout, not a drawer over it");
-  ok(/@media \(min-width: 901px\) \{ \.hamb \{ display: none; \} \}/.test(cssNow),
-     "the drawer button is hidden where there is no drawer");
+  ok(/\.hamb \{ display: none/.test(cssNow) === false,
+     "the menu button is always there");
+  ok(/side-off/.test(SRC) && /side-off/.test(cssNow),
+     "the menu button folds the column away on a wide screen");
   ok(/if \(window\.innerWidth > 900\) return;/.test(SRC),
      "the drawer button does nothing on a wide screen");
 
@@ -1031,6 +1037,16 @@ state.player = basePlayer();
   ok(/serverVer > CLIENT_VERSION/.test(SRC), "it reloads when the server is newer");
   ok(/af_reload_tries/.test(SRC), "and it does not bounce between two versions forever");
   ok(/location\.reload\(true\)/.test(SRC), "the reload is the page's own");
+
+  // The tooltip must not swap items while the cursor is on its way to it.
+  ok(/function tipHot\(x, y\)/.test(SRC), "the tooltip knows when the cursor is on it");
+  ok(/TIP_SWITCH_DELAY = 140/.test(SRC), "a switch of item waits a moment");
+  ok(/if \(shown && tipHot\(x, y\)\) \{[\s\S]{0,200}return;/.test(SRC),
+     "a slot under the tooltip cannot take the tooltip over");
+  ok(/if \(tipHot\(e\.clientX, e\.clientY\)\) return;/.test(SRC),
+     "an empty slot under the tooltip cannot take the tooltip over");
+  ok(/if \(tipSwitchTimer\) \{ clearTimeout\(tipSwitchTimer\); tipSwitchTimer = null; \}\s*\n\s*tipPending = null;\s*\n\s*return;/.test(SRC),
+     "a switch on its way is called off when the cursor reaches the tooltip");
 
   // The tooltip must not close when the cursor is inside it.
   const tipEl = els["item-tip"];
