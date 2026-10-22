@@ -1,6 +1,6 @@
 /* Ashen Fantasy — vanilla JS state machine: username -> roots -> main */
 const $ = (id) => document.getElementById(id);
-const CLIENT_VERSION = "0.9.34"; // must match server.py server_version + footer
+const CLIENT_VERSION = "0.9.35"; // must match server.py server_version + footer
 const state = {
   username: localStorage.getItem("af_user") || "",
   rollId: null,
@@ -914,9 +914,13 @@ document.querySelectorAll(".side-btn").forEach(b => b.onclick = () => {
   document.querySelectorAll(".tab").forEach(x => x.classList.remove("active"));
   b.classList.add("active");
   $("tab-" + b.dataset.tab).classList.add("active");
-  // sidebar auto-hides on every panel switch
-  $("sidebar").classList.remove("open");
-  $("hamburger").classList.add("collapsed");
+  // The sidebar stays open on a wide screen: folding it away on every
+  // switch made the panel flicker and the player hunt for the next tab.
+  // On a small screen it folds away, because it covers the panel.
+  if (window.innerWidth <= 900) {
+    $("sidebar").classList.remove("open");
+    $("hamburger").classList.add("collapsed");
+  }
 });
 $("hamburger").onclick = () => {
   const sb = $("sidebar");
@@ -1089,10 +1093,14 @@ function bagGearAction(itemId) {
   const p = state.player, it = ITEM_BY_ID[itemId];
   if (!it || it.kind !== "gear" || !((p.inventory[itemId] || 0) > 0)) return null;
   const targets = equipTargets(it);
+  // If this very piece is already worn, the action is to take it off.
+  const worn = targets.find(s => p.equipment[s] === itemId);
+  if (worn) return { act: "unequip", slot: worn };
   const free = targets.find(s => !p.equipment[s]);
   if (free) return { act: "equip", slot: free };
-  // All targets occupied: unequip the first one.
-  return { act: "unequip", slot: targets[0] };
+  // Every slot this piece fits is taken by something else: it goes on by
+  // replacing the first one (the old piece goes back into the bag).
+  return { act: "equip", slot: targets[0] };
 }
 
 // Which beasts drop an item, the best chance any of them offers, and the
@@ -1239,6 +1247,8 @@ function showTipHtml(html, x, y, key, itemId) {
   tip.classList.add("on");
   tip.style.left = Math.min(window.innerWidth - tip.offsetWidth - 10, x + 14) + "px";
   tip.style.top = Math.min(window.innerHeight - tip.offsetHeight - 10, y + 14) + "px";
+  // The box is measured here, once, and kept until the tooltip moves again.
+  tipRect = measureTip();
 }
 
 function showTip(itemId, x, y, ctx) {
@@ -1253,11 +1263,28 @@ function showSlotTip(name, type, hint, x, y, key) {
   showTipHtml(html, x, y, "slot|" + key, null);
 }
 
+// An empty slot speaks only if the cursor rests on it: the player moving
+// across the doll must not have the tooltip snatched away by the slot in
+// between.
+const SLOT_TIP_DELAY = 260;
+function armSlotTip(el, e, hint) {
+  if (el._slotTipTimer) return;
+  el._slotTipTimer = setTimeout(() => {
+    el._slotTipTimer = null;
+    showSlotTip(el.dataset.slotName, el.dataset.slotType, hint,
+      e.clientX, e.clientY, el.dataset.slot || ("e" + el.dataset.elixir));
+  }, SLOT_TIP_DELAY);
+}
+function clearSlotTipTimer(el) {
+  if (el._slotTipTimer) { clearTimeout(el._slotTipTimer); el._slotTipTimer = null; }
+}
+
 function hideTip() {
   const tip = $("item-tip");
   if (tip) { tip.classList.remove("on"); tip.style.display = "none"; }
   tipItem = null;
   tipCtxKey = "";
+  tipRect = null;
   // lastTipHtml intentionally kept: re-showing the same item skips the
   // innerHTML rewrite entirely.
   if (tipHideTimer) { clearTimeout(tipHideTimer); tipHideTimer = null; }
@@ -1281,15 +1308,26 @@ function scheduleHideTip() {
 // Where the cursor is, and whether it is inside the tooltip's box.
 let tipPointer = { x: 0, y: 0 };
 let tipOnTip = false;
+let tipRect = null;   // the tooltip's box, measured when it was placed
+
+// The tooltip's box, measured once. Reading it on every mouse move would
+// force the page to lay out again and again, which made the panel flicker
+// and the clicks arrive late.
+function measureTip() {
+  const tip = $("item-tip");
+  if (!tip || !tip.getBoundingClientRect) return null;
+  const r = tip.getBoundingClientRect();
+  if (!r || (!r.width && !r.height)) return null;
+  return { left: r.left, top: r.top, right: r.right, bottom: r.bottom };
+}
 
 function tipPointerOverTip() {
   const tip = $("item-tip");
   if (!tip || tip.style.display !== "block") return false;
-  if (!tip.getBoundingClientRect) return false;
-  const r = tip.getBoundingClientRect();
-  if (!r || (!r.width && !r.height)) return false;
-  return tipPointer.x >= r.left && tipPointer.x <= r.right
-      && tipPointer.y >= r.top && tipPointer.y <= r.bottom;
+  if (!tipRect) tipRect = measureTip();
+  if (!tipRect) return false;
+  return tipPointer.x >= tipRect.left && tipPointer.x <= tipRect.right
+      && tipPointer.y >= tipRect.top && tipPointer.y <= tipRect.bottom;
 }
 
 // The cursor is watched on the document, so it is still known while it is
@@ -1372,18 +1410,28 @@ function renderInventory() {
     // so it looked like the item had vanished. Unequipping is now only via
     // the tooltip's explicit action.
     el.onmousemove = e => {
-      if (el.dataset.tip) showTip(el.dataset.tip, e.clientX, e.clientY, { unequip: el.dataset.slot });
-      else showSlotTip(el.dataset.slotName, el.dataset.slotType, "Bag → hover an item → Equip.", e.clientX, e.clientY, el.dataset.slot);
+      if (el.dataset.tip) {
+        clearSlotTipTimer(el);
+        showTip(el.dataset.tip, e.clientX, e.clientY, { unequip: el.dataset.slot });
+      } else {
+        // An empty slot only speaks if the cursor rests on it. Passing over
+        // it on the way to another slot must not steal the tooltip.
+        armSlotTip(el, e, "Bag → hover an item → Equip.");
+      }
     };
-    el.onmouseleave = scheduleHideTip;
+    el.onmouseleave = () => { clearSlotTipTimer(el); scheduleHideTip(); };
   });
   root.querySelectorAll(".slot[data-elixir]").forEach(el => {
     el.onclick = () => useElixir(+el.dataset.elixir);
     el.onmousemove = e => {
-      if (el.dataset.tip) showTip(el.dataset.tip, e.clientX, e.clientY, { unload: +el.dataset.elixir });
-      else showSlotTip(el.dataset.slotName, el.dataset.slotType, "Bag → hover a pill → Equip.", e.clientX, e.clientY, "e" + el.dataset.elixir);
+      if (el.dataset.tip) {
+        clearSlotTipTimer(el);
+        showTip(el.dataset.tip, e.clientX, e.clientY, { unload: +el.dataset.elixir });
+      } else {
+        armSlotTip(el, e, "Bag → hover a pill → Equip.");
+      }
     };
-    el.onmouseleave = scheduleHideTip;
+    el.onmouseleave = () => { clearSlotTipTimer(el); scheduleHideTip(); };
   });
   root.querySelectorAll(".inv-tab").forEach(el => el.onclick = () => { invTab = el.dataset.tab; renderInventory(); });
   root.querySelectorAll(".inv-sort").forEach(el => el.onclick = () => { invSort = el.dataset.sort; renderInventory(); });

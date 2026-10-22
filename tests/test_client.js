@@ -46,6 +46,7 @@ const ITEM_FIXTURE = {
   roasted_wild_rat_meat: { id: "roasted_wild_rat_meat", name: "Roasted Wild Rat Meat", kind: "consumable", slot: null, glyph: "🍱", rarity: "Common", desc: "", stats: { ...ZERO_STATS }, use: { heal_pct: 15, qi_pct: 5 } },
   linen_robe: { id: "linen_robe", name: "Linen Robe", kind: "gear", slot: "chest", glyph: "🥋", rarity: "Common", desc: "", stats: { ...ZERO_STATS, def: 4, hp: 30 } },
   copper_ring: { id: "copper_ring", name: "Copper Ring", kind: "gear", slot: "ring", glyph: "⭕", rarity: "Common", desc: "", stats: { ...ZERO_STATS, crit: 2 } },
+  jade_ring: { id: "jade_ring", name: "Jade Ring", kind: "gear", slot: "ring", glyph: "⭕", rarity: "Uncommon", desc: "", stats: { ...ZERO_STATS, def: 3 } },
   rat_fur: { id: "rat_fur", name: "Rat Fur", kind: "material", slot: null, glyph: "✦", rarity: "Common", desc: "", stats: { ...ZERO_STATS } },
   wolf_fang: { id: "wolf_fang", name: "Wolf Fang", kind: "material", slot: null, glyph: "✦", rarity: "Uncommon", desc: "", stats: { ...ZERO_STATS } },
   beast_core_fragment: { id: "beast_core_fragment", name: "Beast Core Fragment", kind: "material", slot: null, glyph: "✦", rarity: "Rare", desc: "", stats: { ...ZERO_STATS } },
@@ -105,7 +106,7 @@ const parts = [
   grab(/function hideTip\(\) \{[\s\S]*?\n\}/, "hideTip"),
   grab(/function scheduleHideTip\(\) \{[\s\S]*?\n\}/, "scheduleHideTip"),
   grab(/function tipPointerOverTip\(\) \{[\s\S]*?\n\}/, "tipPointerOverTip"),
-  grab(/let tipPointer = \{ x: 0, y: 0 \};\nlet tipOnTip = false;/, "tipPointer"),
+  grab(/let tipPointer = \{ x: 0, y: 0 \};\nlet tipOnTip = false;\nlet tipRect = null;[\s\S]*?^}/m, "tipPointer"),
   grab(/function watchTipPointer\(e\) \{[\s\S]*?\n\}/, "watchTipPointer"),
   grab(/async function adoptPlayer\(p\) \{[\s\S]*?\n\}/, "adoptPlayer"),
   grab(/function iconUrl\(name\) \{[\s\S]*?\n\}/, "iconUrl"),
@@ -971,7 +972,36 @@ state.player = basePlayer();
   ok(/data-act="sell-all"/.test(manyTip), "several copies can be sold in one go");
 
   // ============ 6p. the bag keeps the spares, the realm reports its gains ============
-  // The tooltip must not hide while the cursor is inside it.
+  // A ring that is not the one being worn must never offer "Unequip".
+  state.player = basePlayer();
+  state.player.equipment = { ring1: "copper_ring", ring2: "copper_ring" };
+  state.player.inventory = { copper_ring: 2, jade_ring: 1 };
+  const wornRing = lib.bagGearAction("copper_ring");
+  ok(wornRing && wornRing.act === "unequip",
+     "the ring that is actually worn offers to be taken off");
+  const otherRing = lib.bagGearAction("jade_ring");
+  ok(otherRing && otherRing.act === "equip",
+     "another ring is offered as Equip, never as Unequip");
+  ok(otherRing && (otherRing.slot === "ring1" || otherRing.slot === "ring2"),
+     "and it goes onto a finger");
+  // The tooltip says the same thing.
+  const otherTip = lib.itemTipHtml("jade_ring", {});
+  ok(/data-act="equip"/.test(otherTip) && !/data-act="unequip"/.test(otherTip),
+     "the tooltip of another ring offers Equip, not Unequip");
+  const wornTip = lib.itemTipHtml("copper_ring", {});
+  ok(/data-act="unequip"/.test(wornTip), "the worn ring's tooltip offers Unequip");
+
+  // ============ 6q. the tooltip, the notices and the sidebar ============
+  ok(/#item-tip \{[^}]*z-index: 10001/.test(cssNow),
+     "the tooltip sits above the corner notices, so a notice never hides it");
+  ok(/let tipRect = null/.test(SRC) && /tipRect = measureTip\(\)/.test(SRC),
+     "the tooltip's box is measured once, not on every mouse move");
+  ok(/armSlotTip\(el, e/.test(SRC) && /SLOT_TIP_DELAY = 260/.test(SRC),
+     "an empty slot only speaks when the cursor rests on it -- passing over it keeps the tooltip");
+  ok(/if \(window\.innerWidth <= 900\) \{/.test(SRC),
+     "the sidebar stays open on a wide screen, so the panel does not flicker");
+
+  // The tooltip must not close when the cursor is inside it.
   const tipEl = els["item-tip"];
   tipEl.getBoundingClientRect = () => ({ left: 0, top: 0, right: 100, bottom: 50, width: 100, height: 50 });
   tipEl.style.display = "block";

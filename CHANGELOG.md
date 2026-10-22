@@ -11,6 +11,28 @@ and push to `main` on https://github.com/itzRealEzra/ashen-fantasy.
 
 ## [Unreleased]
 
+## [0.9.35] - 2026-10-22
+### Fixed
+- **A ring was never the ring you thought.** With both fingers full of the
+  Jade Guard Ring, the Qi Gathering Ring in the bag offered "Unequip" --
+  and clicking it would have taken off a ring that was not it. The action
+  is now decided by what is actually worn: a piece that is on a finger
+  offers to be taken off, any other piece offers to be put on (replacing
+  the first one it fits, which goes back into the bag).
+- **A notice no longer swallows the tooltip.** The corner notices were
+  painted over it, so the tooltip seemed to close the moment a message
+  arrived. The tooltip now sits above them.
+- **Passing over an empty slot no longer steals the tooltip.** The empty
+  slots only speak when the cursor rests on them; moving across the
+  equipment doll keeps the tooltip of the piece you were reading.
+- **The page stopped flickering under the cursor.** The tooltip's box was
+  measured on every mouse move, which forced the page to lay out again and
+  again -- the panel juddered and clicks arrived late enough to need a
+  second try. The box is measured once, when the tooltip is placed.
+- **The sidebar stays open on a wide screen.** Folding it away on every
+  panel switch made the panel jump and sent the player hunting for the
+  next tab. It still folds away on a phone, where it covers the panel.
+
 ## [0.9.34] - 2026-10-22
 ### Changed
 - **Two faces, two jobs.** The brush face (Ma Shan Zheng) is for the
