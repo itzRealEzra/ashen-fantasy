@@ -96,9 +96,6 @@ input { background: #0e0e14; border: 1px solid var(--line); color: var(--ink); p
 /* main game shell — full-bleed to viewport edges */
 .game-shell { border: none; background: var(--panel); flex: 1; min-height: 0; display: flex; flex-direction: column; overflow: hidden; }
 .topbar { display: flex; align-items: center; border-bottom: 1px solid var(--line); flex: none; }
-.hamb { background: none; border: none; border-right: 1px solid var(--line); color: var(--ink); font-size: 22px; padding: 10px 16px; cursor: pointer; transition: transform .3s ease, color .2s ease; }
-.hamb:hover { color: var(--gold2); }
-.hamb.collapsed { transform: rotate(90deg); color: var(--gold); }
 .top-name, .top-realm { border-right: 1px solid var(--line); padding: 12px 20px; }
 .top-name, .top-realm, .top-stones { font-family: var(--font-label); font-size: 18px; letter-spacing: 2px; }
 .top-name span, .top-realm span { color: var(--gold2); }
@@ -106,13 +103,11 @@ input { background: #0e0e14; border: 1px solid var(--line); color: var(--ink); p
 .top-stones .stone-icon { width: 20px; height: 20px; vertical-align: -4px; margin-right: 6px; }
 .stone-glyph { width: 14px; height: 14px; vertical-align: -2px; }
 .shell-body { display: flex; flex: 1; min-height: 0; position: relative; }
-/* On a wide screen the sidebar is a column of the layout: it is always there,
-   the panel sits beside it, and switching tabs never slides anything. A
-   drawer that slides in and out is a thing for a phone, not for a desk --
-   and it is what made the panel flicker and the clicks land twice. */
-.sidebar { position: relative; top: 0; left: 0; bottom: 0; width: 220px; flex: none; z-index: 10; background: var(--panel); border-right: 1px solid var(--line); display: flex; flex-direction: column; overflow-x: hidden; overflow-y: auto; opacity: 1; visibility: visible; transform: translateX(0); transition: transform .3s ease, opacity .22s ease, visibility 0s; box-shadow: 8px 0 24px rgba(0,0,0,.55); }
-/* The menu button folds the column away to give the panel the room. */
-.shell-body.side-off .sidebar { width: 0; min-width: 0; border-right-color: transparent; box-shadow: none; opacity: 0; overflow: hidden; }
+/* The sidebar is a column of the layout: it is always there, the panel sits
+   beside it, and switching tabs never slides anything. A drawer that slides
+   in and out is a thing for a phone, not for a desk -- and it is what made
+   the panel flicker and the clicks land twice. */
+.sidebar { position: relative; top: 0; left: 0; bottom: 0; width: 220px; flex: none; z-index: 10; background: var(--panel); border-right: 1px solid var(--line); display: flex; flex-direction: column; overflow-x: hidden; overflow-y: auto; opacity: 1; visibility: visible; transform: translateX(0); box-shadow: 8px 0 24px rgba(0,0,0,.55); }
 .sidebar .side-btn, .sidebar .side-foot { white-space: nowrap; }
 .side-btn { background: none; border: none; border-bottom: 1px solid var(--line); color: var(--ink); padding: 22px; font-size: 16px; letter-spacing: 2px; cursor: pointer; text-align: center; font-family: var(--font-brush); }
 .side-btn.active, .side-btn:hover { background: #241d0e; color: var(--gold2); }
@@ -402,20 +397,27 @@ input { background: #0e0e14; border: 1px solid var(--line); color: var(--ink); p
 #stat-notice b.up { color: #9ccc65; font-weight: 600; }
 #stat-notice b.down { color: #ff6b6b; font-weight: 600; }
 /* floating item tooltip (hover) with rarity + compare colors.
-   It never eats a click: only its own buttons take the pointer, so a
-   tooltip that floats over a button (the mailbox Claim) cannot swallow it.
-   The cursor is watched on the document instead, so the tooltip stays open
-   while the cursor is inside it. */
+   It never eats a click: only its own buttons take the pointer, and only
+   while the cursor is really on the tooltip. The cursor is watched on the
+   document instead, so the tooltip stays open while the cursor is inside
+   it, and a neighbouring slot cannot snatch it away on the way. */
 #item-tip { display: none; position: fixed; z-index: 10001; max-width: 300px;
-  background: linear-gradient(180deg, rgba(18, 18, 26, .98), rgba(10, 10, 15, .98));
-  border: 1px solid rgba(201, 168, 106, .5); border-radius: 3px; padding: 10px 13px;
+  background: linear-gradient(180deg, rgba(20, 20, 28, .98), rgba(11, 11, 16, .98));
+  border: 1px solid rgba(201, 168, 106, .38); border-radius: 4px; padding: 11px 14px 12px;
   font-size: 13px; line-height: 1.65; color: var(--ink);
-  box-shadow: 0 14px 34px rgba(0, 0, 0, .75), 0 0 0 1px rgba(0, 0, 0, .45);
-  opacity: 0; transition: opacity .12s ease; pointer-events: none; }
+  box-shadow: 0 18px 44px rgba(0, 0, 0, .78), 0 2px 0 rgba(201, 168, 106, .1),
+              0 0 0 1px rgba(0, 0, 0, .5);
+  opacity: 0; transition: opacity .13s ease, transform .13s ease; pointer-events: none; }
 #item-tip.on { opacity: 1; }
+/* A new item fades in over the old one: the eye follows the change. */
+#item-tip.swap { animation: tip-swap .18s ease; }
+@keyframes tip-swap {
+  from { opacity: .25; transform: translateY(3px); }
+  to { opacity: 1; transform: none; }
+}
 #item-tip .tip-title { align-items: center; }
-#item-tip .tip-title b { font-size: 14px; letter-spacing: .5px; }
-#item-tip .tip-rarity { font-size: 11px; letter-spacing: 1.5px; text-transform: uppercase; opacity: .9; }
+#item-tip .tip-title b { font-size: 14.5px; letter-spacing: .4px; color: var(--ink); }
+#item-tip .tip-rarity { font-family: var(--font-brush); font-size: 11.5px; letter-spacing: 1.5px; text-transform: uppercase; opacity: .95; }
 #item-tip .tip-desc { margin-top: 4px; color: var(--muted); }
 /* The tooltip's own buttons are the one part that takes the pointer --
    and only while the cursor is really over the tooltip. Otherwise they lie
@@ -493,8 +495,7 @@ input { background: #0e0e14; border: 1px solid var(--line); color: var(--ink); p
   .roll-list { max-height: 320px; }
   .game-title { font-size: 36px; }
   .shell-body { flex-direction: column; }
-  /* On a phone the sidebar is a drawer: it slides over the panel, and the
-     hamburger opens and closes it. */
-  .sidebar { position: absolute; top: 0; left: 0; bottom: 0; width: min(78vw, 260px); max-height: none; box-shadow: 8px 0 24px rgba(0,0,0,.55); }
-  .sidebar:not(.open) { transform: translateX(-102%); opacity: 0; visibility: hidden; width: min(78vw, 260px); max-height: none; border-right-color: transparent; box-shadow: none; transition: transform .3s ease, opacity .22s ease, visibility 0s .3s; }
+  /* The sidebar is always there -- a narrow column on a phone too, so the
+     panels are always one tap away. */
+  .sidebar { width: min(78vw, 260px); max-height: none; flex: none; }
 }

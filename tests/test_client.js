@@ -97,13 +97,13 @@ const parts = [
   grab(/let invSort = "[a-z]+";/, "invSort"),
   grab(/function paintBattleKit\(\) \{[\s\S]*?\n\}/, "paintBattleKit"),
   grab(/let tipItem = null, tipHideTimer = null;/, "tipState"),
-  grab(/let tipCtxKey = "", lastTipHtml = "";\nlet tipCtx = \{\};[\s\S]*?let tipPending = null;/, "tipState2"),
+  grab(/let tipCtxKey = "", lastTipHtml = "";[\s\S]*?let tipWasOpen = false;/, "tipState2"),
   grab(/let tipWired = false;/, "tipWired"),
   grab(/function ensureTipWired\(\) \{[\s\S]*?\n\}/, "ensureTipWired"),
   grab(/function showTipHtml\(html, x, y, key, itemId, force\) \{[\s\S]*?\n\}/, "showTipHtml"),
   grab(/function showTip\(itemId, x, y, ctx\) \{[\s\S]*?\n\}/, "showTip"),
-  grab(/function commitTipSwitch\(\) \{[\s\S]*?\n\}/, "commitTipSwitch"),
   grab(/function tipHot\(x, y\) \{[\s\S]*?\n\}/, "tipHot"),
+  grab(/function tipSwap\(tip\) \{[\s\S]*?\n\}/, "tipSwap"),
   grab(/function showSlotTip\(name, type, hint, x, y, key\) \{[\s\S]*?\n\}/, "showSlotTip"),
   grab(/function redrawTip\(\) \{[\s\S]*?\n\}/, "redrawTip"),
   grab(/function setTipLive\(on\) \{[\s\S]*?\n\}/, "setTipLive"),
@@ -207,7 +207,7 @@ const parts = [
   grab(/function masteryRows\(p\) \{[\s\S]*?\n\}/, "masteryRows"),
   grab(/function refreshMasteryPanel\(\) \{[\s\S]*?\n\}/, "refreshMasteryPanel"),
   grab(/function herbToast\(itemId, count\) \{[\s\S]*?\n\}/, "herbToast"),
-  grab(/function closeSidebar\(\) \{[\s\S]*?\n\}/, "closeSidebar"),
+
   grab(/function renderWork\(rootId, kind\) \{[\s\S]*?\n\}/, "renderWork"),
   grab(/let crafting = false;/, "crafting"),
   grab(/let mailNewItems = 0;/, "mailNewItems"),
@@ -302,7 +302,6 @@ const lib = new Function("__", prelude + parts + `
     setSort: s => { invSort = s; },
     setSkills: s => { SKILLS = s; },
     applyMasteryXp, masteryPopup, masteryPanel, masteryTotalXp, MASTERY_TRACKS,
-    closeSidebar,
     setRecipes: r => { RECIPES = r; },
     mobStones, rollStones, onMobDeath,
     itemTipHtml, itemTypeLabel, bagTabOf, dropsFor, iconHtml, artCls, BAG_TABS, slotTypeLabel,
@@ -1017,12 +1016,6 @@ state.player = basePlayer();
      "the tooltip's buttons take the pointer only while the cursor is on them");
   ok(/\.sidebar \{ position: relative/.test(cssNow),
      "the sidebar is a column of the layout, not a drawer over it");
-  ok(/\.hamb \{ display: none/.test(cssNow) === false,
-     "the menu button is always there");
-  ok(/side-off/.test(SRC) && /side-off/.test(cssNow),
-     "the menu button folds the column away on a wide screen");
-  ok(/if \(window\.innerWidth > 900\) return;/.test(SRC),
-     "the drawer button does nothing on a wide screen");
 
   // A redrawn panel must not close the tooltip the player is reading.
   ok(/function renderInventory\(\) \{[\s\S]*?redrawTip\(\);/.test(SRC),
@@ -1038,15 +1031,19 @@ state.player = basePlayer();
   ok(/af_reload_tries/.test(SRC), "and it does not bounce between two versions forever");
   ok(/location\.reload\(true\)/.test(SRC), "the reload is the page's own");
 
-  // The tooltip must not swap items while the cursor is on its way to it.
+  // The tooltip must not swap items while the cursor is on its way to it,
+  // and it must swap them at once when it does.
   ok(/function tipHot\(x, y\)/.test(SRC), "the tooltip knows when the cursor is on it");
-  ok(/TIP_SWITCH_DELAY = 140/.test(SRC), "a switch of item waits a moment");
-  ok(/if \(shown && tipHot\(x, y\)\) \{[\s\S]{0,200}return;/.test(SRC),
+  ok(/if \(shown && tipHot\(x, y\)\) return;/.test(SRC),
      "a slot under the tooltip cannot take the tooltip over");
   ok(/if \(tipHot\(e\.clientX, e\.clientY\)\) return;/.test(SRC),
      "an empty slot under the tooltip cannot take the tooltip over");
-  ok(/if \(tipSwitchTimer\) \{ clearTimeout\(tipSwitchTimer\); tipSwitchTimer = null; \}\s*\n\s*tipPending = null;\s*\n\s*return;/.test(SRC),
-     "a switch on its way is called off when the cursor reaches the tooltip");
+  ok(/TIP_SWITCH_DELAY/.test(SRC) === false, "a switch of item is not delayed");
+  ok(/function tipSwap\(tip\)/.test(SRC) && /tip\.classList\.add\("swap"\)/.test(SRC),
+     "a new item fades in over the old one");
+  ok(/#item-tip\.swap \{ animation: tip-swap/.test(cssNow),
+     "the swap is a smooth transition");
+  ok(/@keyframes tip-swap/.test(cssNow), "and it is drawn in the stylesheet");
 
   // The tooltip must not close when the cursor is inside it.
   const tipEl = els["item-tip"];
@@ -1676,29 +1673,18 @@ state.player = basePlayer();
   ok(/class="slot inv-empty"/.test(SRC) === false, "the bag draws no empty slots any more");
   ok(/\.inv-empty-msg \{ text-align: center/.test(CSS), "the empty bag reads as a message");
 
-  // ============ 21. the sidebar is a column on a wide screen, a drawer on a phone ============
-  const sideOps = [];
-  els["sidebar"] = { classList: {
-    contains: c => c === "open", add: c => sideOps.push("add:" + c), remove: c => sideOps.push("remove:" + c),
-  } };
-  els["hamburger"] = { classList: { add: c => sideOps.push("hb-add:" + c), remove() {}, toggle() {} } };
-  // On a phone the sidebar is a drawer over the canvas: clicking the canvas
-  // puts it away.
-  lib.setWidth(600);
-  sideOps.length = 0;
-  lib.closeSidebar();
-  ok(sideOps.includes("remove:open") && sideOps.includes("hb-add:collapsed"),
-     "on a phone, clicking the canvas closes the floating sidebar");
-  // On a wide screen it is a column of the layout, so it stays.
-  lib.setWidth(1200);
-  sideOps.length = 0;
-  lib.closeSidebar();
-  ok(!sideOps.includes("remove:open"),
-     "on a wide screen the sidebar is a column and stays put");
-  sideOps.length = 0;
-  els["sidebar"].classList.contains = () => false;
-  lib.closeSidebar();
-  ok(sideOps.length === 0, "a closed sidebar is left alone");
+  // ============ 21. the sidebar is always there ============
+  // It is a column of the layout: there is no drawer, no button, and nothing
+  // to open or close.
+  ok(/id="hamburger"/.test(HTML) === false, "the page has no menu button");
+  ok(/\.hamb \{/.test(CSS) === false, "the stylesheet has no menu button either");
+  ok(/\.sidebar \{ position: relative/.test(cssNow),
+     "the sidebar is a column of the layout");
+  ok(/\.sidebar:not\(\.open\)/.test(cssNow) === false,
+     "the sidebar is never slid away");
+  ok(/closeSidebar/.test(SRC) === false, "nothing tries to close it");
+  ok(/side-off/.test(SRC) === false && /side-off/.test(cssNow) === false,
+     "the column is never folded away");
 
   // ============ 22. the new benches carry their own icons ============
   const iconDir = path.join(__dirname, "..", "public", "assets", "icons");

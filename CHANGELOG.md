@@ -11,6 +11,23 @@ and push to `main` on https://github.com/itzRealEzra/ashen-fantasy.
 
 ## [Unreleased]
 
+## [0.9.38] - 2026-10-22
+### Changed
+- **The sidebar is always open, and the button is gone.** It is a column of
+  the layout -- there is no drawer to open, no menu button, and nothing that
+  can slide away. Every panel is one click away, always.
+- **The tooltip is polished, and it switches at once.** A new item fades in
+  over the old one (a soft 180 ms dim-and-rise) instead of blinking, and the
+  switch happens the moment the cursor moves -- no waiting. The panel itself
+  is deeper and quieter: a softer gradient, a hairline gold edge, a rounder
+  corner, a longer shadow, a little more room, and the rarity in small
+  capitals.
+
+### Fixed
+- The tooltip keeps the item it is showing while the cursor is on it, and
+  while the cursor is on its way to it: a slot under the tooltip cannot
+  take it over, and an empty slot cannot either.
+
 ## [0.9.37] - 2026-10-22
 ### Fixed
 - **The menu button is back.** It was hidden on a wide screen when the

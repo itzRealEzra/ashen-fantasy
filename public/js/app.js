@@ -1,6 +1,6 @@
 /* Ashen Fantasy — vanilla JS state machine: username -> roots -> main */
 const $ = (id) => document.getElementById(id);
-const CLIENT_VERSION = "0.9.37"; // must match server.py server_version + footer
+const CLIENT_VERSION = "0.9.38"; // must match server.py server_version + footer
 const state = {
   username: localStorage.getItem("af_user") || "",
   rollId: null,
@@ -914,40 +914,7 @@ document.querySelectorAll(".side-btn").forEach(b => b.onclick = () => {
   document.querySelectorAll(".tab").forEach(x => x.classList.remove("active"));
   b.classList.add("active");
   $("tab-" + b.dataset.tab).classList.add("active");
-  // The sidebar is a column of the layout on a wide screen, so it stays put
-  // and the panel never shifts under the cursor. On a phone it is a drawer
-  // over the panel, and it folds away.
-  if (window.innerWidth <= 900) {
-    $("sidebar").classList.remove("open");
-    $("hamburger").classList.add("collapsed");
-  }
 });
-$("hamburger").onclick = () => {
-  // On a wide screen the sidebar is a column of the layout, and the button
-  // folds it away to give the panel the room. On a phone it is a drawer
-  // over the panel, and the button opens and closes it.
-  if (window.innerWidth > 900) {
-    const body = document.querySelector(".shell-body");
-    if (!body) return;
-    const off = body.classList.toggle("side-off");
-    $("hamburger").classList.toggle("collapsed", off);
-    return;
-  }
-  const sb = $("sidebar");
-  sb.classList.toggle("open");
-  $("hamburger").classList.toggle("collapsed", !sb.classList.contains("open"));
-};
-
-// The sidebar floats over the canvas on a phone, so clicking the canvas puts
-// it away. On a wide screen it is a column, and it stays.
-function closeSidebar() {
-  if (window.innerWidth > 900) return;
-  const sb = $("sidebar");
-  if (!sb || !sb.classList.contains("open")) return;
-  sb.classList.remove("open");
-  $("hamburger").classList.add("collapsed");
-}
-document.querySelector(".content").addEventListener("click", closeSidebar);
 
 // ---------- inventory + equipment (v0.7.0) ----------
 let invTab = "all";
@@ -1243,11 +1210,7 @@ function itemTipHtml(itemId, ctx) {
 
 let tipCtxKey = "", lastTipHtml = "";
 let tipCtx = {};   // the context the open tooltip was drawn with
-// A switch of the tooltip waits a moment, so dragging the cursor toward the
-// tooltip (across the neighbouring slots) does not swap the item under it.
-const TIP_SWITCH_DELAY = 140;
-let tipSwitchTimer = null;
-let tipPending = null;
+let tipWasOpen = false;   // was the tooltip already open? (for the swap)
 function showTipHtml(html, x, y, key, itemId, force) {
   ensureTipWired();
   const tip = $("item-tip");
@@ -1258,7 +1221,8 @@ function showTipHtml(html, x, y, key, itemId, force) {
     // still — no rewrite, no reposition, no flicker.
     return;
   }
-  if (lastTipHtml !== html || force) { tip.innerHTML = html; lastTipHtml = html; }
+  const changed = lastTipHtml !== html || force;
+  if (changed) { tip.innerHTML = html; lastTipHtml = html; }
   tipItem = itemId;
   tipCtxKey = key;
   tip.style.display = "block";
@@ -1272,6 +1236,17 @@ function showTipHtml(html, x, y, key, itemId, force) {
   tip.style.top = Math.min(window.innerHeight - tip.offsetHeight - 10, y + 14) + "px";
   // The box is measured here, once, and kept until the tooltip moves again.
   tipRect = measureTip();
+  // A different item fades in over the old one: the eye follows the change
+  // instead of being startled by it.
+  if (changed && tipWasOpen) tipSwap(tip);
+  tipWasOpen = true;
+}
+
+// The swap: the tooltip dims for a moment and comes back with the new item.
+function tipSwap(tip) {
+  tip.classList.remove("swap");
+  void tip.offsetWidth;   // restart the animation
+  tip.classList.add("swap");
 }
 function showTip(itemId, x, y, ctx) {
   const key = itemId + "|" + (ctx && ctx.unequip ? "u" + ctx.unequip : ctx && ctx.unload != null ? "l" + ctx.unload : "b");
@@ -1285,29 +1260,11 @@ function showTip(itemId, x, y, ctx) {
   // The tooltip takes no pointer events, so the slot under it keeps telling
   // us the cursor is on it. If the cursor is inside the tooltip, that slot
   // must not take the tooltip over -- the player is on their way to a
-  // button, not to a different item. The switch that was on its way is
-  // called off with it.
-  if (shown && tipHot(x, y)) {
-    if (tipSwitchTimer) { clearTimeout(tipSwitchTimer); tipSwitchTimer = null; }
-    tipPending = null;
-    return;
-  }
-  // A switch to another item waits a moment: dragging the cursor toward
-  // the tooltip crosses the neighbouring slots on the way, and each of them
-  // would otherwise snatch the tooltip away mid-journey.
-  tipPending = { itemId, x, y, ctx, key };
-  if (tipSwitchTimer) clearTimeout(tipSwitchTimer);
-  tipSwitchTimer = setTimeout(commitTipSwitch, TIP_SWITCH_DELAY);
-}
-
-// The switch the player asked for, once the cursor has settled.
-function commitTipSwitch() {
-  tipSwitchTimer = null;
-  const want = tipPending;
-  tipPending = null;
-  if (!want) return;
-  if (tipHot(want.x, want.y)) return;   // the cursor is on the tooltip
-  showTipHtml(itemTipHtml(want.itemId, want.ctx), want.x, want.y, want.key, want.itemId);
+  // button, not to a different item.
+  if (shown && tipHot(x, y)) return;
+  // A different item: it is shown at once, and it fades in over the old one
+  // rather than blinking.
+  showTipHtml(itemTipHtml(itemId, ctx), x, y, key, itemId);
 }
 
 // Is the cursor inside the tooltip (or right at its edge)?
@@ -1373,8 +1330,7 @@ function hideTip() {
   tipCtxKey = "";
   tipCtx = {};
   tipRect = null;
-  if (tipSwitchTimer) { clearTimeout(tipSwitchTimer); tipSwitchTimer = null; }
-  tipPending = null;
+  tipWasOpen = false;
   // lastTipHtml intentionally kept: re-showing the same item skips the
   // innerHTML rewrite entirely.
   if (tipHideTimer) { clearTimeout(tipHideTimer); tipHideTimer = null; }
@@ -1446,11 +1402,8 @@ function watchTipPointer(e) {
   if (tipPointerOverTip()) {
     tipOnTip = true;
     setTipLive(true);
-    // The cursor is on the tooltip: it stays, the pending hide is off, and
-    // no switch of item is on its way.
+    // The cursor is on the tooltip: it stays, and the pending hide is off.
     if (tipHideTimer) { clearTimeout(tipHideTimer); tipHideTimer = null; }
-    if (tipSwitchTimer) { clearTimeout(tipSwitchTimer); tipSwitchTimer = null; }
-    tipPending = null;
     return;
   }
   setTipLive(false);
