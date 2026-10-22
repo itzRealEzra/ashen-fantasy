@@ -11,6 +11,17 @@ and push to `main` on https://github.com/itzRealEzra/ashen-fantasy.
 
 ## [Unreleased]
 
+## [0.9.33] - 2026-10-22
+### Fixed
+- **The old picture names still work.** The art became WebP, but a few
+  places still asked for the old `.png` -- the spirit stone in the top bar
+  and the loot log, the doll behind the equipment panel, the meditating
+  cultivator, the cultivation backdrop -- and they 404'd. The server now
+  serves the small picture under the name that was asked for, so every old
+  path finds it: the character art went from 1.3 MB to 155 KB and the
+  cultivation backdrop from 2.4 MB to 196 KB, with nothing to change in the
+  page or the style sheet.
+
 ## [0.9.32] - 2026-10-22
 ### Changed
 - **The world is loaded before the game opens.** A gate stands over the

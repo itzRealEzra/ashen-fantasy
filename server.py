@@ -17,8 +17,8 @@ import mimetypes
 # Single source of truth for the build number. Must match CLIENT_VERSION in
 # public/js/app.js and the footer in public/index.html. A player whose saved
 # patch_version differs gets one patch-note mail when they next check mail.
-SERVER_VERSION = "0.9.32"
-CLIENT_VERSION = "0.9.32"  # for /status only; the client keeps its own copy
+SERVER_VERSION = "0.9.33"
+CLIENT_VERSION = "0.9.33"  # for /status only; the client keeps its own copy
 STARTED_AT = time.time()
 RESTARTED_AT = 0
 RESTART_SEQ = 0
@@ -1460,6 +1460,13 @@ class Handler(BaseHTTPRequestHandler):
         if norm.startswith("..") or norm.startswith("/"):
             return self._send_json({"error": "forbidden"}, status=403)
         full = os.path.join(PUBLIC_DIR, norm)
+        # The art is small WebP now, but a page or a style sheet may still
+        # ask for the old .png name. The little picture is served under the
+        # name that was asked for, so nothing breaks and nothing heavy is
+        # ever sent.
+        stem, ext = os.path.splitext(full)
+        if ext.lower() in (".png", ".jpg", ".jpeg") and os.path.isfile(stem + ".webp"):
+            full = stem + ".webp"
         if not os.path.isfile(full):
             return self._send_json({"error": "not found"}, status=404)
         if content_type is None:

@@ -217,6 +217,14 @@ try:
     ok(by_id["rat_fur"].get("img", "").startswith("/assets/items/rat_fur."),
        "an item with a picture of its own keeps it")
 
+    # The art is served as WebP now, but a page or a style sheet may still
+    # ask for the old .png name: the little picture is served under that
+    # name, so nothing breaks and nothing heavy is sent.
+    for rel in ("/assets/icons/spirit_stone.png", "/assets/icons/equipment_doll.png",
+                "/assets/character/character_0_meditating.png"):
+        st, raw, _ = _send(urllib.request.Request("http://127.0.0.1:%d%s" % (PORT, rel)))
+        ok(st == 200 and len(raw) > 0, "the old png path still finds the picture (%s)" % rel)
+
     # Live pickup: a file dropped in after startup must be picked up.
     probe_dir = os.path.join(server.PUBLIC_DIR, "assets", "items")
     probe = os.path.join(probe_dir, "__probe_test__.png")
