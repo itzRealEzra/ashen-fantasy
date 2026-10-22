@@ -11,6 +11,37 @@ and push to `main` on https://github.com/itzRealEzra/ashen-fantasy.
 
 ## [Unreleased]
 
+## [0.9.36] - 2026-10-22
+### Fixed
+- **The bag never offers "Unequip" for a piece you are carrying.** A ring in
+  the bag is a ring to put on, even when both fingers are full and even when
+  the very same ring is already worn on the other one (then the spare takes
+  that finger). "Unequip" belongs to the piece on the doll, where you can
+  see it being worn. The tooltip, the button and the action now all follow
+  one rule for which slot a piece takes.
+- **A notice no longer takes the tooltip away.** The panel behind it is
+  redrawn when a craft, a sale or a gather lands, and that redraw used to
+  close the tooltip the player was reading -- the notice arrived and the
+  tooltip blinked out under the cursor. Now the tooltip is redrawn where it
+  stands, with the numbers it now has, and it closes only when the item is
+  really gone.
+- **The tooltip survives a pass over an empty slot.** Moving the cursor
+  across the equipment doll no longer snatches the tooltip away; the empty
+  slot speaks only if the cursor rests on it.
+- **The sidebar is a column of the layout, not a drawer over it.** It used
+  to slide in and out over the panel, so the panel jumped and a click could
+  land on the moving sidebar instead of the tab. On a wide screen it is
+  simply there, and the panel never shifts under the cursor. On a phone it
+  is still a drawer, opened with the menu button.
+- **The tooltip's buttons no longer swallow clicks meant for the panel.**
+  They take the pointer only while the cursor is really on the tooltip, so
+  a click on the panel behind it lands on the panel.
+
+### Added
+- **A page running an old build reloads itself.** If the server is newer
+  than the page, the page says so and reloads, so a fix can never be
+  "still the same" because the browser was holding on to the old code.
+
 ## [0.9.35] - 2026-10-22
 ### Fixed
 - **A ring was never the ring you thought.** With both fingers full of the

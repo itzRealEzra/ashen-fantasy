@@ -99,6 +99,9 @@ input { background: #0e0e14; border: 1px solid var(--line); color: var(--ink); p
 .hamb { background: none; border: none; border-right: 1px solid var(--line); color: var(--ink); font-size: 22px; padding: 10px 16px; cursor: pointer; transition: transform .3s ease, color .2s ease; }
 .hamb:hover { color: var(--gold2); }
 .hamb.collapsed { transform: rotate(90deg); color: var(--gold); }
+/* On a wide screen the sidebar is a column of the layout, so the button that
+   opens the drawer has nothing to open. */
+@media (min-width: 901px) { .hamb { display: none; } }
 .top-name, .top-realm { border-right: 1px solid var(--line); padding: 12px 20px; }
 .top-name, .top-realm, .top-stones { font-family: var(--font-label); font-size: 18px; letter-spacing: 2px; }
 .top-name span, .top-realm span { color: var(--gold2); }
@@ -106,9 +109,11 @@ input { background: #0e0e14; border: 1px solid var(--line); color: var(--ink); p
 .top-stones .stone-icon { width: 20px; height: 20px; vertical-align: -4px; margin-right: 6px; }
 .stone-glyph { width: 14px; height: 14px; vertical-align: -2px; }
 .shell-body { display: flex; flex: 1; min-height: 0; position: relative; }
-/* Sidebar floats above the canvas — opening/closing never resizes .content */
-.sidebar { position: absolute; top: 0; left: 0; bottom: 0; width: 220px; z-index: 10; background: var(--panel); border-right: 1px solid var(--line); display: flex; flex-direction: column; overflow-x: hidden; overflow-y: auto; opacity: 1; visibility: visible; transform: translateX(0); transition: transform .3s ease, opacity .22s ease, visibility 0s; box-shadow: 8px 0 24px rgba(0,0,0,.55); }
-.sidebar:not(.open) { transform: translateX(-102%); opacity: 0; visibility: hidden; border-right-color: transparent; box-shadow: none; transition: transform .3s ease, opacity .22s ease, visibility 0s .3s; }
+/* On a wide screen the sidebar is a column of the layout: it is always there,
+   the panel sits beside it, and switching tabs never slides anything. A
+   drawer that slides in and out is a thing for a phone, not for a desk --
+   and it is what made the panel flicker and the clicks land twice. */
+.sidebar { position: relative; top: 0; left: 0; bottom: 0; width: 220px; flex: none; z-index: 10; background: var(--panel); border-right: 1px solid var(--line); display: flex; flex-direction: column; overflow-x: hidden; overflow-y: auto; opacity: 1; visibility: visible; transform: translateX(0); transition: transform .3s ease, opacity .22s ease, visibility 0s; box-shadow: 8px 0 24px rgba(0,0,0,.55); }
 .sidebar .side-btn, .sidebar .side-foot { white-space: nowrap; }
 .side-btn { background: none; border: none; border-bottom: 1px solid var(--line); color: var(--ink); padding: 22px; font-size: 16px; letter-spacing: 2px; cursor: pointer; text-align: center; font-family: var(--font-brush); }
 .side-btn.active, .side-btn:hover { background: #241d0e; color: var(--gold2); }
@@ -413,8 +418,12 @@ input { background: #0e0e14; border: 1px solid var(--line); color: var(--ink); p
 #item-tip .tip-title b { font-size: 14px; letter-spacing: .5px; }
 #item-tip .tip-rarity { font-size: 11px; letter-spacing: 1.5px; text-transform: uppercase; opacity: .9; }
 #item-tip .tip-desc { margin-top: 4px; color: var(--muted); }
-/* The tooltip's own buttons are the one part that takes the pointer. */
-#item-tip .tip-actions { pointer-events: auto; }
+/* The tooltip's own buttons are the one part that takes the pointer --
+   and only while the cursor is really over the tooltip. Otherwise they lie
+   in the way of the panel behind them, and a click meant for the panel
+   lands on "Sell" instead. */
+#item-tip .tip-actions { pointer-events: none; }
+#item-tip.live .tip-actions { pointer-events: auto; }
 #item-tip .up { color: #9ccc65; }
 #item-tip .down { color: #ff8a80; }
 #item-tip.on { opacity: 1; }
@@ -485,6 +494,8 @@ input { background: #0e0e14; border: 1px solid var(--line); color: var(--ink); p
   .roll-list { max-height: 320px; }
   .game-title { font-size: 36px; }
   .shell-body { flex-direction: column; }
-  .sidebar { width: min(78vw, 260px); max-height: none; }
-  .sidebar:not(.open) { width: min(78vw, 260px); max-height: none; border-right-color: transparent; }
+  /* On a phone the sidebar is a drawer: it slides over the panel, and the
+     hamburger opens and closes it. */
+  .sidebar { position: absolute; top: 0; left: 0; bottom: 0; width: min(78vw, 260px); max-height: none; box-shadow: 8px 0 24px rgba(0,0,0,.55); }
+  .sidebar:not(.open) { transform: translateX(-102%); opacity: 0; visibility: hidden; width: min(78vw, 260px); max-height: none; border-right-color: transparent; box-shadow: none; transition: transform .3s ease, opacity .22s ease, visibility 0s .3s; }
 }

@@ -97,10 +97,14 @@ const parts = [
   grab(/let invSort = "[a-z]+";/, "invSort"),
   grab(/function paintBattleKit\(\) \{[\s\S]*?\n\}/, "paintBattleKit"),
   grab(/let tipItem = null, tipHideTimer = null;/, "tipState"),
-  grab(/let tipCtxKey = "", lastTipHtml = "";/, "tipState2"),
+  grab(/let tipCtxKey = "", lastTipHtml = "";\nlet tipCtx = \{\};/, "tipState2"),
   grab(/let tipWired = false;/, "tipWired"),
   grab(/function ensureTipWired\(\) \{[\s\S]*?\n\}/, "ensureTipWired"),
-  grab(/function showTipHtml\(html, x, y, key, itemId\) \{[\s\S]*?\n\}/, "showTipHtml"),
+  grab(/function showTipHtml\(html, x, y, key, itemId, force\) \{[\s\S]*?\n\}/, "showTipHtml"),
+  grab(/function redrawTip\(\) \{[\s\S]*?\n\}/, "redrawTip"),
+  grab(/function setTipLive\(on\) \{[\s\S]*?\n\}/, "setTipLive"),
+  grab(/function pointerOnSlot\(\) \{[\s\S]*?\n\}/, "pointerOnSlot"),
+  grab(/function equipSlotFor\(itemId, it, p\) \{[\s\S]*?\n\}/, "equipSlotFor"),
   grab(/function showTip\(itemId, x, y, ctx\) \{[\s\S]*?\n\}/, "showTip"),
   grab(/function showSlotTip\(name, type, hint, x, y, key\) \{[\s\S]*?\n\}/, "showSlotTip"),
   grab(/function hideTip\(\) \{[\s\S]*?\n\}/, "hideTip"),
@@ -258,7 +262,7 @@ const prelude = `
   const setTimeout = (fn, ms) => { calls.timeouts.push({ fn, ms }); return calls.timeouts.length; };
   let ICON = {};
   const window = { innerWidth: 1200, innerHeight: 800 };
-  const fetch = (...a) => { calls.fetches++; return calls.fetch ? calls.fetch(...a) : Promise.resolve({ ok: false, json: async () => ({ ok: false }) }); };
+  window.setWidth = w => { window.innerWidth = w; };  const fetch = (...a) => { calls.fetches++; return calls.fetch ? calls.fetch(...a) : Promise.resolve({ ok: false, json: async () => ({ ok: false }) }); };
 `;
 
 const lib = new Function("__", prelude + parts + `
@@ -284,6 +288,7 @@ const lib = new Function("__", prelude + parts + `
     masteryLevel, masteryRank, masteryNumeral, masteryTitle, masteryXp, masteryKillXp,
     masteryRankOf, masteryRankLabel, masteryBonusText, masteryBodyBonus, fetchMasteryDefs, fmtSeconds,
     setMasteryDefs: d => { MASTERY_DEFS = d; },
+    setWidth: w => { window.innerWidth = w; },
     activeBuffs, skillCooldown, equippedSkills, useSkills, fireSkill, sortBag,
     BAG_SORTS, ITEM_RARITY_ORDER, renderSkills, toggleSkill, SKILL_SLOTS, paintCombat,
     paintBattleKit, iconUrl, iconImg, fetchSkills, setSkillsLoaded: v => { SKILLS_LOADED = v; },
@@ -382,8 +387,8 @@ state.player = basePlayer();
   lib.equipItem("copper_ring");
   ok(state.player.equipment.ring1 === "copper_ring" && state.player.equipment.ring2 === "copper_ring",
     "two rings fill both ring slots");
-  ok(JSON.stringify(lib.bagGearAction("copper_ring")) === JSON.stringify({ act: "unequip", slot: "ring1" }),
-    "bag action unequip when both fingers full");
+  ok(JSON.stringify(lib.bagGearAction("copper_ring")) === JSON.stringify({ act: "equip", slot: "ring1" }),
+    "a ring in the bag is offered as Equip, even with both fingers full");
 
   // ---- paired slots take the best value, they do not add up
   // Jade Guard Ring def+2 hp+15 crit+1 against Copper Spirit Ring crit+2 must
@@ -977,8 +982,8 @@ state.player = basePlayer();
   state.player.equipment = { ring1: "copper_ring", ring2: "copper_ring" };
   state.player.inventory = { copper_ring: 2, jade_ring: 1 };
   const wornRing = lib.bagGearAction("copper_ring");
-  ok(wornRing && wornRing.act === "unequip",
-     "the ring that is actually worn offers to be taken off");
+  ok(wornRing && wornRing.act === "equip",
+     "a ring in the bag is always offered as Equip, worn or not");
   const otherRing = lib.bagGearAction("jade_ring");
   ok(otherRing && otherRing.act === "equip",
      "another ring is offered as Equip, never as Unequip");
@@ -989,7 +994,8 @@ state.player = basePlayer();
   ok(/data-act="equip"/.test(otherTip) && !/data-act="unequip"/.test(otherTip),
      "the tooltip of another ring offers Equip, not Unequip");
   const wornTip = lib.itemTipHtml("copper_ring", {});
-  ok(/data-act="unequip"/.test(wornTip), "the worn ring's tooltip offers Unequip");
+  ok(/data-act="equip"/.test(wornTip) && !/data-act="unequip"/.test(wornTip),
+     "the worn ring's bag tooltip offers Equip too -- the doll offers Unequip");
 
   // ============ 6q. the tooltip, the notices and the sidebar ============
   ok(/#item-tip \{[^}]*z-index: 10001/.test(cssNow),
@@ -998,8 +1004,33 @@ state.player = basePlayer();
      "the tooltip's box is measured once, not on every mouse move");
   ok(/armSlotTip\(el, e/.test(SRC) && /SLOT_TIP_DELAY = 260/.test(SRC),
      "an empty slot only speaks when the cursor rests on it -- passing over it keeps the tooltip");
-  ok(/if \(window\.innerWidth <= 900\) \{/.test(SRC),
-     "the sidebar stays open on a wide screen, so the panel does not flicker");
+  ok(/pointerOnSlot\(\)/.test(SRC),
+     "the tooltip stays while the cursor is over any slot");
+  ok(/redrawTip\(\)/.test(SRC),
+     "a redrawn panel redraws the tooltip instead of closing it");
+  ok(/#item-tip \.tip-actions \{[^}]*pointer-events: none/.test(cssNow)
+     && /#item-tip\.live \.tip-actions \{[^}]*pointer-events: auto/.test(cssNow),
+     "the tooltip's buttons take the pointer only while the cursor is on them");
+  ok(/\.sidebar \{ position: relative/.test(cssNow),
+     "the sidebar is a column of the layout, not a drawer over it");
+  ok(/@media \(min-width: 901px\) \{ \.hamb \{ display: none; \} \}/.test(cssNow),
+     "the drawer button is hidden where there is no drawer");
+  ok(/if \(window\.innerWidth > 900\) return;/.test(SRC),
+     "the drawer button does nothing on a wide screen");
+
+  // A redrawn panel must not close the tooltip the player is reading.
+  ok(/function renderInventory\(\) \{[\s\S]*?redrawTip\(\);/.test(SRC),
+     "redrawing the bag redraws the tooltip instead of closing it");
+  ok(/function renderWork\(rootId, kind\) \{[\s\S]*?redrawTip\(\);/.test(SRC),
+     "redrawing a bench redraws the tooltip instead of closing it");
+  ok(/function renderMail\(\) \{[\s\S]*?redrawTip\(\);/.test(SRC),
+     "redrawing the mailbox redraws the tooltip instead of closing it");
+  // A page running an old build fetches the new one, so a fix that is
+  // "still the same" cannot be a stale browser any more.
+  ok(/function reloadToNewBuild\(serverVer\)/.test(SRC), "a stale page reloads itself");
+  ok(/serverVer > CLIENT_VERSION/.test(SRC), "it reloads when the server is newer");
+  ok(/af_reload_tries/.test(SRC), "and it does not bounce between two versions forever");
+  ok(/location\.reload\(true\)/.test(SRC), "the reload is the page's own");
 
   // The tooltip must not close when the cursor is inside it.
   const tipEl = els["item-tip"];
@@ -1061,8 +1092,9 @@ state.player = basePlayer();
   // A tooltip must never swallow the click under it (the mailbox Claim).
   ok(/#item-tip \{[^}]*pointer-events: none/.test(cssNow),
      "the tooltip lets clicks through");
-  ok(/#item-tip \.tip-actions \{[^}]*pointer-events: auto/.test(cssNow),
-     "the tooltip's own buttons still take the pointer");
+  ok(/#item-tip \.tip-actions \{[^}]*pointer-events: none/.test(cssNow)
+     && /#item-tip\.live \.tip-actions \{[^}]*pointer-events: auto/.test(cssNow),
+     "the tooltip's buttons take the pointer only while the cursor is on them");
 
   state.player = basePlayer();
   state.player.inventory = { rat_fur: 4 };
@@ -1506,7 +1538,7 @@ state.player = basePlayer();
     // neutral "Elixir I" fallback no longer occurs in the live game. Nothing to
     // delete: the fixture matches the shipped item set.
     vm.createContext(sb);
-    for (const fn of ["esc", "pillShape", "elixirSlots", "iconHtml", "artCls", "slotIconHtml", "bagTabOf", "sortBag", "equipTargets", "hiddenFromBag", "renderInventory", "formatStatValue"]) {
+    for (const fn of ["esc", "pillShape", "elixirSlots", "iconHtml", "artCls", "slotIconHtml", "bagTabOf", "sortBag", "equipTargets", "hiddenFromBag", "redrawTip", "renderInventory", "formatStatValue"]) {
       const src = grabFnSrc(fn);
       if (src) vm.runInContext(src, sb);
     }
@@ -1628,15 +1660,25 @@ state.player = basePlayer();
   ok(/class="slot inv-empty"/.test(SRC) === false, "the bag draws no empty slots any more");
   ok(/\.inv-empty-msg \{ text-align: center/.test(CSS), "the empty bag reads as a message");
 
-  // ============ 21. the floating sidebar puts itself away ============
+  // ============ 21. the sidebar is a column on a wide screen, a drawer on a phone ============
   const sideOps = [];
   els["sidebar"] = { classList: {
     contains: c => c === "open", add: c => sideOps.push("add:" + c), remove: c => sideOps.push("remove:" + c),
   } };
   els["hamburger"] = { classList: { add: c => sideOps.push("hb-add:" + c), remove() {}, toggle() {} } };
+  // On a phone the sidebar is a drawer over the canvas: clicking the canvas
+  // puts it away.
+  lib.setWidth(600);
+  sideOps.length = 0;
   lib.closeSidebar();
   ok(sideOps.includes("remove:open") && sideOps.includes("hb-add:collapsed"),
-     "clicking the canvas closes the floating sidebar");
+     "on a phone, clicking the canvas closes the floating sidebar");
+  // On a wide screen it is a column of the layout, so it stays.
+  lib.setWidth(1200);
+  sideOps.length = 0;
+  lib.closeSidebar();
+  ok(!sideOps.includes("remove:open"),
+     "on a wide screen the sidebar is a column and stays put");
   sideOps.length = 0;
   els["sidebar"].classList.contains = () => false;
   lib.closeSidebar();

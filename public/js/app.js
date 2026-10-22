@@ -1,6 +1,6 @@
 /* Ashen Fantasy — vanilla JS state machine: username -> roots -> main */
 const $ = (id) => document.getElementById(id);
-const CLIENT_VERSION = "0.9.35"; // must match server.py server_version + footer
+const CLIENT_VERSION = "0.9.36"; // must match server.py server_version + footer
 const state = {
   username: localStorage.getItem("af_user") || "",
   rollId: null,
@@ -914,22 +914,27 @@ document.querySelectorAll(".side-btn").forEach(b => b.onclick = () => {
   document.querySelectorAll(".tab").forEach(x => x.classList.remove("active"));
   b.classList.add("active");
   $("tab-" + b.dataset.tab).classList.add("active");
-  // The sidebar stays open on a wide screen: folding it away on every
-  // switch made the panel flicker and the player hunt for the next tab.
-  // On a small screen it folds away, because it covers the panel.
+  // The sidebar is a column of the layout on a wide screen, so it stays put
+  // and the panel never shifts under the cursor. On a phone it is a drawer
+  // over the panel, and it folds away.
   if (window.innerWidth <= 900) {
     $("sidebar").classList.remove("open");
     $("hamburger").classList.add("collapsed");
   }
 });
 $("hamburger").onclick = () => {
+  // On a wide screen the sidebar is always there, so the button does nothing
+  // there.
+  if (window.innerWidth > 900) return;
   const sb = $("sidebar");
   sb.classList.toggle("open");
   $("hamburger").classList.toggle("collapsed", !sb.classList.contains("open"));
 };
 
-// The sidebar floats over the canvas, so clicking the canvas puts it away.
+// The sidebar floats over the canvas on a phone, so clicking the canvas puts
+// it away. On a wide screen it is a column, and it stays.
 function closeSidebar() {
+  if (window.innerWidth > 900) return;
   const sb = $("sidebar");
   if (!sb || !sb.classList.contains("open")) return;
   sb.classList.remove("open");
@@ -1087,20 +1092,26 @@ function artCls(it, base) {
   return base + (it && it.lineArt ? " line-art" : "");
 }
 
-// What should bag gear do: equip another, or unequip what's worn?
-// Unequip wins when there is nothing left to equip.
+// Which slot would this piece take? A free one first, then one that is not
+// already wearing this same piece, and only then the first -- which is
+// replaced, and the old piece goes back into the bag. One rule, so the
+// tooltip, the button and the action can never disagree.
+function equipSlotFor(itemId, it, p) {
+  const targets = equipTargets(it);
+  if (!p || !p.equipment) return targets[0];
+  return targets.find(s => !p.equipment[s])
+    || targets.find(s => p.equipment[s] !== itemId)
+    || targets[0];
+}
+
+// What should bag gear do: it goes on. The bag is where the spares are, so
+// the bag always offers "Equip" -- even when the very same piece is already
+// worn on the other finger (then the spare takes that finger). "Unequip"
+// belongs to the piece on the doll, where you can see it being worn.
 function bagGearAction(itemId) {
   const p = state.player, it = ITEM_BY_ID[itemId];
   if (!it || it.kind !== "gear" || !((p.inventory[itemId] || 0) > 0)) return null;
-  const targets = equipTargets(it);
-  // If this very piece is already worn, the action is to take it off.
-  const worn = targets.find(s => p.equipment[s] === itemId);
-  if (worn) return { act: "unequip", slot: worn };
-  const free = targets.find(s => !p.equipment[s]);
-  if (free) return { act: "equip", slot: free };
-  // Every slot this piece fits is taken by something else: it goes on by
-  // replacing the first one (the old piece goes back into the bag).
-  return { act: "equip", slot: targets[0] };
+  return { act: "equip", slot: equipSlotFor(itemId, it, p) };
 }
 
 // Which beasts drop an item, the best chance any of them offers, and the
@@ -1175,13 +1186,8 @@ function itemTipHtml(itemId, ctx) {
   }
   if (it.kind === "gear" && !ctx.unequip) {
     const p = state.player;
-    const targets = it.slot === "ring" ? ["ring1", "ring2"] : [it.slot];
-    // Preview the same slot equipItem will choose: free first, then a slot
-    // not already wearing this item, then the first slot as a final fallback.
-    const targetSlot = p && p.equipment
-      ? (targets.find(s => !p.equipment[s])
-          || targets.find(s => p.equipment[s] !== itemId)
-          || targets[0]) : targets[0];
+    // Preview the same slot equipItem will choose -- one rule for both.
+    const targetSlot = equipSlotFor(itemId, it, p);
     const cur = p && p.equipment ? (p.equipment[targetSlot] || null) : null;
     if (cur && cur !== itemId && ITEM_BY_ID[cur]) {
       const a = ITEM_BY_ID[cur].stats || {}, b = it.stats || {};
@@ -1207,10 +1213,9 @@ function itemTipHtml(itemId, ctx) {
   } else if (ctx.unequip) acts += `<button data-act="unequip" data-slot="${esc(ctx.unequip)}">Unequip</button>`;
   else if (ctx.unload != null) acts += `<button data-act="use">Use</button><button data-act="unload" data-slot="${ctx.unload}">Unequip</button>`;
   else if (it.kind === "gear" && owned > 0) {
-    // Accurate label via the same rule the bag click uses.
-    const a = bagGearAction(itemId);
-    if (a && a.act === "unequip") acts += `<button data-act="unequip" data-slot="${esc(a.slot)}">Unequip</button>`;
-    else acts += `<button data-act="equip">Equip</button>`;
+    // A piece in the bag is a piece to put on. Taking something off is done
+    // from the doll, where the worn piece is in plain sight.
+    acts += `<button data-act="equip">Equip</button>`;
   }
   else if (it.kind === "consumable" && owned > 0) {
     // Already loaded? Mirror the elixir-slot tooltip: Use + Unequip.
@@ -1230,21 +1235,27 @@ function itemTipHtml(itemId, ctx) {
 }
 
 let tipCtxKey = "", lastTipHtml = "";
-function showTipHtml(html, x, y, key, itemId) {
+let tipCtx = {};   // the context the open tooltip was drawn with
+function showTipHtml(html, x, y, key, itemId, force) {
   ensureTipWired();
   const tip = $("item-tip");
   if (!tip || !html) return;
   if (tipHideTimer) { clearTimeout(tipHideTimer); tipHideTimer = null; }
-  if (tipItem === itemId && tipCtxKey === key && tip.style.display === "block") {
+  if (!force && tipItem === itemId && tipCtxKey === key && tip.style.display === "block") {
     // Same target + context: keep the tooltip (and its buttons) perfectly
     // still — no rewrite, no reposition, no flicker.
     return;
   }
-  if (lastTipHtml !== html) { tip.innerHTML = html; lastTipHtml = html; }
+  if (lastTipHtml !== html || force) { tip.innerHTML = html; lastTipHtml = html; }
   tipItem = itemId;
   tipCtxKey = key;
   tip.style.display = "block";
   tip.classList.add("on");
+  if (force) {
+    // A redraw keeps the place: the cursor has not moved.
+    tipRect = measureTip();
+    return;
+  }
   tip.style.left = Math.min(window.innerWidth - tip.offsetWidth - 10, x + 14) + "px";
   tip.style.top = Math.min(window.innerHeight - tip.offsetHeight - 10, y + 14) + "px";
   // The box is measured here, once, and kept until the tooltip moves again.
@@ -1252,22 +1263,43 @@ function showTipHtml(html, x, y, key, itemId) {
 }
 
 function showTip(itemId, x, y, ctx) {
+  tipCtx = ctx || {};
   const key = itemId + "|" + (ctx && ctx.unequip ? "u" + ctx.unequip : ctx && ctx.unload != null ? "l" + ctx.unload : "b");
   showTipHtml(itemTipHtml(itemId, ctx), x, y, key, itemId);
+}
+
+// A panel is redrawn (a craft, a sale, a gather) while the cursor is resting
+// on an item. The tooltip must not blink out from under the cursor: it is
+// redrawn where it stands, with the numbers it now has. Only an item that is
+// really gone closes it.
+function redrawTip() {
+  const tip = $("item-tip");
+  if (!tip || tip.style.display !== "block" || !tipItem) return;
+  const p = state.player;
+  const it = ITEM_BY_ID[tipItem];
+  const held = !!(p && p.inventory && p.inventory[tipItem] > 0);
+  const worn = !!(p && p.equipment && Object.values(p.equipment).indexOf(tipItem) >= 0);
+  const loaded = !!(p && p.elixirs && p.elixirs.indexOf(tipItem) >= 0);
+  if (!it || (!held && !worn && !loaded)) { hideTip(); return; }
+  showTipHtml(itemTipHtml(tipItem, tipCtx || {}), tipPointer.x, tipPointer.y,
+    tipCtxKey, tipItem, true);
 }
 
 // Custom tooltip for empty slots: a plain "Empty" and how to fill it.
 function showSlotTip(name, type, hint, x, y, key) {
   const html = `<div class="tip-title"><b>Empty</b></div>` +
     (hint ? `<div class="muted">${esc(hint)}</div>` : "");
+  tipCtx = {};
   showTipHtml(html, x, y, "slot|" + key, null);
 }
 
 // An empty slot speaks only if the cursor rests on it: the player moving
 // across the doll must not have the tooltip snatched away by the slot in
-// between.
+// between. The pending hide is cancelled too -- the cursor is still over a
+// slot, so the tooltip it is reading stays up.
 const SLOT_TIP_DELAY = 260;
 function armSlotTip(el, e, hint) {
+  if (tipHideTimer) { clearTimeout(tipHideTimer); tipHideTimer = null; }
   if (el._slotTipTimer) return;
   el._slotTipTimer = setTimeout(() => {
     el._slotTipTimer = null;
@@ -1281,26 +1313,33 @@ function clearSlotTipTimer(el) {
 
 function hideTip() {
   const tip = $("item-tip");
-  if (tip) { tip.classList.remove("on"); tip.style.display = "none"; }
+  if (tip) { tip.classList.remove("on"); tip.classList.remove("live"); tip.style.display = "none"; }
   tipItem = null;
   tipCtxKey = "";
+  tipCtx = {};
   tipRect = null;
   // lastTipHtml intentionally kept: re-showing the same item skips the
   // innerHTML rewrite entirely.
   if (tipHideTimer) { clearTimeout(tipHideTimer); tipHideTimer = null; }
 }
 
+// The tooltip closes only when the cursor has left everything it describes:
+// the tooltip itself, or the slot it belongs to. Passing over an empty slot
+// on the way somewhere else must not take the tooltip away.
+function pointerOnSlot() {
+  if (typeof document.elementFromPoint !== "function") return false;
+  const el = document.elementFromPoint(tipPointer.x, tipPointer.y);
+  if (!el || !el.closest) return false;
+  return !!(el.closest(".slot") || el.closest("[data-tip]"));
+}
+
 // Grace period so the cursor can travel from the slot onto the tooltip.
-//
-// The tooltip does not take the pointer (it must never swallow a click on
-// what lies under it), so it cannot be "hovered" in the ordinary way. Where
-// the cursor actually is decides: if it is inside the tooltip's box, the
-// tooltip stays.
 function scheduleHideTip() {
   if (tipHideTimer) clearTimeout(tipHideTimer);
   tipHideTimer = setTimeout(() => {
     tipHideTimer = null;
     if (tipPointerOverTip()) return;   // the cursor is inside the tooltip
+    if (pointerOnSlot()) return;       // the cursor is still over a slot
     hideTip();
   }, 350);
 }
@@ -1330,6 +1369,15 @@ function tipPointerOverTip() {
       && tipPointer.y >= tipRect.top && tipPointer.y <= tipRect.bottom;
 }
 
+// The tooltip's buttons take the pointer only while the cursor is really
+// over the tooltip. Otherwise they lie in the way: a click meant for the
+// panel behind them would land on "Sell" instead, and the player has to
+// click again.
+function setTipLive(on) {
+  const tip = $("item-tip");
+  if (tip) tip.classList.toggle("live", !!on);
+}
+
 // The cursor is watched on the document, so it is still known while it is
 // over the tooltip (which takes no pointer events of its own).
 function watchTipPointer(e) {
@@ -1337,8 +1385,15 @@ function watchTipPointer(e) {
   tipPointer.x = e.clientX;
   tipPointer.y = e.clientY;
   const tip = $("item-tip");
-  if (!tip || tip.style.display !== "block") return;
-  if (tipPointerOverTip()) { tipOnTip = true; return; }
+  if (!tip || tip.style.display !== "block") { setTipLive(false); return; }
+  if (tipPointerOverTip()) {
+    tipOnTip = true;
+    setTipLive(true);
+    // The cursor is on the tooltip: it stays, and the pending hide is off.
+    if (tipHideTimer) { clearTimeout(tipHideTimer); tipHideTimer = null; }
+    return;
+  }
+  setTipLive(false);
   if (tipOnTip) {
     // The cursor has left the tooltip: it may go now.
     tipOnTip = false;
@@ -1349,7 +1404,9 @@ function watchTipPointer(e) {
 function renderInventory() {
   const p = state.player;
   if (!p) return;
-  hideTip();
+  // The bag is redrawn; a tooltip resting on one of its slots is redrawn
+  // with it, rather than blinking out from under the cursor.
+  redrawTip();
   const root = $("inventory-root");
   if (!root) return;
   const doll = DOLL_ROWS.map(row => `<div class="doll-row">` + row.map(({ s, label }) => {
@@ -1531,17 +1588,15 @@ function afterGearChange(before) {
 function equipItem(itemId) {
   const p = state.player, it = ITEM_BY_ID[itemId];
   if (!it || it.kind !== "gear" || (p.inventory[itemId] || 0) <= 0) return;
-  const targets = equipTargets(it);
-  if (targets.every(s => p.equipment[s] === itemId)) return;
+  if (equipTargets(it).every(s => p.equipment[s] === itemId)) return;
   const before = derivedStats(p);
-  // Fill a free slot first. If both rings are occupied, replace a different
-  // ring before ever swapping a duplicate with itself.
-  const slot = targets.find(s => !p.equipment[s])
-    || targets.find(s => p.equipment[s] !== itemId)
-    || targets[0];
+  // The same slot the tooltip promised: a free one, then one not already
+  // wearing this piece, and only then the first -- which is replaced, and
+  // the old piece goes back into the bag.
+  const slot = equipSlotFor(itemId, it, p);
   const prev = p.equipment[slot];
   takeInv(itemId, 1);
-  if (prev) addInv(prev, 1);
+  if (prev && prev !== itemId) addInv(prev, 1);
   p.equipment[slot] = itemId;
   afterGearChange(before);
 }
@@ -2207,6 +2262,8 @@ function renderWork(rootId, kind) {
   const root = $(rootId);
   const p = state.player;
   if (!root || !p) return;
+  // The bench is redrawn; a tooltip resting on it is redrawn with it.
+  redrawTip();
   const trade = TRADES[kind] || TRADES.craft;
   if (!RECIPES.length) {
     root.innerHTML = `<p class="muted">Consulting the forge…</p>`;
@@ -2937,7 +2994,7 @@ function mailItemsHtml(items) {
 function renderMail() {
   const root = $("mail-root");
   if (!root) return;
-  hideTip();
+  redrawTip();
   paintMailBadge();
   if (!mailBox.length) {
     root.innerHTML = `<div class="mail-empty"><h2>Mail</h2><p class="muted">The mailbox is empty. Patch notes and rewards arrive here.</p></div>`;
@@ -3062,13 +3119,35 @@ async function checkServerFresh() {
   try {
     const r = await fetch("/api/health", { cache: "no-store" });
     const j = await r.json();
-    if (!String(j.version || "").endsWith(CLIENT_VERSION)) {
+    const serverVer = String(j.version || "").split("/").pop();
+    if (serverVer && serverVer !== CLIENT_VERSION) {
+      // The server is newer than this page: the browser is running an old
+      // build, and everything the player tries would be the old behaviour.
+      // A stale page reloads itself and gets the new one.
+      if (serverVer > CLIENT_VERSION) {
+        reloadToNewBuild(serverVer);
+        return;
+      }
       serverAlert(`Server/client version mismatch (server: ${j.version || "unknown"}, client: v${CLIENT_VERSION}). Restart server.py from the latest pull.`);
     }
     applyServerState(j);
   } catch {
     serverAlert("Cannot reach the game server. Start it with: python server.py");
   }
+}
+
+// A page running an old build fetches the new one. The guard keeps a page
+// from bouncing between two versions forever.
+function reloadToNewBuild(serverVer) {
+  let tries = 0;
+  try { tries = parseInt(sessionStorage.getItem("af_reload_tries") || "0", 10) || 0; } catch {}
+  if (tries >= 3) {
+    serverAlert(`The server is on v${serverVer} but this page is on v${CLIENT_VERSION}. Reload the page by hand (Ctrl+F5).`);
+    return;
+  }
+  try { sessionStorage.setItem("af_reload_tries", String(tries + 1)); } catch {}
+  serverAlert(`A new version (v${serverVer}) is on the server — reloading…`);
+  setTimeout(() => location.reload(true), 400);
 }
 
 // Maintenance mode and the admin announcement banner, both driven from
